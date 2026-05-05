@@ -1,4 +1,4 @@
-# Implementation Plan: Auto Expenses Manager (Discord Bot + Android)
+# Implementation Plan: Expense Tracker (Discord Bot + Android)
 
 **Branch**: `001-expense-tracker` | **Date**: 2026-05-05 | **Spec**: [proposal.md](../../proposal.md)
 **Input**: Feature specification from `proposal.md` (clarified 2026-05-05)

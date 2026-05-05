@@ -26,7 +26,7 @@ Templates reviewed and updated:
 Deferred TODOs: None
 -->
 
-# Auto Expenses Manager Constitution
+# Expense Tracker Constitution
 
 ## Core Principles
 

@@ -1,8 +1,8 @@
 ---
-description: "Task list for Auto Expenses Manager implementation"
+description: "Task list for Expense Tracker implementation"
 ---
 
-# Tasks: Auto Expenses Manager (Discord Bot + Android)
+# Tasks: Expense Tracker (Discord Bot + Android)
 
 **Input**: Design documents from `specs/001-expense-tracker/`
 **Prerequisites**: plan.md ✅, data-model.md ✅, research.md ✅, quickstart.md ✅, contracts/ ✅

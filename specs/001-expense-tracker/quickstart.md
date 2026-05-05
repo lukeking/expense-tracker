@@ -1,4 +1,4 @@
-# Quickstart: Auto Expenses Manager
+# Quickstart: Expense Tracker
 
 ## Prerequisites
 

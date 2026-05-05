@@ -1,4 +1,4 @@
-# Research: Auto Expenses Manager
+# Research: Expense Tracker
 
 **Branch**: `001-expense-tracker` | **Date**: 2026-05-05
 

@@ -1,4 +1,4 @@
-# Data Model: Auto Expenses Manager
+# Data Model: Expense Tracker
 
 **Branch**: `001-expense-tracker` | **Date**: 2026-05-05
 
