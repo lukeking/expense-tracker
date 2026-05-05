@@ -23,10 +23,10 @@ description: "Task list for Expense Tracker implementation"
 
 **Purpose**: Create the project skeleton so both backend and Android can be developed in parallel.
 
-- [ ] T001 Create top-level directory structure: `backend/`, `android/`, `backend/supabase/`, `backend/scripts/` per plan.md
-- [ ] T002 [P] Initialize Cloudflare Workers TypeScript project in `backend/` — `wrangler init`, configure `wrangler.toml` with Cron Trigger (`0 2 * * *`), install Hono, `@supabase/supabase-js`, `@noble/ed25519`, `vitest`, `@cloudflare/vitest-pool-workers`
-- [ ] T003 [P] Initialize Android Gradle project in `android/` — Kotlin DSL, `compileSdk 34`, add Room, WorkManager, Retrofit, OkHttp, Kotlin Coroutines, MockK, JUnit 4 dependencies in `android/app/build.gradle.kts`
-- [ ] T004 [P] Configure linting and formatting — ESLint + Prettier for `backend/`, ktlint for `android/`; add `backend/vitest.config.ts` with `@cloudflare/vitest-pool-workers` pool configuration
+- [X] T001 Create top-level directory structure: `backend/`, `android/`, `backend/supabase/`, `backend/scripts/` per plan.md
+- [X] T002 [P] Initialize Cloudflare Workers TypeScript project in `backend/` — `wrangler init`, configure `wrangler.toml` with Cron Trigger (`0 2 * * *`), install Hono, `@supabase/supabase-js`, `@noble/ed25519`, `vitest`, `@cloudflare/vitest-pool-workers`
+- [X] T003 [P] Initialize Android Gradle project in `android/` — Kotlin DSL, `compileSdk 34`, add Room, WorkManager, Retrofit, OkHttp, Kotlin Coroutines, MockK, JUnit 4 dependencies in `android/app/build.gradle.kts`
+- [X] T004 [P] Configure linting and formatting — ESLint + Prettier for `backend/`, ktlint for `android/`; add `backend/vitest.config.ts` with `@cloudflare/vitest-pool-workers` pool configuration
 
 ---
 
@@ -36,15 +36,15 @@ description: "Task list for Expense Tracker implementation"
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T005 Create Supabase schema migration in `backend/supabase/schema.sql` — `transactions`, `receipts`, `budget_settings`, `pending_matches` tables with all indexes per data-model.md
-- [ ] T006 [P] Implement Supabase client singleton in `backend/src/db/client.ts` — typed client using `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` env bindings
-- [ ] T007 [P] Implement shared TypeScript types in `backend/src/types.ts` — `Transaction`, `Receipt`, `BudgetSettings`, `PaymentMethod`, `TransactionItem`, `ReceiptItem` per data-model.md
-- [ ] T008 Implement Discord ed25519 signature verification middleware in `backend/src/middleware/discord-verify.ts` — verify `X-Signature-Ed25519` + `X-Signature-Timestamp` using `@noble/ed25519` and `DISCORD_PUBLIC_KEY` binding; return `401` on failure
-- [ ] T009 [P] Implement Android API key verification middleware in `backend/src/middleware/android-auth.ts` — validate `Authorization: Bearer <key>` against `ANDROID_API_KEY` binding; return `401` on failure
-- [ ] T010 Implement typed DB query functions in `backend/src/db/queries.ts` — `insertTransaction`, `getMonthlySpend`, `getBudgetSettings`, `updateBudgetSettings`, `upsertReceipts`, `findMatchCandidates`, `matchTransaction`, `getUnmatchedTransactions`, `insertPendingMatch`, `resolvePendingMatch`
-- [ ] T011 Implement Hono router entry point in `backend/src/index.ts` — route stubs for `POST /discord/interactions`, `POST /api/notification`, `GET /api/health`, and `scheduled` export for Cron Trigger handler; wire in middlewares
-- [ ] T012 [P] Create Room database and entity in `android/app/src/main/java/com/expenses/db/` — `PendingTransaction.kt` entity (id, amount, bankName, paymentMethod, notifiedAt, rawText, retryCount), `LocalDatabase.kt`, `PendingTransactionDao.kt`
-- [ ] T013 [P] Configure `wrangler.toml` — declare all required secrets (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DISCORD_PUBLIC_KEY`, `DISCORD_APPLICATION_ID`, `DISCORD_BOT_TOKEN`, `GEMINI_API_KEY`, `ANDROID_API_KEY`, `MOF_CARRIER_ID`, `MOF_VERIFICATION_CODE`, `MOF_API_KEY`, `DISCORD_CHANNEL_ID`), `compatibility_date`, `compatibility_flags = ["nodejs_compat"]`
+- [X] T005 Create Supabase schema migration in `backend/supabase/schema.sql` — `transactions`, `receipts`, `budget_settings`, `pending_matches` tables with all indexes per data-model.md
+- [X] T006 [P] Implement Supabase client singleton in `backend/src/db/client.ts` — typed client using `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` env bindings
+- [X] T007 [P] Implement shared TypeScript types in `backend/src/types.ts` — `Transaction`, `Receipt`, `BudgetSettings`, `PaymentMethod`, `TransactionItem`, `ReceiptItem` per data-model.md
+- [X] T008 Implement Discord ed25519 signature verification middleware in `backend/src/middleware/discord-verify.ts` — verify `X-Signature-Ed25519` + `X-Signature-Timestamp` using `@noble/ed25519` and `DISCORD_PUBLIC_KEY` binding; return `401` on failure
+- [X] T009 [P] Implement Android API key verification middleware in `backend/src/middleware/android-auth.ts` — validate `Authorization: Bearer <key>` against `ANDROID_API_KEY` binding; return `401` on failure
+- [X] T010 Implement typed DB query functions in `backend/src/db/queries.ts` — `insertTransaction`, `getMonthlySpend`, `getBudgetSettings`, `updateBudgetSettings`, `upsertReceipts`, `findMatchCandidates`, `matchTransaction`, `getUnmatchedTransactions`, `insertPendingMatch`, `resolvePendingMatch`
+- [X] T011 Implement Hono router entry point in `backend/src/index.ts` — route stubs for `POST /discord/interactions`, `POST /api/notification`, `GET /api/health`, and `scheduled` export for Cron Trigger handler; wire in middlewares
+- [X] T012 [P] Create Room database and entity in `android/app/src/main/java/com/expenses/db/` — `PendingTransaction.kt` entity (id, amount, bankName, paymentMethod, notifiedAt, rawText, retryCount), `LocalDatabase.kt`, `PendingTransactionDao.kt`
+- [X] T013 [P] Configure `wrangler.toml` — declare all required secrets (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DISCORD_PUBLIC_KEY`, `DISCORD_APPLICATION_ID`, `DISCORD_BOT_TOKEN`, `GEMINI_API_KEY`, `ANDROID_API_KEY`, `MOF_CARRIER_ID`, `MOF_VERIFICATION_CODE`, `MOF_API_KEY`, `DISCORD_CHANNEL_ID`), `compatibility_date`, `compatibility_flags = ["nodejs_compat"]`
 
 **Checkpoint**: Foundation ready — user story implementation can now begin.
 
@@ -58,14 +58,14 @@ description: "Task list for Expense Tracker implementation"
 
 ### Implementation for User Story 1
 
-- [ ] T014 [P] [US1] Implement Gemini NLP parsing service in `backend/src/services/gemini.ts` — raw `fetch` to Gemini `generateContent` endpoint, JSON-mode prompt, parse `{ amount, items[], tags[] }` from free-text descriptions; use `gemini-2.0-flash` model
-- [ ] T015 [P] [US1] Implement monthly budget computation service in `backend/src/services/budget.ts` — `getMonthlyTotal(supabase, year, month)`, `getBudgetProgress(supabase)` returning current spend + budget + percentage
-- [ ] T016 [US1] Implement Discord slash command handler in `backend/src/handlers/discord.ts` — handle PING (type 1), `/expense` command (type 2): return deferred `type: 5`, use `ctx.waitUntil()` to call Gemini, write to `transactions`, compute budget progress, PATCH Discord follow-up message
-- [ ] T017 [US1] Implement `/budget` command handler in `backend/src/handlers/discord.ts` — validate amount > 0, update `budget_settings`, return immediate `type: 4` confirmation
-- [ ] T018 [US1] Implement `/summary [month]` command handler in `backend/src/handlers/discord.ts` — return deferred `type: 5`, aggregate monthly spend by tags, format summary message, PATCH follow-up
-- [ ] T019 [US1] Implement Discord message PATCH helper in `backend/src/services/discord-notify.ts` — `patchInteractionMessage(applicationId, token, content)` and `sendChannelMessage(channelId, content)` using `DISCORD_BOT_TOKEN`
-- [ ] T020 [P] [US1] Create Discord slash command registration script in `backend/scripts/register-commands.ts` — registers `/expense`, `/budget`, `/summary` with correct option schemas via Discord REST API; run with `npx tsx`
-- [ ] T021 [US1] Wire Discord handler into router in `backend/src/index.ts` — `app.post('/discord/interactions', discordVerify, discordHandler)`
+- [X] T014 [P] [US1] Implement Gemini NLP parsing service in `backend/src/services/gemini.ts` — raw `fetch` to Gemini `generateContent` endpoint, JSON-mode prompt, parse `{ amount, items[], tags[] }` from free-text descriptions; use `gemini-2.0-flash` model
+- [X] T015 [P] [US1] Implement monthly budget computation service in `backend/src/services/budget.ts` — `getMonthlyTotal(supabase, year, month)`, `getBudgetProgress(supabase)` returning current spend + budget + percentage
+- [X] T016 [US1] Implement Discord slash command handler in `backend/src/handlers/discord.ts` — handle PING (type 1), `/expense` command (type 2): return deferred `type: 5`, use `ctx.waitUntil()` to call Gemini, write to `transactions`, compute budget progress, PATCH Discord follow-up message
+- [X] T017 [US1] Implement `/budget` command handler in `backend/src/handlers/discord.ts` — validate amount > 0, update `budget_settings`, return immediate `type: 4` confirmation
+- [X] T018 [US1] Implement `/summary [month]` command handler in `backend/src/handlers/discord.ts` — return deferred `type: 5`, aggregate monthly spend by tags, format summary message, PATCH follow-up
+- [X] T019 [US1] Implement Discord message PATCH helper in `backend/src/services/discord-notify.ts` — `patchInteractionMessage(applicationId, token, content)` and `sendChannelMessage(channelId, content)` using `DISCORD_BOT_TOKEN`
+- [X] T020 [P] [US1] Create Discord slash command registration script in `backend/scripts/register-commands.ts` — registers `/expense`, `/budget`, `/summary` with correct option schemas via Discord REST API; run with `npx tsx`
+- [X] T021 [US1] Wire Discord handler into router in `backend/src/index.ts` — `app.post('/discord/interactions', discordVerify, discordHandler)`
 - [ ] T022 [US1] Deploy backend and verify US1 end-to-end — run `wrangler secret put` for all secrets, `wrangler deploy`, register slash commands, test all three commands in Discord, verify `transactions` rows in Supabase
 
 **Checkpoint**: User Story 1 fully functional. Manual expense tracking via Discord works independently.
@@ -80,15 +80,15 @@ description: "Task list for Expense Tracker implementation"
 
 ### Implementation for User Story 2
 
-- [ ] T023 [P] [US2] Implement notification parser in `android/app/src/main/java/com/expenses/parser/NotificationParser.kt` — regex patterns for major TW banks (台新、國泰、玉山、中信、富邦) and mobile pay (LINE Pay、街口); extract `amount`, `bank_name`, `payment_method` from raw notification title + text; return `null` for non-payment notifications
-- [ ] T024 [P] [US2] Implement Android notification ingestion endpoint in `backend/src/handlers/android.ts` — `POST /api/notification`: validate fields, check duplicate (same amount+bank+method within 5 min per `contracts/android-api.md`), insert `transactions` row with `discord_message_id=null`, call `sendChannelMessage` for proactive Discord notification, return `201` with transaction ID
-- [ ] T025 [P] [US2] Implement health check endpoint in `backend/src/handlers/android.ts` — `GET /api/health`: return `{ status: "ok", timestamp }` with `200`
-- [ ] T026 [US2] Implement proactive Discord channel notification in `backend/src/services/discord-notify.ts` — `sendTransactionNotification(transaction, budgetProgress)`: format and POST to `DISCORD_CHANNEL_ID`, store returned Discord message ID
-- [ ] T027 [US2] Update `insertTransaction` in `backend/src/db/queries.ts` to store `discord_message_id` returned from Discord; add `updateDiscordMessageId(transactionId, messageId)` helper
-- [ ] T028 [P] [US2] Implement `ApiClient` in `android/app/src/main/java/com/expenses/network/ApiClient.kt` — Retrofit interface with `postNotification(body)` and `getHealth()` endpoints; `Authorization: Bearer` header from `secrets.xml`
-- [ ] T029 [US2] Implement `TransactionSyncWorker` in `android/app/src/main/java/com/expenses/worker/TransactionSyncWorker.kt` — `CoroutineWorker`: read oldest pending `PendingTransaction` from Room, POST to `/api/notification`, on 201 delete from Room, on 409 delete from Room (duplicate), on 5xx/network error return `Result.retry()`; use exponential backoff (`BackoffPolicy.EXPONENTIAL`, 30s initial, max 10 attempts)
-- [ ] T030 [US2] Implement `NotificationListenerService` in `android/app/src/main/java/com/expenses/service/ExpenseNotificationListenerService.kt` — parse notification with `NotificationParser`, insert to Room DB, enqueue `OneTimeWorkRequest<TransactionSyncWorker>` with network constraint
-- [ ] T031 [US2] Wire Android endpoints into router in `backend/src/index.ts` — `app.post('/api/notification', androidAuth, androidHandler)` and `app.get('/api/health', healthHandler)`
+- [X] T023 [P] [US2] Implement notification parser in `android/app/src/main/java/com/expenses/parser/NotificationParser.kt` — regex patterns for major TW banks (台新、國泰、玉山、中信、富邦) and mobile pay (LINE Pay、街口); extract `amount`, `bank_name`, `payment_method` from raw notification title + text; return `null` for non-payment notifications
+- [X] T024 [P] [US2] Implement Android notification ingestion endpoint in `backend/src/handlers/android.ts` — `POST /api/notification`: validate fields, check duplicate (same amount+bank+method within 5 min per `contracts/android-api.md`), insert `transactions` row with `discord_message_id=null`, call `sendChannelMessage` for proactive Discord notification, return `201` with transaction ID
+- [X] T025 [P] [US2] Implement health check endpoint in `backend/src/handlers/android.ts` — `GET /api/health`: return `{ status: "ok", timestamp }` with `200`
+- [X] T026 [US2] Implement proactive Discord channel notification in `backend/src/services/discord-notify.ts` — `sendTransactionNotification(transaction, budgetProgress)`: format and POST to `DISCORD_CHANNEL_ID`, store returned Discord message ID
+- [X] T027 [US2] Update `insertTransaction` in `backend/src/db/queries.ts` to store `discord_message_id` returned from Discord; add `updateDiscordMessageId(transactionId, messageId)` helper
+- [X] T028 [P] [US2] Implement `ApiClient` in `android/app/src/main/java/com/expenses/network/ApiClient.kt` — Retrofit interface with `postNotification(body)` and `getHealth()` endpoints; `Authorization: Bearer` header from `secrets.xml`
+- [X] T029 [US2] Implement `TransactionSyncWorker` in `android/app/src/main/java/com/expenses/worker/TransactionSyncWorker.kt` — `CoroutineWorker`: read oldest pending `PendingTransaction` from Room, POST to `/api/notification`, on 201 delete from Room, on 409 delete from Room (duplicate), on 5xx/network error return `Result.retry()`; use exponential backoff (`BackoffPolicy.EXPONENTIAL`, 30s initial, max 10 attempts)
+- [X] T030 [US2] Implement `NotificationListenerService` in `android/app/src/main/java/com/expenses/service/ExpenseNotificationListenerService.kt` — parse notification with `NotificationParser`, insert to Room DB, enqueue `OneTimeWorkRequest<TransactionSyncWorker>` with network constraint
+- [X] T031 [US2] Wire Android endpoints into router in `backend/src/index.ts` — `app.post('/api/notification', androidAuth, androidHandler)` and `app.get('/api/health', healthHandler)`
 - [ ] T032 [US2] Build and install Android APK; grant NotificationListenerService permission; verify end-to-end notification → Room → WorkManager → CF Worker → Supabase → Discord message flow
 
 **Checkpoint**: User Story 2 fully functional. Auto-capture from bank notifications works independently.
@@ -103,13 +103,13 @@ description: "Task list for Expense Tracker implementation"
 
 ### Implementation for User Story 3
 
-- [ ] T033 [P] [US3] Implement MOF API client in `backend/src/handlers/mof-sync.ts` — `fetchMofInvoices(env, date)`: build query params per `contracts/mof-api.md`, fetch from `einvoice.nat.gov.tw`, parse ROC calendar dates (add 1911), handle error codes (401 → Discord alert, 404 → no-op, 429/5xx → log and exit)
-- [ ] T034 [P] [US3] Implement `upsertReceipts` in `backend/src/db/queries.ts` — `INSERT ... ON CONFLICT (invoice_number) DO NOTHING` to idempotently store fetched invoices with all fields from data-model.md
-- [ ] T035 [US3] Implement matching algorithm service in `backend/src/services/matcher.ts` — `runMatchingAlgorithm(env)`: fetch unmatched transactions, for each find receipts with `total_amount = amount` and `invoice_date` within ±48h of `transaction_at`; single match → auto-match + update Discord; multiple matches → create `pending_matches` row + send Discord button message; zero matches → no-op
-- [ ] T036 [US3] Implement auto-match Discord message edit in `backend/src/services/discord-notify.ts` — `patchTransactionMatchedMessage(transaction, receipt)`: format seller name, items list, auto-tags; PATCH the stored `discord_message_id`
-- [ ] T037 [US3] Implement ambiguous match Discord alert in `backend/src/services/discord-notify.ts` — `sendAmbiguousMatchAlert(transaction, candidateReceipts)`: POST message with action buttons (`custom_id: "confirm_match:{txId}:{receiptId}"`) for each candidate receipt
-- [ ] T038 [US3] Implement Discord button component handler in `backend/src/handlers/discord.ts` — handle `type: 3` (MESSAGE_COMPONENT): parse `custom_id = "confirm_match:{txId}:{receiptId}"`, call `matchTransaction`, `resolvePendingMatch`, update Discord original message, return `type: 4` confirmation
-- [ ] T039 [US3] Implement Cron Trigger scheduled handler in `backend/src/index.ts` — export `scheduled(event, env, ctx)`: call `handleMofSync(env)` inside `ctx.waitUntil()`; `handleMofSync` calls `fetchMofInvoices` → `upsertReceipts` → `runMatchingAlgorithm`
+- [X] T033 [P] [US3] Implement MOF API client in `backend/src/handlers/mof-sync.ts` — `fetchMofInvoices(env, date)`: build query params per `contracts/mof-api.md`, fetch from `einvoice.nat.gov.tw`, parse ROC calendar dates (add 1911), handle error codes (401 → Discord alert, 404 → no-op, 429/5xx → log and exit)
+- [X] T034 [P] [US3] Implement `upsertReceipts` in `backend/src/db/queries.ts` — `INSERT ... ON CONFLICT (invoice_number) DO NOTHING` to idempotently store fetched invoices with all fields from data-model.md
+- [X] T035 [US3] Implement matching algorithm service in `backend/src/services/matcher.ts` — `runMatchingAlgorithm(env)`: fetch unmatched transactions, for each find receipts with `total_amount = amount` and `invoice_date` within ±48h of `transaction_at`; single match → auto-match + update Discord; multiple matches → create `pending_matches` row + send Discord button message; zero matches → no-op
+- [X] T036 [US3] Implement auto-match Discord message edit in `backend/src/services/discord-notify.ts` — `patchTransactionMatchedMessage(transaction, receipt)`: format seller name, items list, auto-tags; PATCH the stored `discord_message_id`
+- [X] T037 [US3] Implement ambiguous match Discord alert in `backend/src/services/discord-notify.ts` — `sendAmbiguousMatchAlert(transaction, candidateReceipts)`: POST message with action buttons (`custom_id: "confirm_match:{txId}:{receiptId}"`) for each candidate receipt
+- [X] T038 [US3] Implement Discord button component handler in `backend/src/handlers/discord.ts` — handle `type: 3` (MESSAGE_COMPONENT): parse `custom_id = "confirm_match:{txId}:{receiptId}"`, call `matchTransaction`, `resolvePendingMatch`, update Discord original message, return `type: 4` confirmation
+- [X] T039 [US3] Implement Cron Trigger scheduled handler in `backend/src/index.ts` — export `scheduled(event, env, ctx)`: call `handleMofSync(env)` inside `ctx.waitUntil()`; `handleMofSync` calls `fetchMofInvoices` → `upsertReceipts` → `runMatchingAlgorithm`
 - [ ] T040 [US3] Test Cron Trigger locally — `wrangler dev --test-scheduled`, send `curl "http://localhost:8787/__scheduled?cron=*+*+*+*+*"`, verify receipts fetched, matching logic executes, Discord messages updated
 
 **Checkpoint**: User Story 3 fully functional. Full automation pipeline (Android → CF Worker → MOF sync → Discord) works end-to-end.
@@ -122,20 +122,20 @@ description: "Task list for Expense Tracker implementation"
 
 ### Unit Tests (Constitution-Mandated)
 
-- [ ] T041 [P] Write Vitest unit tests for Discord ed25519 verification in `backend/tests/handlers/discord.test.ts` — valid signature passes, invalid signature returns 401, PING returns type 1
-- [ ] T042 [P] Write Vitest unit tests for `/expense` command handler in `backend/tests/handlers/discord.test.ts` — deferred response returned, Gemini called with correct prompt, transaction inserted, budget progress computed
-- [ ] T043 [P] Write Vitest unit tests for Gemini parsing service in `backend/tests/services/gemini.test.ts` — parses amount+items from Chinese text, handles edge cases (no items, large amounts, special chars)
-- [ ] T044 [P] Write Vitest unit tests for matching algorithm in `backend/tests/services/matcher.test.ts` — single candidate auto-matched, multiple candidates create pending_match, zero candidates are no-ops
-- [ ] T045 [P] Write Vitest unit tests for Android ingestion endpoint in `backend/tests/handlers/android.test.ts` — valid payload creates transaction, duplicate within 5 min returns 409, missing field returns 400, bad API key returns 401
-- [ ] T046 [P] Write Vitest unit tests for MOF sync handler in `backend/tests/handlers/mof-sync.test.ts` — ROC date conversion, 401 response triggers Discord alert, 404 response is no-op
-- [ ] T047 [P] Write JUnit/MockK unit tests for `NotificationParser` in `android/app/src/test/java/com/expenses/parser/NotificationParserTest.kt` — correctly parses 台新/國泰/LINE Pay patterns, returns null for non-payment notifications
-- [ ] T048 [P] Write JUnit/MockK unit tests for `TransactionSyncWorker` in `android/app/src/test/java/com/expenses/worker/TransactionSyncWorkerTest.kt` — 201 response deletes from Room, 409 deletes without retry, 5xx returns `Result.retry()`
+- [X] T041 [P] Write Vitest unit tests for Discord ed25519 verification in `backend/tests/handlers/discord.test.ts` — valid signature passes, invalid signature returns 401, PING returns type 1
+- [X] T042 [P] Write Vitest unit tests for `/expense` command handler in `backend/tests/handlers/discord.test.ts` — deferred response returned, Gemini called with correct prompt, transaction inserted, budget progress computed
+- [X] T043 [P] Write Vitest unit tests for Gemini parsing service in `backend/tests/services/gemini.test.ts` — parses amount+items from Chinese text, handles edge cases (no items, large amounts, special chars)
+- [X] T044 [P] Write Vitest unit tests for matching algorithm in `backend/tests/services/matcher.test.ts` — single candidate auto-matched, multiple candidates create pending_match, zero candidates are no-ops
+- [X] T045 [P] Write Vitest unit tests for Android ingestion endpoint in `backend/tests/handlers/android.test.ts` — valid payload creates transaction, duplicate within 5 min returns 409, missing field returns 400, bad API key returns 401
+- [X] T046 [P] Write Vitest unit tests for MOF sync handler in `backend/tests/handlers/mof-sync.test.ts` — ROC date conversion, 401 response triggers Discord alert, 404 response is no-op
+- [X] T047 [P] Write JUnit/MockK unit tests for `NotificationParser` in `android/app/src/test/java/com/expenses/parser/NotificationParserTest.kt` — correctly parses 台新/國泰/LINE Pay patterns, returns null for non-payment notifications
+- [X] T048 [P] Write JUnit/MockK unit tests for `TransactionSyncWorker` in `android/app/src/test/java/com/expenses/worker/TransactionSyncWorkerTest.kt` — 201 response deletes from Room, 409 deletes without retry, 5xx returns `Result.retry()`
 
 ### Security & Polish
 
-- [ ] T049 Security audit — verify no secrets in source code or `wrangler.toml`; confirm all credentials are `wrangler secret put`; verify Android `secrets.xml` is in `.gitignore`
-- [ ] T050 [P] Update `backend/supabase/schema.sql` with any schema adjustments discovered during implementation; re-run migration on Supabase
-- [ ] T051 [P] Performance check — verify Discord handlers respond with deferred `type: 5` within 3s; verify no synchronous Supabase calls block the response path
+- [X] T049 Security audit — verify no secrets in source code or `wrangler.toml`; confirm all credentials are `wrangler secret put`; verify Android `secrets.xml` is in `.gitignore`
+- [X] T050 [P] Update `backend/supabase/schema.sql` with any schema adjustments discovered during implementation; re-run migration on Supabase
+- [X] T051 [P] Performance check — verify Discord handlers respond with deferred `type: 5` within 3s; verify no synchronous Supabase calls block the response path
 - [ ] T052 Run quickstart.md validation — follow the guide from scratch on a clean environment; update any stale steps
 
 ---
