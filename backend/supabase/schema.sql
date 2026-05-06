@@ -20,8 +20,9 @@ CREATE INDEX IF NOT EXISTS idx_receipts_invoice_date ON receipts (invoice_date D
 CREATE INDEX IF NOT EXISTS idx_receipts_total_amount ON receipts (total_amount);
 
 CREATE TABLE IF NOT EXISTS transactions (
-  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  amount             INTEGER NOT NULL CHECK (amount > 0),
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  transaction_type      TEXT NOT NULL DEFAULT 'expense' CHECK (transaction_type IN ('expense', 'refund', 'fee')),
+  amount                INTEGER NOT NULL CHECK (amount > 0),
   items              JSONB,
   tags               TEXT[] DEFAULT '{}',
   payment_method     TEXT NOT NULL CHECK (

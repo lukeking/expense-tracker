@@ -16,20 +16,24 @@ The primary ledger record. Created from two sources: (a) Discord manual input, o
 
 ```sql
 CREATE TABLE transactions (
-  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  amount             INTEGER NOT NULL,               -- NTD, no decimals
-  items              JSONB,                          -- [{name: text, amount: integer}]
-  tags               TEXT[] DEFAULT '{}',            -- freeform: ["food", "transport"]
-  payment_method     TEXT NOT NULL,                  -- see Payment Method table below
-  wallet             TEXT,                           -- mobile app used: 'line_pay' | 'google_pay' | null
-  bank_name          TEXT,                           -- from Android notification, e.g. "玉山銀行"
-  note               TEXT,                           -- optional freeform note
-  is_matched         BOOLEAN NOT NULL DEFAULT FALSE, -- matched with a 財政部 receipt
-  matched_receipt_id UUID REFERENCES receipts(id),   -- set when matched
-  parent_transaction_id UUID REFERENCES transactions(id), -- set for linked fee records (e.g. 國外交易服務費)
-  discord_message_id TEXT,                           -- Discord message ID for later PATCH edits
-  transaction_at     TIMESTAMPTZ NOT NULL,           -- when the purchase occurred
-  created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  transaction_type      TEXT NOT NULL DEFAULT 'expense', -- 'expense' | 'refund' | 'fee'
+  amount                INTEGER NOT NULL,               -- NTD, always positive; type determines debit/credit
+  items                 JSONB,                          -- [{name: text, amount: integer}]
+  tags                  TEXT[] DEFAULT '{}',            -- freeform: ["food", "transport"]
+  payment_method        TEXT NOT NULL,                  -- see Payment Method table below
+  wallet                TEXT,                           -- mobile app used: 'line_pay' | 'google_pay' | null
+  bank_name             TEXT,                           -- from Android notification, e.g. "玉山銀行"
+  note                  TEXT,                           -- optional freeform note
+  is_matched            BOOLEAN NOT NULL DEFAULT FALSE, -- matched with a 財政部 receipt
+  matched_receipt_id    UUID REFERENCES receipts(id),   -- set when matched
+  parent_transaction_id UUID REFERENCES transactions(id), -- set for 'refund' and 'fee' child records
+  discord_message_id    TEXT,                           -- Discord message ID for later PATCH edits
+  transaction_at        TIMESTAMPTZ NOT NULL,           -- when the purchase/refund occurred
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT chk_transaction_type CHECK (
+    transaction_type IN ('expense', 'refund', 'fee')
+  ),
   CONSTRAINT chk_payment_method CHECK (
     payment_method IN ('credit_card', 'prepaid_wallet', 'easy_card', 'bank_account', 'cash')
   ),
@@ -53,11 +57,19 @@ CREATE INDEX idx_transactions_is_matched ON transactions (is_matched) WHERE is_m
 | `cash` | `null` | ❌ Manual only | Cash payment |
 
 **Validation rules**:
-- `amount` must be > 0
+- `transaction_type` must be `'expense'`, `'refund'`, or `'fee'`
+- `amount` must be > 0 (always positive; `transaction_type` determines whether it debits or credits the budget)
 - `payment_method` must be one of the five values above
 - `wallet` must be `null` unless `payment_method` is `credit_card` or `prepaid_wallet`
 - `matched_receipt_id` set → `is_matched` must be `true`
 - `items` array elements must have `name` (string) and `amount` (positive integer)
+- `parent_transaction_id` must be set for `refund` and `fee` types (unless user explicitly records without link)
+
+**Budget calculation**:
+```
+net_spend = SUM(amount WHERE type='expense') + SUM(amount WHERE type='fee') - SUM(amount WHERE type='refund')
+```
+Both `fee` and `refund` child records are counted in the month of their own `transaction_at`, not the parent's month.
 
 **Multi-app notification deduplication**:
 
@@ -153,6 +165,7 @@ CREATE TABLE pending_matches (
 
 export type PaymentMethod = 'credit_card' | 'prepaid_wallet' | 'easy_card' | 'bank_account' | 'cash';
 export type MobileWallet = 'line_pay' | 'google_pay';
+export type TransactionType = 'expense' | 'refund' | 'fee';
 
 export interface TransactionItem {
   name: string;
@@ -161,6 +174,7 @@ export interface TransactionItem {
 
 export interface Transaction {
   id: string;
+  transaction_type: TransactionType;
   amount: number;
   items: TransactionItem[] | null;
   tags: string[];

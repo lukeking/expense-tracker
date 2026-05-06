@@ -1,5 +1,6 @@
 export type PaymentMethod = 'credit_card' | 'prepaid_wallet' | 'easy_card' | 'bank_account' | 'cash';
 export type MobileWallet = 'line_pay' | 'google_pay';
+export type TransactionType = 'expense' | 'refund' | 'fee';
 
 export interface TransactionItem {
   name: string;
@@ -8,6 +9,7 @@ export interface TransactionItem {
 
 export interface Transaction {
   id: string;
+  transaction_type: TransactionType;
   amount: number;
   items: TransactionItem[] | null;
   tags: string[];

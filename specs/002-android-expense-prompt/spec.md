@@ -68,6 +68,7 @@ Using the Android prompt, the user types `fee [amount] [original transaction des
 - **FR-006**: The text field MUST be cleared after a successful submission and focused for the next entry.
 - **FR-007**: The prompt screen MUST be accessible directly — without navigating through multiple screens — so it can serve as a fast fallback input method.
 - **FR-008**: The prompt MUST accept a `fee [amount] [description]` command that creates a new linked fee transaction referencing a prior transaction matched by description. On Android, the app MUST present a scrollable list of candidate transactions (most recent first) for the user to tap-select, rather than requiring the user to recall details from memory. The list MUST include a "None of these / record without link" option at the bottom, allowing the fee to be saved as a standalone unlinked transaction if no candidate is correct.
+- **FR-009**: The prompt MUST accept a `refund [amount] [description]` command that creates a linked refund transaction (type: `refund`) referencing a prior transaction. Partial refunds are supported — the refund amount may be less than the original. On Android, the candidate selection list and "None of these" escape hatch from FR-008 apply equally. Business reimbursements (出公差墊付請領) and ticket cancellations (退票) both use this command.
 
 ### Key Entities
 
@@ -91,6 +92,7 @@ No new entities. Uses the same **Transaction** entity as the main expense tracke
 
 ### Session 2026-05-06
 
+- Q: How should refunds (退款/退票/請領) be modeled? → A: `transaction_type` field (`expense`|`refund`|`fee`) on all transactions. Refunds are positive-amount child transactions linked via `parent_transaction_id`. Budget = Σ(expense) + Σ(fee) − Σ(refund). Same `refund` command for business reimbursements and ticket cancellations; cancellation fees use the `fee` command.
 - Q: Where should the foreign transaction fee command live? → A: Both Discord and Android prompt. Fee is modeled as a new linked transaction (not an edit to the original) — `fee [amount] [description]` finds the matching parent transaction and creates a child fee record via `parent_transaction_id`. No web console or history UI needed.
 
 ---
