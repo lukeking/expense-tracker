@@ -9,6 +9,7 @@ data class PendingTransaction(
     val amount: Int,
     val bankName: String,
     val paymentMethod: String,
+    val wallet: String? = null,
     val notifiedAt: String,
     val rawText: String,
     val retryCount: Int = 0,

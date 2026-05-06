@@ -11,8 +11,9 @@ import retrofit2.http.POST
 
 data class NotificationRequest(
     val amount: Int,
-    val bank_name: String,
+    val bank_name: String?,
     val payment_method: String,
+    val wallet: String?,
     val notification_text: String,
     val notified_at: String,
 )

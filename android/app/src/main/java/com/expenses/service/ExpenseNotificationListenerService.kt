@@ -37,6 +37,7 @@ class ExpenseNotificationListenerService : NotificationListenerService() {
             amount = parsed.amount,
             bankName = parsed.bankName,
             paymentMethod = parsed.paymentMethod,
+            wallet = parsed.wallet,
             notifiedAt = notifiedAt,
             rawText = "$title $text",
         )

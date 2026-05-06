@@ -1,4 +1,5 @@
-export type PaymentMethod = 'credit_card' | 'mobile_pay' | 'cash';
+export type PaymentMethod = 'credit_card' | 'prepaid_wallet' | 'easy_card' | 'bank_account' | 'cash';
+export type MobileWallet = 'line_pay' | 'google_pay';
 
 export interface TransactionItem {
   name: string;
@@ -11,6 +12,7 @@ export interface Transaction {
   items: TransactionItem[] | null;
   tags: string[];
   payment_method: PaymentMethod;
+  wallet: MobileWallet | null;
   bank_name: string | null;
   note: string | null;
   is_matched: boolean;
