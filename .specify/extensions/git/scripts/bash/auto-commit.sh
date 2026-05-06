@@ -45,6 +45,7 @@ fi
 # Read per-command config from git-config.yml
 _config_file="$REPO_ROOT/.specify/extensions/git/git-config.yml"
 _enabled=false
+_enabled_explicit=false
 _commit_msg=""
 
 if [ -f "$_config_file" ]; then
@@ -92,6 +93,7 @@ if [ -f "$_config_file" ]; then
                     _val=$(echo "$_line" | sed 's/^[^:]*:[[:space:]]*//' | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
                     [ "$_val" = "true" ] && _enabled=true
                     [ "$_val" = "false" ] && _enabled=false
+                    _enabled_explicit=true
                 fi
                 if echo "$_line" | grep -Eq '[[:space:]]+message:'; then
                     _commit_msg=$(echo "$_line" | sed 's/^[^:]*:[[:space:]]*//' | sed 's/^["'\'']//' | sed 's/["'\'']*$//')
@@ -100,13 +102,9 @@ if [ -f "$_config_file" ]; then
         fi
     done < "$_config_file"
 
-    # If event-specific key not found, use default
-    if [ "$_enabled" = "false" ] && [ "$_default_enabled" = "true" ]; then
-        # Only use default if the event wasn't explicitly set to false
-        # Check if event section existed at all
-        if ! grep -q "^[[:space:]]*${EVENT_NAME}:" "$_config_file" 2>/dev/null; then
-            _enabled=true
-        fi
+    # Apply default when no explicit enabled: key was found for this event
+    if [ "$_enabled_explicit" = "false" ] && [ "$_default_enabled" = "true" ]; then
+        _enabled=true
     fi
 else
     # No config file — auto-commit disabled by default

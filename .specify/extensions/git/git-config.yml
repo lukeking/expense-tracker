@@ -10,37 +10,23 @@ init_commit_message: "[Spec Kit] Initial commit"
 # Auto-commit before/after core commands.
 # Set "default" to enable for all commands, then override per-command.
 # Each key can be true/false. Message is customizable per-command.
-#
-# NOTE: default only applies to events with NO entry below.
-# Any event that has an entry (even just a message) must also set enabled: true
-# explicitly, otherwise the script treats the section's existence as an override.
 auto_commit:
   default: true
-  # before_* events have no entries here → inherit default: true
   after_constitution:
-    enabled: true
     message: "[Spec Kit] Add project constitution"
   after_specify:
-    enabled: true
     message: "[Spec Kit] Add specification"
   after_clarify:
-    enabled: true
     message: "[Spec Kit] Clarify specification"
   after_plan:
-    enabled: true
     message: "[Spec Kit] Add implementation plan"
   after_tasks:
-    enabled: true
     message: "[Spec Kit] Add tasks"
   after_implement:
-    enabled: true
     message: "[Spec Kit] Implementation progress"
   after_checklist:
-    enabled: true
     message: "[Spec Kit] Add checklist"
   after_analyze:
-    enabled: true
     message: "[Spec Kit] Add analysis report"
   after_taskstoissues:
-    enabled: true
     message: "[Spec Kit] Sync tasks to issues"
