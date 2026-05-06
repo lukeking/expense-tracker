@@ -140,6 +140,43 @@ description: "Task list for Expense Tracker implementation"
 
 ---
 
+## Phase P: Payment Model Update (Clarification 2026-05-06)
+
+**Purpose**: Apply the expanded payment model to all existing source files. All Phase 1–N tasks are already complete; this phase patches the code to match the new data model agreed in the clarification session.
+
+**Changes covered**:
+- `payment_method`: 5 values (`credit_card` | `prepaid_wallet` | `easy_card` | `bank_account` | `cash`), removing `mobile_pay`
+- New `wallet` column (`'line_pay'` | `'google_pay'` | null) for `credit_card` / `prepaid_wallet` rows
+- Dedup logic: upsert on `amount + 3-minute window` (replaces 409-on-duplicate)
+- Android parser: `wallet` detection + ignore list (EasyCard auto top-up, ATM withdrawal)
+- Android worker: treat HTTP 200 (merge) as success
+
+### Backend — Types & DB
+
+- [X] T053 Update `PaymentMethod` type and add `MobileWallet` type in `backend/src/types.ts` — `PaymentMethod = 'credit_card' | 'prepaid_wallet' | 'easy_card' | 'bank_account' | 'cash'`; `MobileWallet = 'line_pay' | 'google_pay'`; add `wallet: MobileWallet | null` field to `Transaction` interface
+- [X] T054 [P] Rewrite `findDuplicateTransaction` in `backend/src/db/queries.ts` → rename to `findExistingTransaction`, query on `amount + created_at > NOW() - INTERVAL '3 minutes'` only (remove `payment_method` and `bank_name` conditions); add `mergeTransactionFields(id, fields)` helper that UPDATEs only null `bank_name` / `wallet` fields
+- [X] T055 [P] Update `insertTransaction` signature in `backend/src/db/queries.ts` — add optional `wallet: MobileWallet | null` parameter; include in INSERT
+
+### Backend — Handler
+
+- [X] T056 Rewrite duplicate-handling logic in `backend/src/handlers/android.ts` — replace 409-on-duplicate with upsert: call `findExistingTransaction`; if found → call `mergeTransactionFields` and return `200 { transaction_id, discord_message_id, merged: true }`; if not found → insert and return `201`; update payload validation to accept all five `payment_method` values and optional `wallet` field
+
+### Android — Parser
+
+- [X] T057 Expand `NotificationParser.kt` in `android/app/src/main/java/com/expenses/parser/NotificationParser.kt` — add `shouldIgnore(title, text): Boolean` method returning `true` for EasyCard auto top-up (`自動加值`/`自動補值`) and ATM withdrawal (`提款`/`提現`/`ATM`); add `wallet: String?` field to `ParsedNotification`; detect LINE Pay (`LINE Pay`/`LinePay` in title → `wallet = "line_pay"`) and Google Pay (`Google Pay` → `wallet = "google_pay"`); call `shouldIgnore` first in `parse()` and return `null` if matched
+
+### Android — Network & Worker
+
+- [X] T058 [P] Add `wallet: String?` field to `NotificationRequest` data class in `android/app/src/main/java/com/expenses/network/ApiClient.kt`; populate from `ParsedNotification.wallet` in `ExpenseNotificationListenerService`
+- [X] T059 [P] Update `TransactionSyncWorker.kt` in `android/app/src/main/java/com/expenses/worker/TransactionSyncWorker.kt` — treat HTTP `200` response as success (delete from Room, `Result.success()`), same as `201`; remove any `409` branch (server no longer returns 409 for same-window duplicates)
+
+### Tests
+
+- [X] T060 [P] Update `backend/tests/handlers/android.test.ts` — replace 409-duplicate test with upsert-merge test (second notification with same amount returns 200 with `merged: true`); add test for `easy_card` and `prepaid_wallet` payment methods; add test for invalid `wallet` value rejected when `payment_method` is `cash`
+- [X] T061 [P] Update `android/app/src/test/java/com/expenses/parser/NotificationParserTest.kt` — add tests: EasyCard auto top-up notification returns `null` (shouldIgnore); ATM withdrawal notification returns `null`; LINE Pay title sets `wallet = "line_pay"`; Google Pay title sets `wallet = "google_pay"`; regular bank notification has `wallet = null`
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -150,6 +187,7 @@ description: "Task list for Expense Tracker implementation"
 - **US2 (Phase 4)**: Depends on Foundational — no dependency on US1/US3 (can run in parallel with US1)
 - **US3 (Phase 5)**: Depends on Foundational + US2 (reuses `discord_message_id` stored by US2 handler)
 - **Polish (Phase N)**: Depends on all desired user stories complete
+- **Payment Model Update (Phase P)**: Depends on Phase N — patches existing code, no new user stories
 
 ### User Story Dependencies
 

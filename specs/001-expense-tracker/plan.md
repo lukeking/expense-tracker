@@ -1,7 +1,7 @@
 # Implementation Plan: Expense Tracker (Discord Bot + Android)
 
-**Branch**: `001-expense-tracker` | **Date**: 2026-05-05 | **Spec**: [proposal.md](../../proposal.md)
-**Input**: Feature specification from `proposal.md` (clarified 2026-05-05)
+**Branch**: `001-expense-tracker` | **Date**: 2026-05-05 (updated 2026-05-06) | **Spec**: [proposal.md](../../proposal.md)
+**Input**: Feature specification from `proposal.md` (clarified 2026-05-05, payment model clarified 2026-05-06)
 
 ## Summary
 
@@ -21,6 +21,7 @@ Build a personal, single-user automated expense tracking system combining: an An
 **Performance Goals**: Discord interactions must respond <3s (Discord hard timeout); notification ingestion <1s P95; MOF sync completes within CF Worker 30s CPU limit
 **Constraints**: CF Workers 128MB memory / 10ms CPU (free tier); Android must handle offline with WorkManager exponential backoff; no user accounts — single static API key for Android auth
 **Scale/Scope**: Single user, ~50–100 transactions/month, ~30–50 invoices/month
+**Payment Methods**: `credit_card` | `prepaid_wallet` | `easy_card` | `bank_account` | `cash`; optional `wallet` field (`'line_pay'` | `'google_pay'`) for credit_card/prepaid_wallet; multi-app notification dedup via upsert on `amount + 3-minute window`
 
 ## Constitution Check
 

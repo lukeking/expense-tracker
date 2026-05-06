@@ -1,6 +1,6 @@
 # Data Model: Expense Tracker
 
-**Branch**: `001-expense-tracker` | **Date**: 2026-05-05
+**Branch**: `001-expense-tracker` | **Date**: 2026-05-05 (updated 2026-05-06)
 
 ## Overview
 
@@ -20,25 +20,56 @@ CREATE TABLE transactions (
   amount             INTEGER NOT NULL,               -- NTD, no decimals
   items              JSONB,                          -- [{name: text, amount: integer}]
   tags               TEXT[] DEFAULT '{}',            -- freeform: ["food", "transport"]
-  payment_method     TEXT NOT NULL,                  -- 'credit_card' | 'mobile_pay' | 'cash'
-  bank_name          TEXT,                           -- from Android notification, e.g. "台新銀行"
+  payment_method     TEXT NOT NULL,                  -- see Payment Method table below
+  wallet             TEXT,                           -- mobile app used: 'line_pay' | 'google_pay' | null
+  bank_name          TEXT,                           -- from Android notification, e.g. "玉山銀行"
   note               TEXT,                           -- optional freeform note
   is_matched         BOOLEAN NOT NULL DEFAULT FALSE, -- matched with a 財政部 receipt
   matched_receipt_id UUID REFERENCES receipts(id),   -- set when matched
   discord_message_id TEXT,                           -- Discord message ID for later PATCH edits
   transaction_at     TIMESTAMPTZ NOT NULL,           -- when the purchase occurred
-  created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT chk_payment_method CHECK (
+    payment_method IN ('credit_card', 'prepaid_wallet', 'easy_card', 'bank_account', 'cash')
+  ),
+  CONSTRAINT chk_wallet CHECK (
+    wallet IS NULL OR payment_method IN ('credit_card', 'prepaid_wallet')
+  )
 );
 
 CREATE INDEX idx_transactions_transaction_at ON transactions (transaction_at DESC);
 CREATE INDEX idx_transactions_is_matched ON transactions (is_matched) WHERE is_matched = FALSE;
 ```
 
+**Payment method values**:
+
+| `payment_method` | `wallet` | Auto-capture | Description |
+|---|---|---|---|
+| `credit_card` | `null` / `'line_pay'` / `'google_pay'` | ✅ Bank push | Direct credit card or mobile-wallet-backed credit charge |
+| `prepaid_wallet` | `'line_pay'` / `'google_pay'` | ✅ App push | Mobile wallet prepaid balance (e.g. LINE Pay Money) |
+| `easy_card` | `null` | ❌ Manual only | EasyCard actual spending; auto top-up is ignored |
+| `bank_account` | `null` | ⚠️ Bank push | Online transfer / direct debit payment |
+| `cash` | `null` | ❌ Manual only | Cash payment |
+
 **Validation rules**:
 - `amount` must be > 0
-- `payment_method` must be one of `credit_card`, `mobile_pay`, `cash`
+- `payment_method` must be one of the five values above
+- `wallet` must be `null` unless `payment_method` is `credit_card` or `prepaid_wallet`
 - `matched_receipt_id` set → `is_matched` must be `true`
 - `items` array elements must have `name` (string) and `amount` (positive integer)
+
+**Multi-app notification deduplication**:
+
+The same purchase may trigger multiple push notifications within ~3 minutes from different apps (e.g. 玉山銀行 + 玉山Wallet + LINE Pay). The backend handles this with an **upsert** strategy:
+- Match condition: `amount` equal AND `created_at` within 3 minutes of existing transaction
+- First notification → `INSERT`, return `201`
+- Subsequent notifications (same window) → `UPDATE` only `NULL` fields (`bank_name`, `wallet`), return `200` with existing `transaction_id`
+- `bank_name` is NOT used as a dedup key (differs across app notifications)
+
+**Android parser ignore list** (not forwarded to backend):
+- EasyCard auto top-up: notification contains `自動加值` / `自動補值`
+- ATM cash withdrawal: notification contains `提款` / `提現` / `ATM`
+- Non-spending bank alerts (balance queries, bill reminders)
 
 **State transitions**:
 ```
@@ -114,7 +145,8 @@ CREATE TABLE pending_matches (
 ```typescript
 // src/types.ts
 
-export type PaymentMethod = 'credit_card' | 'mobile_pay' | 'cash';
+export type PaymentMethod = 'credit_card' | 'prepaid_wallet' | 'easy_card' | 'bank_account' | 'cash';
+export type MobileWallet = 'line_pay' | 'google_pay';
 
 export interface TransactionItem {
   name: string;
@@ -127,6 +159,7 @@ export interface Transaction {
   items: TransactionItem[] | null;
   tags: string[];
   payment_method: PaymentMethod;
+  wallet: MobileWallet | null;
   bank_name: string | null;
   note: string | null;
   is_matched: boolean;

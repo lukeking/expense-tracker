@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Transaction, Receipt, BudgetSettings, TransactionItem, PaymentMethod } from '../types';
+import type { Transaction, Receipt, BudgetSettings, TransactionItem, PaymentMethod, MobileWallet } from '../types';
 
 export async function insertTransaction(
   supabase: SupabaseClient,
@@ -8,6 +8,7 @@ export async function insertTransaction(
     items: TransactionItem[] | null;
     tags: string[];
     payment_method: PaymentMethod;
+    wallet?: MobileWallet | null;
     bank_name?: string | null;
     note?: string | null;
     discord_message_id?: string | null;
@@ -159,21 +160,46 @@ export async function resolvePendingMatch(
   if (error) throw new Error(`resolvePendingMatch: ${error.message}`);
 }
 
-export async function findDuplicateTransaction(
+export async function findExistingTransaction(
   supabase: SupabaseClient,
-  amount: number,
-  paymentMethod: string,
-  bankName: string
+  amount: number
 ): Promise<Transaction | null> {
-  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from('transactions')
     .select('*')
     .eq('amount', amount)
-    .eq('payment_method', paymentMethod)
-    .eq('bank_name', bankName)
-    .gte('created_at', fiveMinutesAgo)
+    .gte('created_at', threeMinutesAgo)
+    .order('created_at', { ascending: false })
     .limit(1);
-  if (error) throw new Error(`findDuplicateTransaction: ${error.message}`);
+  if (error) throw new Error(`findExistingTransaction: ${error.message}`);
   return data && data.length > 0 ? (data[0] as Transaction) : null;
+}
+
+export async function mergeTransactionFields(
+  supabase: SupabaseClient,
+  transactionId: string,
+  fields: { bank_name?: string | null; wallet?: MobileWallet | null }
+): Promise<Transaction> {
+  // Only update fields that are currently null in the DB
+  const updates: Record<string, string | null> = {};
+  if (fields.bank_name != null) updates.bank_name = fields.bank_name;
+  if (fields.wallet != null) updates.wallet = fields.wallet;
+
+  if (Object.keys(updates).length > 0) {
+    const { error } = await supabase
+      .from('transactions')
+      .update(updates)
+      .eq('id', transactionId)
+      .is('bank_name', null); // only overwrite if still null (first writer wins per field)
+    if (error) throw new Error(`mergeTransactionFields: ${error.message}`);
+  }
+
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('id', transactionId)
+    .single();
+  if (error) throw new Error(`mergeTransactionFields fetch: ${error.message}`);
+  return data as Transaction;
 }

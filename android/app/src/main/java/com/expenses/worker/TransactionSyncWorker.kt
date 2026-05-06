@@ -30,20 +30,17 @@ class TransactionSyncWorker(
             val response = api.postNotification(
                 NotificationRequest(
                     amount = pending.amount,
-                    bank_name = pending.bankName,
+                    bank_name = pending.bankName.ifEmpty { null },
                     payment_method = pending.paymentMethod,
+                    wallet = pending.wallet,
                     notification_text = pending.rawText,
                     notified_at = pending.notifiedAt,
                 )
             )
 
             when {
-                response.code() == 201 -> {
-                    dao.delete(pending)
-                    Result.success()
-                }
-                response.code() == 409 -> {
-                    // Duplicate — discard without retry
+                response.code() == 201 || response.code() == 200 -> {
+                    // 201 = new transaction created; 200 = merged into existing
                     dao.delete(pending)
                     Result.success()
                 }
