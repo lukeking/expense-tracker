@@ -16,19 +16,24 @@ The primary ledger record. Created from two sources: (a) Discord manual input, o
 
 ```sql
 CREATE TABLE transactions (
-  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  amount             INTEGER NOT NULL,               -- NTD, no decimals
-  items              JSONB,                          -- [{name: text, amount: integer}]
-  tags               TEXT[] DEFAULT '{}',            -- freeform: ["food", "transport"]
-  payment_method     TEXT NOT NULL,                  -- see Payment Method table below
-  wallet             TEXT,                           -- mobile app used: 'line_pay' | 'google_pay' | null
-  bank_name          TEXT,                           -- from Android notification, e.g. "玉山銀行"
-  note               TEXT,                           -- optional freeform note
-  is_matched         BOOLEAN NOT NULL DEFAULT FALSE, -- matched with a 財政部 receipt
-  matched_receipt_id UUID REFERENCES receipts(id),   -- set when matched
-  discord_message_id TEXT,                           -- Discord message ID for later PATCH edits
-  transaction_at     TIMESTAMPTZ NOT NULL,           -- when the purchase occurred
-  created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  transaction_type      TEXT NOT NULL DEFAULT 'expense', -- 'expense' | 'refund' | 'fee'
+  amount                INTEGER NOT NULL,               -- NTD, always positive; type determines debit/credit
+  items                 JSONB,                          -- [{name: text, amount: integer}]
+  tags                  TEXT[] DEFAULT '{}',            -- freeform: ["food", "transport"]
+  payment_method        TEXT NOT NULL,                  -- see Payment Method table below
+  wallet                TEXT,                           -- mobile app used: 'line_pay' | 'google_pay' | null
+  bank_name             TEXT,                           -- from Android notification, e.g. "玉山銀行"
+  note                  TEXT,                           -- optional freeform note
+  is_matched            BOOLEAN NOT NULL DEFAULT FALSE, -- matched with a 財政部 receipt
+  matched_receipt_id    UUID REFERENCES receipts(id),   -- set when matched
+  parent_transaction_id UUID REFERENCES transactions(id), -- set for 'refund' and 'fee' child records
+  discord_message_id    TEXT,                           -- Discord message ID for later PATCH edits
+  transaction_at        TIMESTAMPTZ NOT NULL,           -- when the purchase/refund occurred
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT chk_transaction_type CHECK (
+    transaction_type IN ('expense', 'refund', 'fee')
+  ),
   CONSTRAINT chk_payment_method CHECK (
     payment_method IN ('credit_card', 'prepaid_wallet', 'easy_card', 'bank_account', 'cash')
   ),
@@ -52,11 +57,19 @@ CREATE INDEX idx_transactions_is_matched ON transactions (is_matched) WHERE is_m
 | `cash` | `null` | ❌ Manual only | Cash payment |
 
 **Validation rules**:
-- `amount` must be > 0
+- `transaction_type` must be `'expense'`, `'refund'`, or `'fee'`
+- `amount` must be > 0 (always positive; `transaction_type` determines whether it debits or credits the budget)
 - `payment_method` must be one of the five values above
 - `wallet` must be `null` unless `payment_method` is `credit_card` or `prepaid_wallet`
 - `matched_receipt_id` set → `is_matched` must be `true`
 - `items` array elements must have `name` (string) and `amount` (positive integer)
+- `parent_transaction_id` must be set for `refund` and `fee` types (unless user explicitly records without link)
+
+**Budget calculation**:
+```
+net_spend = SUM(amount WHERE type='expense') + SUM(amount WHERE type='fee') - SUM(amount WHERE type='refund')
+```
+Both `fee` and `refund` child records are counted in the month of their own `transaction_at`, not the parent's month.
 
 **Multi-app notification deduplication**:
 
@@ -87,7 +100,8 @@ Invoice records fetched from 財政部電子發票平台. Stored raw + structure
 ```sql
 CREATE TABLE receipts (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  invoice_number  TEXT UNIQUE NOT NULL,     -- e.g. "AB12345678"
+  invoice_number  TEXT NOT NULL,            -- e.g. "AB12345678" (字軌 + serial)
+  random_code     TEXT NOT NULL,            -- 隨機碼: 4-char anti-forgery code from MOF
   seller_name     TEXT NOT NULL,
   seller_tax_id   TEXT NOT NULL,            -- 統一編號
   total_amount    INTEGER NOT NULL,         -- NTD
@@ -96,7 +110,11 @@ CREATE TABLE receipts (
   carrier_type    TEXT NOT NULL DEFAULT 'mobile_barcode',
   raw_data        JSONB NOT NULL,           -- original API response for auditability
   fetched_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT uq_receipt UNIQUE (invoice_number, invoice_date, seller_tax_id, random_code)
+  -- invoice_number alone can recur across MOF 2-month allocation periods;
+  -- the composite key covers period (invoice_date), issuer (seller_tax_id),
+  -- and per-document uniqueness (random_code).
 );
 
 CREATE INDEX idx_receipts_invoice_date ON receipts (invoice_date DESC);
@@ -147,6 +165,7 @@ CREATE TABLE pending_matches (
 
 export type PaymentMethod = 'credit_card' | 'prepaid_wallet' | 'easy_card' | 'bank_account' | 'cash';
 export type MobileWallet = 'line_pay' | 'google_pay';
+export type TransactionType = 'expense' | 'refund' | 'fee';
 
 export interface TransactionItem {
   name: string;
@@ -155,6 +174,7 @@ export interface TransactionItem {
 
 export interface Transaction {
   id: string;
+  transaction_type: TransactionType;
   amount: number;
   items: TransactionItem[] | null;
   tags: string[];
@@ -164,6 +184,7 @@ export interface Transaction {
   note: string | null;
   is_matched: boolean;
   matched_receipt_id: string | null;
+  parent_transaction_id: string | null;
   discord_message_id: string | null;
   transaction_at: string; // ISO 8601
   created_at: string;
@@ -179,6 +200,7 @@ export interface ReceiptItem {
 export interface Receipt {
   id: string;
   invoice_number: string;
+  random_code: string;    // 隨機碼: 4-char anti-forgery code
   seller_name: string;
   seller_tax_id: string;
   total_amount: number;

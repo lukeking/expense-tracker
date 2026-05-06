@@ -1,5 +1,6 @@
 export type PaymentMethod = 'credit_card' | 'prepaid_wallet' | 'easy_card' | 'bank_account' | 'cash';
 export type MobileWallet = 'line_pay' | 'google_pay';
+export type TransactionType = 'expense' | 'refund' | 'fee';
 
 export interface TransactionItem {
   name: string;
@@ -8,6 +9,7 @@ export interface TransactionItem {
 
 export interface Transaction {
   id: string;
+  transaction_type: TransactionType;
   amount: number;
   items: TransactionItem[] | null;
   tags: string[];
@@ -17,6 +19,7 @@ export interface Transaction {
   note: string | null;
   is_matched: boolean;
   matched_receipt_id: string | null;
+  parent_transaction_id: string | null;
   discord_message_id: string | null;
   transaction_at: string;
   created_at: string;
@@ -32,6 +35,7 @@ export interface ReceiptItem {
 export interface Receipt {
   id: string;
   invoice_number: string;
+  random_code: string;
   seller_name: string;
   seller_tax_id: string;
   total_amount: number;
@@ -55,6 +59,28 @@ export interface BudgetProgress {
   percentage: number;
   year: number;
   month: number;
+}
+
+export interface BudgetSummary {
+  total_spent: number;
+  monthly_budget: number;
+  remaining: number;
+  percentage: number;
+}
+
+export interface InputResponse {
+  success: boolean;
+  message: string;
+  transaction_id?: string;
+  budget_summary?: BudgetSummary;
+}
+
+export interface CandidateTransaction {
+  id: string;
+  amount: number;
+  description: string;
+  transaction_at: string;
+  transaction_type: TransactionType;
 }
 
 export interface GeminiParseResult {

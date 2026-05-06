@@ -2,7 +2,8 @@
 
 CREATE TABLE IF NOT EXISTS receipts (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  invoice_number  TEXT UNIQUE NOT NULL,
+  invoice_number  TEXT NOT NULL,
+  random_code     TEXT NOT NULL,
   seller_name     TEXT NOT NULL,
   seller_tax_id   TEXT NOT NULL,
   total_amount    INTEGER NOT NULL,
@@ -11,15 +12,17 @@ CREATE TABLE IF NOT EXISTS receipts (
   carrier_type    TEXT NOT NULL DEFAULT 'mobile_barcode',
   raw_data        JSONB NOT NULL,
   fetched_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT uq_receipt UNIQUE (invoice_number, invoice_date, seller_tax_id, random_code)
 );
 
 CREATE INDEX IF NOT EXISTS idx_receipts_invoice_date ON receipts (invoice_date DESC);
 CREATE INDEX IF NOT EXISTS idx_receipts_total_amount ON receipts (total_amount);
 
 CREATE TABLE IF NOT EXISTS transactions (
-  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  amount             INTEGER NOT NULL CHECK (amount > 0),
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  transaction_type      TEXT NOT NULL DEFAULT 'expense' CHECK (transaction_type IN ('expense', 'refund', 'fee')),
+  amount                INTEGER NOT NULL CHECK (amount > 0),
   items              JSONB,
   tags               TEXT[] DEFAULT '{}',
   payment_method     TEXT NOT NULL CHECK (
@@ -30,9 +33,10 @@ CREATE TABLE IF NOT EXISTS transactions (
                      ),
   bank_name          TEXT,
   note               TEXT,
-  is_matched         BOOLEAN NOT NULL DEFAULT FALSE,
-  matched_receipt_id UUID REFERENCES receipts(id),
-  discord_message_id TEXT,
+  is_matched            BOOLEAN NOT NULL DEFAULT FALSE,
+  matched_receipt_id    UUID REFERENCES receipts(id),
+  parent_transaction_id UUID REFERENCES transactions(id),
+  discord_message_id    TEXT,
   transaction_at     TIMESTAMPTZ NOT NULL,
   created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

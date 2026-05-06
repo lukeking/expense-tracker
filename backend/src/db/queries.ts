@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Transaction, Receipt, BudgetSettings, TransactionItem, PaymentMethod, MobileWallet } from '../types';
+import type { Transaction, Receipt, BudgetSettings, TransactionItem, PaymentMethod, MobileWallet, TransactionType } from '../types';
 
 export async function insertTransaction(
   supabase: SupabaseClient,
@@ -12,6 +12,8 @@ export async function insertTransaction(
     bank_name?: string | null;
     note?: string | null;
     discord_message_id?: string | null;
+    transaction_type?: TransactionType;
+    parent_transaction_id?: string | null;
     transaction_at: string;
   }
 ): Promise<Transaction> {
