@@ -102,10 +102,11 @@ The user can query the current month's spending summary at any time from chat, a
 - **FR-010**: The system MUST allow the user to set a monthly total budget target and track cumulative spending against it.
 - **FR-011**: The system MUST operate correctly when the Android device is temporarily offline — expenses captured while offline MUST be submitted automatically once connectivity is restored.
 - **FR-012**: The system MUST support querying the current spending summary on demand from chat.
+- **FR-013**: The system MUST support a `fee [amount] [description]` command in both the chat interface and the Android prompt that creates a new linked fee transaction (国外交易服務費 or any deferred charge) referencing a prior transaction matched by description. If multiple candidates match, the user is presented with a selection list. The original transaction record is never modified.
 
 ### Key Entities
 
-- **Transaction**: A single expense record. Attributes: unique ID, amount (NT$ integer), items (structured list of item name + sub-amount), payment method, wallet (optional), bank name (optional), tags (free-form list), matched-invoice flag, matched invoice reference, chat message reference, timestamps.
+- **Transaction**: A single expense record. Attributes: unique ID, amount (NT$ integer), items (structured list of item name + sub-amount), payment method, wallet (optional), bank name (optional), tags (free-form list), matched-invoice flag, matched invoice reference, chat message reference, parent transaction reference (optional — set when the record is a linked fee such as 國外交易服務費), timestamps.
 - **Monthly Budget**: A configuration value (NT$ integer) representing the user's spending cap for a calendar month.
 - **Invoice**: A government e-invoice record retrieved from the invoice platform. Attributes: invoice number, anti-forgery random code (隨機碼, 4 chars), merchant name, merchant tax ID (統一編號), issue date, total amount, line items (name + amount each). Uniqueness is enforced by the composite key `(invoice_number, invoice_date, seller_tax_id, random_code)` — invoice number alone can recur across allocation periods; the random code eliminates all remaining collision scenarios.
 - **Tag**: A freeform label attached to a transaction for later filtering (e.g., `food`, `transport`). No budget cap per tag.
@@ -131,6 +132,7 @@ The user can query the current month's spending summary at any time from chat, a
 
 ### Session 2026-05-06
 
+- Q: How should foreign transaction service fees (國外交易服務費) be recorded? → A: `fee [amount] [description]` command available in both Discord and Android prompt. Creates a new linked transaction (child) referencing the original (parent) via `parent_transaction_id`. Original transaction is never modified. If multiple parent candidates match, user selects from a list before the fee record is created.
 - Q: What fields should form the receipts unique constraint? → A: `UNIQUE (invoice_number, invoice_date, seller_tax_id, random_code)` — invoice_number alone can recur across MOF allocation periods; invoice_date pins the period; seller_tax_id pins the issuer; random_code (隨機碼, 4-char anti-forgery code) eliminates all remaining collision scenarios and requires a new `random_code` column in the receipts table.
 
 ---

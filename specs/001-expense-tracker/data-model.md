@@ -26,6 +26,7 @@ CREATE TABLE transactions (
   note               TEXT,                           -- optional freeform note
   is_matched         BOOLEAN NOT NULL DEFAULT FALSE, -- matched with a 財政部 receipt
   matched_receipt_id UUID REFERENCES receipts(id),   -- set when matched
+  parent_transaction_id UUID REFERENCES transactions(id), -- set for linked fee records (e.g. 國外交易服務費)
   discord_message_id TEXT,                           -- Discord message ID for later PATCH edits
   transaction_at     TIMESTAMPTZ NOT NULL,           -- when the purchase occurred
   created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -169,6 +170,7 @@ export interface Transaction {
   note: string | null;
   is_matched: boolean;
   matched_receipt_id: string | null;
+  parent_transaction_id: string | null;
   discord_message_id: string | null;
   transaction_at: string; // ISO 8601
   created_at: string;

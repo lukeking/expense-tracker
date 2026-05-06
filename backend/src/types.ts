@@ -17,6 +17,7 @@ export interface Transaction {
   note: string | null;
   is_matched: boolean;
   matched_receipt_id: string | null;
+  parent_transaction_id: string | null;
   discord_message_id: string | null;
   transaction_at: string;
   created_at: string;

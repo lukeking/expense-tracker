@@ -32,9 +32,10 @@ CREATE TABLE IF NOT EXISTS transactions (
                      ),
   bank_name          TEXT,
   note               TEXT,
-  is_matched         BOOLEAN NOT NULL DEFAULT FALSE,
-  matched_receipt_id UUID REFERENCES receipts(id),
-  discord_message_id TEXT,
+  is_matched            BOOLEAN NOT NULL DEFAULT FALSE,
+  matched_receipt_id    UUID REFERENCES receipts(id),
+  parent_transaction_id UUID REFERENCES transactions(id),
+  discord_message_id    TEXT,
   transaction_at     TIMESTAMPTZ NOT NULL,
   created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

@@ -27,12 +27,31 @@ The user opens the Android app, sees a single text input field, types a freeform
 
 ---
 
+### User Story 2 — Foreign Transaction Fee Logging (Priority: P2)
+
+When making a foreign purchase, the user's credit card later charges a separate service fee (國外交易服務費, typically 1–1.5%) that does not appear in the original push notification — it only shows up on the monthly statement days later. The user needs to record this fee linked to the original transaction without editing the original amount.
+
+Using the Android prompt, the user types `fee [amount] [original transaction description]` (e.g. `fee 47 星巴克`). The backend finds the most recent matching transaction, creates a new linked fee record for NT$47, and confirms in-app. The original transaction record remains unchanged.
+
+**Why this priority**: Without this, foreign fees either go unrecorded (inaccurate budget) or require re-entering the full transaction with a wrong date (loses time and causal accuracy). P2 because it only affects foreign card transactions.
+
+**Independent Test**: Create a transaction for NT$380 "星巴克", then submit `fee 47 星巴克` via the prompt; verify a new NT$47 fee transaction exists linked to the original NT$380 record, and the original record is unmodified.
+
+**Acceptance Scenarios**:
+
+1. **Given** a prior transaction for NT$1,200 "Airbnb" exists, **When** the user submits `fee 180 Airbnb`, **Then** a new fee transaction of NT$180 is created linked to the Airbnb transaction, and the app confirms with updated budget totals.
+2. **Given** no matching transaction is found for the description, **When** the user submits `fee 47 某商店`, **Then** the app shows a "no matching transaction found" message and no fee record is created.
+3. **Given** multiple transactions match the description (e.g. two 星巴克 visits), **When** the user submits `fee 47 星巴克`, **Then** the app lists the candidates with dates/amounts and asks the user to select the correct one before creating the fee record.
+
+---
+
 ### Edge Cases
 
 - What happens when the backend returns a parse error? The app shows a human-readable error message; the text is preserved so the user can correct and resubmit.
 - What if the user submits an empty string? Submission is blocked; a hint message is shown.
 - What if the same expense is submitted twice (double-tap)? The second submission goes through normal dedup — same amount within 3 minutes merges into one record at the backend.
 - What if the device is offline and the user closes the app before syncing? The queued entry persists and is submitted on next launch with connectivity.
+- What if `fee` is submitted without a description and multiple recent foreign transactions exist? The app presents the last 5 transactions as candidates for the user to select.
 
 ---
 
@@ -47,10 +66,11 @@ The user opens the Android app, sees a single text input field, types a freeform
 - **FR-005**: If the device is offline at submission time, the entry MUST be queued locally and submitted automatically once connectivity is restored, with the user notified of the deferred outcome.
 - **FR-006**: The text field MUST be cleared after a successful submission and focused for the next entry.
 - **FR-007**: The prompt screen MUST be accessible directly — without navigating through multiple screens — so it can serve as a fast fallback input method.
+- **FR-008**: The prompt MUST accept a `fee [amount] [description]` command that creates a new linked fee transaction referencing a prior transaction matched by description. If multiple candidates match, the user MUST be presented with a selection list before the fee record is created.
 
 ### Key Entities
 
-No new entities. Uses the same **Transaction** entity as the main expense tracker. The prompt is a new input surface, not a new data concept.
+No new entities. Uses the same **Transaction** entity as the main expense tracker, including the `parent_transaction_id` field for linked fee records. The prompt is a new input surface, not a new data concept.
 
 ---
 
@@ -62,6 +82,15 @@ No new entities. Uses the same **Transaction** entity as the main expense tracke
 - **SC-002**: 100% of expense types supported by the chat interface (cash, EasyCard, bank account, manual credit card) can also be submitted via the Android prompt — no category is blocked.
 - **SC-003**: Offline-queued expenses are submitted within 30 seconds of connectivity being restored, with no data loss.
 - **SC-004**: Parse errors are surfaced to the user within 5 seconds of submission with a message clear enough that the user can correct and resubmit without assistance.
+- **SC-005**: A `fee` command with an unambiguous description match completes (linked record created + confirmation shown) in under 10 seconds.
+
+---
+
+## Clarifications
+
+### Session 2026-05-06
+
+- Q: Where should the foreign transaction fee command live? → A: Both Discord and Android prompt. Fee is modeled as a new linked transaction (not an edit to the original) — `fee [amount] [description]` finds the matching parent transaction and creates a child fee record via `parent_transaction_id`. No web console or history UI needed.
 
 ---
 
