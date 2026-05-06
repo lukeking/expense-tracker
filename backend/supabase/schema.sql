@@ -22,7 +22,12 @@ CREATE TABLE IF NOT EXISTS transactions (
   amount             INTEGER NOT NULL CHECK (amount > 0),
   items              JSONB,
   tags               TEXT[] DEFAULT '{}',
-  payment_method     TEXT NOT NULL CHECK (payment_method IN ('credit_card', 'mobile_pay', 'cash')),
+  payment_method     TEXT NOT NULL CHECK (
+                       payment_method IN ('credit_card', 'prepaid_wallet', 'easy_card', 'bank_account', 'cash')
+                     ),
+  wallet             TEXT CHECK (
+                       wallet IS NULL OR payment_method IN ('credit_card', 'prepaid_wallet')
+                     ),
   bank_name          TEXT,
   note               TEXT,
   is_matched         BOOLEAN NOT NULL DEFAULT FALSE,

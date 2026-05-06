@@ -125,3 +125,34 @@ Worker (async, waitUntil): call Gemini → write DB → PATCH /webhooks/{id}/{to
 **Alternatives considered**:
 - Firebase Cloud Messaging + immediate upload — simpler but requires network at notification time; fails offline
 - Foreground service — overkill for this use case, battery-hostile
+
+---
+
+## 9. Payment Method Model & Multi-App Notification Deduplication
+
+**Decision**: Five `payment_method` values with a separate nullable `wallet` field; backend upsert dedup on `amount + 3-minute window`
+
+**Rationale**:
+
+The original `mobile_pay` value conflated two distinct payment sources (credit card via mobile wallet vs. prepaid wallet balance). Splitting into `credit_card` + `prepaid_wallet` with a shared `wallet` field (`'line_pay'` | `'google_pay'`) cleanly models both cases while remaining queryable.
+
+A single credit card purchase in Taiwan typically generates 2–3 push notifications within ~3 minutes from different apps (e.g. 玉山銀行 + 玉山Wallet + LINE Pay official account). Each notification carries partial information:
+- Bank app notification → `bank_name`, `amount`
+- Mobile wallet notification → `wallet` type, `amount`
+
+**Chosen strategy**: Android sends each notification independently (stateless); backend upserts on `amount + 3-minute window`, merging only null fields. This gives the richest possible data (both `bank_name` and `wallet`) without complex client-side coordination.
+
+**Payment capture matrix**:
+
+| `payment_method` | Android auto-capture | Notes |
+|---|---|---|
+| `credit_card` | ✅ Bank/wallet push | Possible multi-app notifications → upsert merge |
+| `prepaid_wallet` | ✅ App push | LINE Pay Money etc.; same upsert logic |
+| `easy_card` | ❌ Manual (Discord) | No per-transaction push; auto top-up ignored |
+| `bank_account` | ⚠️ Possible bank push | Online transfer; ATM withdrawal push must be ignored |
+| `cash` | ❌ Manual (Discord) | No push |
+
+**Alternatives considered**:
+- Android-side 60s aggregation window — avoids duplicate backend calls but requires stateful client logic; breaks WorkManager's simple retry model
+- Keep `mobile_pay` as single value — loses distinction between credit-card-backed and prepaid-balance payments; breaks future budget categorisation
+- `409 Conflict` reject on duplicate — discards partial info from second notification (e.g. loses `wallet` type if bank notification arrived first)
