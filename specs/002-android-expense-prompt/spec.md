@@ -41,7 +41,8 @@ Using the Android prompt, the user types `fee [amount] [original transaction des
 
 1. **Given** a prior transaction for NT$1,200 "Airbnb" exists, **When** the user submits `fee 180 Airbnb`, **Then** a new fee transaction of NT$180 is created linked to the Airbnb transaction, and the app confirms with updated budget totals.
 2. **Given** no matching transaction is found for the description, **When** the user submits `fee 47 某商店`, **Then** the app shows a "no matching transaction found" message and no fee record is created.
-3. **Given** multiple transactions match the description (e.g. two 星巴克 visits), **When** the user submits `fee 47 星巴克`, **Then** the app lists the candidates with dates/amounts and asks the user to select the correct one before creating the fee record.
+3. **Given** multiple transactions match the description (e.g. two 星巴克 visits), **When** the user submits `fee 47 星巴克`, **Then** the app lists the candidates with dates/amounts and a "None of these" option; selecting a candidate links the fee record, selecting "None of these" saves it as a standalone unlinked transaction.
+4. **Given** the user submits `fee 180` with no description, **When** the app displays the candidate list, **Then** it shows the 20 most recent transactions (most recent first) plus the "None of these" option, so the user can tap without recalling any details.
 
 ---
 
@@ -66,7 +67,7 @@ Using the Android prompt, the user types `fee [amount] [original transaction des
 - **FR-005**: If the device is offline at submission time, the entry MUST be queued locally and submitted automatically once connectivity is restored, with the user notified of the deferred outcome.
 - **FR-006**: The text field MUST be cleared after a successful submission and focused for the next entry.
 - **FR-007**: The prompt screen MUST be accessible directly — without navigating through multiple screens — so it can serve as a fast fallback input method.
-- **FR-008**: The prompt MUST accept a `fee [amount] [description]` command that creates a new linked fee transaction referencing a prior transaction matched by description. If multiple candidates match, the user MUST be presented with a selection list before the fee record is created.
+- **FR-008**: The prompt MUST accept a `fee [amount] [description]` command that creates a new linked fee transaction referencing a prior transaction matched by description. On Android, the app MUST present a scrollable list of candidate transactions (most recent first) for the user to tap-select, rather than requiring the user to recall details from memory. The list MUST include a "None of these / record without link" option at the bottom, allowing the fee to be saved as a standalone unlinked transaction if no candidate is correct.
 
 ### Key Entities
 
