@@ -1,0 +1,33 @@
+.claude/skills/speckit*
+
+# Node.js / TypeScript (backend)
+node_modules/
+dist/
+build/
+*.log
+.env
+.env.*
+!.env.example
+
+# Wrangler
+.wrangler/
+
+# Android
+android/app/src/main/res/values/secrets.xml
+android/.gradle/
+android/app/build/
+android/build/
+android/*.iml
+android/.idea/
+android/local.properties
+*.class
+*.apk
+*.aab
+
+# OS
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+.vscode/
+.idea/

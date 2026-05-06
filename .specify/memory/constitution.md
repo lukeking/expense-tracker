@@ -1,50 +1,158 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+SYNC IMPACT REPORT
+==================
+Version change: (template/unversioned) → 1.0.0
+Ratified: 2026-05-05 (initial adoption)
+
+Modified principles:
+  [PRINCIPLE_1_NAME] → I. Simplicity-First (Personal Tool)
+  [PRINCIPLE_2_NAME] → II. Offline-First on Android
+  [PRINCIPLE_3_NAME] → III. Serverless Boundary Compliance
+  [PRINCIPLE_4_NAME] → IV. Automation Over Manual Input
+  [PRINCIPLE_5_NAME] → V. Security at System Boundaries
+
+Added sections:
+  II. Phased Development Constraints (formerly [SECTION_2_NAME])
+  III. Quality Standards (formerly [SECTION_3_NAME])
+  Governance (previously placeholder)
+
+Removed sections: None
+
+Templates reviewed and updated:
+  ✅ .specify/templates/plan-template.md — Constitution Check gates populated
+  ✅ .specify/templates/spec-template.md — no changes required
+  ✅ .specify/templates/tasks-template.md — no changes required
+
+Deferred TODOs: None
+-->
+
+# Expense Tracker Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Simplicity-First (Personal Tool)
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+This is a single-user personal tool. The system MUST NOT introduce multi-user,
+multi-tenant, or generalized abstractions unless explicitly required by a future
+requirement that has been ratified in this constitution.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+- No user accounts, no RBAC, no access control layer beyond Discord webhook
+  signature verification and the Android static API key.
+- YAGNI applies strictly: three similar lines of code beat a premature abstraction.
+- When in doubt between two approaches, choose the one with fewer moving parts.
+- Adding a new project component (service, library, microservice) MUST be justified
+  in the feature plan's Complexity Tracking table.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### II. Offline-First on Android
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+The Android companion app MUST function (capture and queue transactions) without
+network connectivity.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+- All parsed notification data MUST be persisted to a local Room database before
+  any network call is attempted.
+- WorkManager MUST be used for all background sync operations. Direct network calls
+  from `NotificationListenerService` are PROHIBITED.
+- Failed sync attempts MUST use exponential backoff; the system MUST NOT silently
+  drop a transaction due to a transient network error.
+- On receiving a `409 Conflict` from the server, the app MUST discard the duplicate
+  without retrying.
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+### III. Serverless Boundary Compliance
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+All CF Workers backend code MUST respect the platform's hard constraints to avoid
+silent failures or unexpected billing.
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+- Memory MUST stay within the 128 MB limit per isolate; CPU time MUST be written
+  with the 10 ms free-tier limit in mind.
+- No WebSocket connections, no long-polling, no Discord gateway. Discord integration
+  MUST use the Interactions Webhook (HTTP POST) model exclusively.
+- Any operation that may exceed 3 seconds (Gemini API call, Supabase write, MOF API
+  call) MUST be deferred: return a Discord `type: 5` deferred response immediately
+  then complete the operation inside `ctx.waitUntil()`.
+- The MOF Cron Trigger handler MUST complete within the CF Workers 30-second CPU
+  wall-time limit. Long receipt lists MUST be processed in batches if needed.
+
+### IV. Automation Over Manual Input
+
+The primary goal is to minimize cognitive overhead of expense tracking.
+
+- Credit card and mobile pay transactions MUST be captured automatically via the
+  Android notification listener (target: ≥ 95% of monthly transactions).
+- Manual Discord input MUST remain a single low-friction command:
+  `/expense <amount> <description>` — no multi-step wizard, no required fields
+  beyond amount.
+- Receipt matching MUST be fully automatic for unambiguous cases (exactly one
+  candidate receipt in the time window). User confirmation via Discord button
+  MUST be required only for genuinely ambiguous matches.
+- The system MUST proactively update (PATCH) a previously sent Discord message
+  when a transaction is successfully matched to a receipt, so the user sees a
+  richer record without additional input.
+
+### V. Security at System Boundaries
+
+All secrets MUST be stored server-side; no credential MUST ever be embedded in
+client-facing artifacts or source code.
+
+- Discord interactions endpoint MUST verify the ed25519 signature on every
+  request before processing any payload. Requests failing verification MUST
+  return `401` immediately.
+- The Android API key MUST be stored as a CF Workers secret (`wrangler secret put
+  ANDROID_API_KEY`) and validated in the worker. It MUST NOT appear in source code,
+  `wrangler.toml`, or committed config files.
+- 財政部 API credentials (carrier ID, verification code, API key) MUST be stored
+  exclusively as CF Workers secrets.
+- The Supabase service role key MUST never be transmitted to any client (Android
+  app or Discord user). All Supabase access goes through the CF Worker exclusively.
+- Android clients MUST communicate only through the CF Worker HTTP API; direct
+  Supabase connections from Android are PROHIBITED.
+
+## Phased Development Constraints
+
+Phase 1 (Core Engine) and Phase 2 (Automation) are the two delivery milestones.
+
+- Phase 1 MUST be fully functional and independently deployable before any Phase 2
+  work begins. Phase 1 scope: manual Discord expense entry, Gemini NLP parsing,
+  monthly budget reporting.
+- Phase 2 MUST extend Phase 1 without breaking it. Phase 2 scope: Android
+  notification listener, 財政部 MOF API sync, automatic receipt matching.
+- Each phase MUST be demonstrable independently using only the quickstart guide.
+- No Phase 2 infrastructure (e.g., `pending_matches` table, MOF Cron Trigger) is
+  required in Phase 1, but schema MUST be forward-compatible with Phase 2 additions.
+
+## Quality Standards
+
+Testing MUST cover the failure modes most likely to corrupt the single user's
+financial data.
+
+- All CF Workers request handlers MUST have unit tests using Vitest +
+  `@cloudflare/vitest-pool-workers`. Tests MUST run against the actual Workers
+  runtime (Miniflare), not mocked fetch.
+- Android business logic (notification parser, sync worker, deduplication) MUST
+  have unit tests using JUnit 4 + MockK.
+- The following edge cases MUST have explicit test coverage:
+  - Duplicate notification received within 5-minute window
+  - Ambiguous match (two same-amount receipts in time window)
+  - MOF API returning `401` (bad credentials)
+  - Discord ed25519 verification failure
+  - Android notification received while offline
+- Deduplication MUST be enforced at the server ingestion layer; client-side
+  deduplication alone is insufficient.
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+This constitution supersedes all other practices documented in this repository.
+Ambiguity is resolved in favor of the principle that was most recently ratified.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+- Amendments MUST include: a written rationale, a semver version bump, and an
+  updated `Last Amended` date.
+- Version bump rules: MAJOR for principle removal or incompatible redefinition;
+  MINOR for new principle or materially expanded guidance; PATCH for clarifications
+  or wording fixes.
+- Every feature implementation plan (`plan.md`) MUST include a Constitution Check
+  section that explicitly verifies compliance with each of the five Core Principles.
+  A failing gate MUST block Phase 0 research unless justified in the Complexity
+  Tracking table.
+- All pull requests introducing new components, dependencies, or data-access
+  patterns MUST reference the relevant principle(s) that authorize the change.
+
+**Version**: 1.0.0 | **Ratified**: 2026-05-05 | **Last Amended**: 2026-05-05
