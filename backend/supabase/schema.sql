@@ -2,7 +2,8 @@
 
 CREATE TABLE IF NOT EXISTS receipts (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  invoice_number  TEXT UNIQUE NOT NULL,
+  invoice_number  TEXT NOT NULL,
+  random_code     TEXT NOT NULL,
   seller_name     TEXT NOT NULL,
   seller_tax_id   TEXT NOT NULL,
   total_amount    INTEGER NOT NULL,
@@ -11,7 +12,8 @@ CREATE TABLE IF NOT EXISTS receipts (
   carrier_type    TEXT NOT NULL DEFAULT 'mobile_barcode',
   raw_data        JSONB NOT NULL,
   fetched_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT uq_receipt UNIQUE (invoice_number, invoice_date, seller_tax_id, random_code)
 );
 
 CREATE INDEX IF NOT EXISTS idx_receipts_invoice_date ON receipts (invoice_date DESC);

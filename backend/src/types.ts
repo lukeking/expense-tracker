@@ -32,6 +32,7 @@ export interface ReceiptItem {
 export interface Receipt {
   id: string;
   invoice_number: string;
+  random_code: string;
   seller_name: string;
   seller_tax_id: string;
   total_amount: number;

@@ -107,7 +107,7 @@ The user can query the current month's spending summary at any time from chat, a
 
 - **Transaction**: A single expense record. Attributes: unique ID, amount (NT$ integer), items (structured list of item name + sub-amount), payment method, wallet (optional), bank name (optional), tags (free-form list), matched-invoice flag, matched invoice reference, chat message reference, timestamps.
 - **Monthly Budget**: A configuration value (NT$ integer) representing the user's spending cap for a calendar month.
-- **Invoice**: A government e-invoice record retrieved from the invoice platform. Attributes: invoice number, merchant name, date, total amount, line items (name + amount each).
+- **Invoice**: A government e-invoice record retrieved from the invoice platform. Attributes: invoice number, anti-forgery random code (隨機碼, 4 chars), merchant name, merchant tax ID (統一編號), issue date, total amount, line items (name + amount each). Uniqueness is enforced by the composite key `(invoice_number, invoice_date, seller_tax_id, random_code)` — invoice number alone can recur across allocation periods; the random code eliminates all remaining collision scenarios.
 - **Tag**: A freeform label attached to a transaction for later filtering (e.g., `food`, `transport`). No budget cap per tag.
 
 ---
@@ -124,6 +124,14 @@ The user can query the current month's spending summary at any time from chat, a
 - **SC-006**: Ambiguous reconciliation matches (same amount, multiple candidates) are never auto-resolved — 100% of such cases go to the user for confirmation.
 - **SC-007**: The system remains fully operational after the Android device has been offline for up to 24 hours — no expense data is lost.
 - **SC-008**: The monthly budget summary query returns accurate totals within 2 seconds.
+
+---
+
+## Clarifications
+
+### Session 2026-05-06
+
+- Q: What fields should form the receipts unique constraint? → A: `UNIQUE (invoice_number, invoice_date, seller_tax_id, random_code)` — invoice_number alone can recur across MOF allocation periods; invoice_date pins the period; seller_tax_id pins the issuer; random_code (隨機碼, 4-char anti-forgery code) eliminates all remaining collision scenarios and requires a new `random_code` column in the receipts table.
 
 ---
 

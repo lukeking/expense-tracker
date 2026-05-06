@@ -87,7 +87,8 @@ Invoice records fetched from 財政部電子發票平台. Stored raw + structure
 ```sql
 CREATE TABLE receipts (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  invoice_number  TEXT UNIQUE NOT NULL,     -- e.g. "AB12345678"
+  invoice_number  TEXT NOT NULL,            -- e.g. "AB12345678" (字軌 + serial)
+  random_code     TEXT NOT NULL,            -- 隨機碼: 4-char anti-forgery code from MOF
   seller_name     TEXT NOT NULL,
   seller_tax_id   TEXT NOT NULL,            -- 統一編號
   total_amount    INTEGER NOT NULL,         -- NTD
@@ -96,7 +97,11 @@ CREATE TABLE receipts (
   carrier_type    TEXT NOT NULL DEFAULT 'mobile_barcode',
   raw_data        JSONB NOT NULL,           -- original API response for auditability
   fetched_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT uq_receipt UNIQUE (invoice_number, invoice_date, seller_tax_id, random_code)
+  -- invoice_number alone can recur across MOF 2-month allocation periods;
+  -- the composite key covers period (invoice_date), issuer (seller_tax_id),
+  -- and per-document uniqueness (random_code).
 );
 
 CREATE INDEX idx_receipts_invoice_date ON receipts (invoice_date DESC);
@@ -179,6 +184,7 @@ export interface ReceiptItem {
 export interface Receipt {
   id: string;
   invoice_number: string;
+  random_code: string;    // 隨機碼: 4-char anti-forgery code
   seller_name: string;
   seller_tax_id: string;
   total_amount: number;
