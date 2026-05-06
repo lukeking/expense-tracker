@@ -61,6 +61,28 @@ export interface BudgetProgress {
   month: number;
 }
 
+export interface BudgetSummary {
+  total_spent: number;
+  monthly_budget: number;
+  remaining: number;
+  percentage: number;
+}
+
+export interface InputResponse {
+  success: boolean;
+  message: string;
+  transaction_id?: string;
+  budget_summary?: BudgetSummary;
+}
+
+export interface CandidateTransaction {
+  id: string;
+  amount: number;
+  description: string;
+  transaction_at: string;
+  transaction_type: TransactionType;
+}
+
 export interface GeminiParseResult {
   amount: number;
   items: { name: string; amount?: number }[];
