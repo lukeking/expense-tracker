@@ -85,6 +85,7 @@ export interface CandidateTransaction {
 
 export interface GeminiParseResult {
   amount: number;
+  payment_method: PaymentMethod;
   items: { name: string; amount?: number }[];
   tags: string[];
 }
@@ -96,6 +97,7 @@ export interface Env {
   DISCORD_APPLICATION_ID: string;
   DISCORD_BOT_TOKEN: string;
   GEMINI_API_KEY: string;
+  GEMINI_MODEL_NAME: string;
   ANDROID_API_KEY: string;
   MOF_CARRIER_ID: string;
   MOF_VERIFICATION_CODE: string;

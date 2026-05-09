@@ -5,17 +5,23 @@ const DISCORD_API = 'https://discord.com/api/v10';
 export async function patchInteractionMessage(
   env: Env,
   token: string,
-  content: string
-): Promise<void> {
+  content: string,
+  components?: object[]
+): Promise<string | null> {
   const url = `${DISCORD_API}/webhooks/${env.DISCORD_APPLICATION_ID}/${token}/messages/@original`;
+  const body: Record<string, unknown> = { content };
+  if (components !== undefined) body.components = components;
   const res = await fetch(url, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     console.error('patchInteractionMessage failed:', res.status, await res.text());
+    return null;
   }
+  const data = (await res.json()) as { id: string };
+  return data.id;
 }
 
 export async function sendChannelMessage(

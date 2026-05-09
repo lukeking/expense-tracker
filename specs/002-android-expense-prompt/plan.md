@@ -1,96 +1,117 @@
-# Implementation Plan: Android Expense Prompt
+# Implementation Plan: [FEATURE]
 
-**Branch**: `001-expense-tracker` | **Date**: 2026-05-06 | **Spec**: [spec.md](spec.md)
-**Input**: Feature specification from `specs/002-android-expense-prompt/spec.md`
+**Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
+**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
+
+**Note**: This template is filled in by the `/speckit-plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
 
 ## Summary
 
-Add a freeform text prompt screen to the existing Android app that replicates Discord bot expense-entry functionality: manual expense, `fee [amount] [desc]`, and `refund [amount] [desc]` commands. The backend parses raw text via Gemini, stores the result in Supabase, and returns a budget summary. Offline inputs queue in a new `PendingManualInput` Room entity (separate from `PendingTransaction`) and sync via a new WorkManager worker. Two new backend routes extend the existing `android.ts` handler.
+[Extract from feature spec: primary requirement + technical approach from research]
 
 ## Technical Context
 
-**Language/Version**: Kotlin 1.9 (Android, API 26+); TypeScript (CF Workers runtime, ES2022)
-**Primary Dependencies**:
-  - Android: Room, WorkManager, OkHttp/Retrofit, Kotlin Coroutines, RecyclerView
-  - Backend: Hono (routing), `@supabase/supabase-js` v2, Gemini API (raw HTTP), existing `budget.ts` service
-**Storage**: Room (Android local queue); Supabase hosted PostgreSQL (server)
-**Testing**: JUnit 4 + MockK (Android); Vitest + `@cloudflare/vitest-pool-workers` (backend)
-**Target Platform**: Android 8.0+ (API 26+); Cloudflare Workers
-**Project Type**: Extension of existing personal tool — new UI screen + two new backend routes
-**Performance Goals**: End-to-end submit → confirmation < 10s on normal connection (SC-001); candidate list fetch < 2s
-**Constraints**: Offline-first (Room + WorkManager mandatory); no Supabase direct access from Android; Android API key auth only
-**Scale/Scope**: Same single-user, ~50–100 transactions/month
+<!--
+  ACTION REQUIRED: Replace the content in this section with the technical details
+  for the project. The structure here is presented in advisory capacity to guide
+  the iteration process.
+-->
+
+**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]  
+**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]  
+**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]  
+**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]  
+**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
+**Project Type**: [e.g., library/cli/web-service/mobile-app/compiler/desktop-app or NEEDS CLARIFICATION]  
+**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
+**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
+**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- [X] **I. Simplicity-First** — One new Activity, one new Room entity, two new backend routes. No new services, libraries, or components beyond what the spec requires. The candidate list uses a plain RecyclerView (no bottom sheet). `PendingManualInput` avoids sharing schema with `PendingTransaction` because the two queue structurally different data.
-- [X] **II. Offline-First on Android** — Manual inputs are persisted to `PendingManualInput` (Room) before any network call. `ManualInputSyncWorker` (WorkManager, exponential backoff) handles all sync. `PromptActivity` enqueues the worker; it does not make direct network calls on the submit path. Duplicate detection via 3-minute window dedup at the server layer.
-- [X] **III. Serverless Boundary Compliance** — Both new routes (`POST /android/input`, `GET /android/transactions/recent`) are synchronous for the query portion. The Gemini parse call + Supabase write inside `POST /android/input` MUST use the existing deferred pattern if they risk approaching 3s. No WebSockets or gateway connections introduced.
-- [X] **IV. Automation Over Manual Input** — This feature is the manual fallback path, not a replacement for automation. It adds low-friction single-field input with no required metadata beyond the freeform text. No wizard, no pickers. The candidate list for fee/refund reduces user cognitive load (tap vs. recall).
-- [X] **V. Security at System Boundaries** — Android authenticates via the existing `ANDROID_API_KEY` header. No Supabase key on the client. API key validated in the Worker middleware. All Supabase writes go through the CF Worker.
+Verify compliance with each Core Principle from `.specify/memory/constitution.md`:
 
-*Post-design re-check*: No violations introduced. Architecture is a straightforward extension of existing patterns.
+- [ ] **I. Simplicity-First** — No unnecessary abstractions, multi-user patterns,
+  or new components without justification in Complexity Tracking.
+- [ ] **II. Offline-First on Android** — Android uses Room + WorkManager for
+  offline queuing; no direct network calls from NotificationListenerService.
+- [ ] **III. Serverless Boundary Compliance** — All slow operations use
+  `ctx.waitUntil()` + deferred Discord response; no gateway/WebSocket connections.
+- [ ] **IV. Automation Over Manual Input** — Auto-capture ≥95% of transactions;
+  manual Discord input stays a single command; auto-match unambiguous receipts.
+- [ ] **V. Security at System Boundaries** — All secrets in CF Workers secrets;
+  ed25519 Discord verification; Android never touches Supabase directly.
+
+*ERROR if any gate fails without a justified entry in Complexity Tracking.*
 
 ## Project Structure
 
 ### Documentation (this feature)
 
 ```text
-specs/002-android-expense-prompt/
-├── plan.md              # This file
-├── research.md          # Phase 0 output
-├── data-model.md        # Phase 1 output: PendingManualInput entity
-├── quickstart.md        # Phase 1 output: integration test guide
-├── contracts/
-│   └── android-prompt-api.md   # POST /android/input + GET /android/transactions/recent
-└── tasks.md             # Phase 2 output (/speckit-tasks)
+specs/[###-feature]/
+├── plan.md              # This file (/speckit-plan command output)
+├── research.md          # Phase 0 output (/speckit-plan command)
+├── data-model.md        # Phase 1 output (/speckit-plan command)
+├── quickstart.md        # Phase 1 output (/speckit-plan command)
+├── contracts/           # Phase 1 output (/speckit-plan command)
+└── tasks.md             # Phase 2 output (/speckit-tasks command - NOT created by /speckit-plan)
 ```
 
-### Source Code
+### Source Code (repository root)
+<!--
+  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
+  for this feature. Delete unused options and expand the chosen structure with
+  real paths (e.g., apps/admin, packages/something). The delivered plan must
+  not include Option labels.
+-->
 
 ```text
-# Android (extend existing com.expenses package)
-android/app/src/main/java/com/expenses/
-├── db/
-│   ├── PendingManualInput.kt          # NEW — Room entity for queued raw text inputs
-│   ├── PendingManualInputDao.kt       # NEW — insert / getAll / delete / incrementRetry
-│   └── LocalDatabase.kt              # MODIFY — add PendingManualInput to @Database entities
-├── network/
-│   └── ApiClient.kt                  # MODIFY — add postInput() + getRecentTransactions()
-├── ui/
-│   ├── PromptActivity.kt             # NEW — single-screen prompt UI
-│   └── CandidateAdapter.kt           # NEW — RecyclerView adapter for fee/refund candidate list
-├── worker/
-│   └── ManualInputSyncWorker.kt      # NEW — WorkManager worker: dequeue → POST → mark done
-└── (no changes to NotificationListenerService, TransactionSyncWorker, or parser)
+# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
+src/
+├── models/
+├── services/
+├── cli/
+└── lib/
 
-android/app/src/main/res/layout/
-├── activity_prompt.xml               # NEW — EditText + submit button + RecyclerView (GONE by default)
-└── item_candidate.xml                # NEW — single candidate row (date + description + amount)
+tests/
+├── contract/
+├── integration/
+└── unit/
 
-android/app/src/main/AndroidManifest.xml   # MODIFY — register PromptActivity
+# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
+backend/
+├── src/
+│   ├── models/
+│   ├── services/
+│   └── api/
+└── tests/
 
-android/app/src/test/java/com/expenses/
-├── worker/ManualInputSyncWorkerTest.kt    # NEW — offline queue, retry, dedup 409 handling
-└── ui/PromptViewModelTest.kt             # NEW — command detection, candidate fetch trigger
+frontend/
+├── src/
+│   ├── components/
+│   ├── pages/
+│   └── services/
+└── tests/
 
-# Backend (extend existing android.ts handler)
-backend/src/handlers/
-└── android.ts                        # MODIFY — add POST /android/input + GET /android/transactions/recent
+# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
+api/
+└── [same as backend above]
 
-backend/src/
-└── types.ts                          # MODIFY — add InputResponse, CandidateTransaction types
+ios/ or android/
+└── [platform-specific structure: feature modules, UI flows, platform tests]
 ```
 
-**Structure Decision**: Option 3 (Mobile + API). Android extension follows existing feature-module pattern (`db/`, `network/`, `ui/`, `worker/`). Backend extension stays in `android.ts` per research Decision 4.
+**Structure Decision**: [Document the selected structure and reference the real
+directories captured above]
 
 ## Complexity Tracking
 
-> No constitution violations require justification. One complexity note:
+> **Fill ONLY if Constitution Check has violations that must be justified**
 
-| Decision | Why Needed | Simpler Alternative Rejected Because |
-|----------|------------|-------------------------------------|
-| `PendingManualInput` separate from `PendingTransaction` | Manual inputs store raw text; notifications store parsed fields | Shared entity would force nullable columns for incompatible schemas (amount, bankName, paymentMethod all irrelevant for raw text queue) |
-| `ManualInputSyncWorker` separate from `TransactionSyncWorker` | Different payload shape, different endpoint, different retry semantics (409 = parse error, not dedup) | Merging them adds conditional branches that obscure the already-tested sync logic |
+| Violation | Why Needed | Simpler Alternative Rejected Because |
+|-----------|------------|-------------------------------------|
+| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
+| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
