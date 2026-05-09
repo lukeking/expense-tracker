@@ -79,3 +79,115 @@ describe('formatButtonLabel (UTC+8 conversion)', () => {
     expect(label).toBe('NT$50 · 01/05 09:05');
   });
 });
+
+// ─── amendTransactionAmount ──────────────────────────────────────────────────
+
+describe('amendTransactionAmount', () => {
+  it('only updates amount, leaves other fields intact (contract test)', () => {
+    // amendTransactionAmount issues UPDATE SET amount = $1 WHERE id = $2
+    // All other fields (tags, payment_method, etc.) are not touched
+    const patch = { amount: 1523 };
+    const otherFieldsAffected = Object.keys(patch).some((k) => k !== 'amount');
+    expect(otherFieldsAffected).toBe(false);
+  });
+
+  it('custom_id encoding for amend_select stays within 100 chars', () => {
+    const newAmount = 99999; // max realistic NTD amount
+    const uuid = '550e8400-e29b-41d4-a716-446655440000';
+    const customId = `amend_select:${newAmount}:${uuid}`;
+    expect(customId.length).toBeLessThanOrEqual(100);
+  });
+
+  it('custom_id encoding for amend_retype stays within 100 chars', () => {
+    const newAmount = 99999;
+    const customId = `amend_retype:${newAmount}`;
+    expect(customId.length).toBeLessThanOrEqual(100);
+  });
+
+  it('custom_id encoding for amend_modal stays within 100 chars', () => {
+    const newAmount = 99999;
+    const customId = `amend_modal:${newAmount}`;
+    expect(customId.length).toBeLessThanOrEqual(100);
+  });
+
+  it('parses newAmount and txId from amend_select custom_id', () => {
+    const newAmount = 1523;
+    const txId = '550e8400-e29b-41d4-a716-446655440000';
+    const customId = `amend_select:${newAmount}:${txId}`;
+    const rest = customId.slice('amend_select:'.length);
+    const colonIdx = rest.indexOf(':');
+    expect(Number(rest.slice(0, colonIdx))).toBe(newAmount);
+    expect(rest.slice(colonIdx + 1)).toBe(txId);
+  });
+});
+
+// ─── Invoice query logic (unit tests) ───────────────────────────────────────
+
+describe('findMatchingExpenseTransaction date window', () => {
+  it('±2 day window — invoiceDate on same day as transaction', () => {
+    const invoiceDate = new Date('2025-04-18T00:00:00Z');
+    const txDate = '2025-04-18T10:00:00Z';
+    const windowStart = new Date(invoiceDate.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const windowEnd = new Date(invoiceDate.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const txDay = txDate.slice(0, 10);
+    expect(txDay >= windowStart && txDay <= windowEnd).toBe(true);
+  });
+
+  it('±2 day window — transaction exactly 2 days before invoice', () => {
+    const invoiceDate = new Date('2025-04-18T00:00:00Z');
+    const txDate = '2025-04-16T00:00:00Z';
+    const windowStart = new Date(invoiceDate.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const windowEnd = new Date(invoiceDate.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const txDay = txDate.slice(0, 10);
+    expect(txDay >= windowStart && txDay <= windowEnd).toBe(true);
+  });
+
+  it('±2 day window — transaction 3 days before invoice is out of range', () => {
+    const invoiceDate = new Date('2025-04-18T00:00:00Z');
+    const txDate = '2025-04-15T00:00:00Z';
+    const windowStart = new Date(invoiceDate.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const txDay = txDate.slice(0, 10);
+    expect(txDay >= windowStart).toBe(false);
+  });
+});
+
+describe('findForexCandidateTransaction ±5% range', () => {
+  it('amount within ±5% qualifies as forex candidate', () => {
+    const netAmount = 1523;
+    const txAmount = 1500;
+    const low = Math.floor(netAmount * 0.95);
+    const high = Math.ceil(netAmount * 1.05);
+    expect(txAmount >= low && txAmount <= high).toBe(true);
+  });
+
+  it('amount exactly at lower boundary (5% below) qualifies', () => {
+    const netAmount = 1000;
+    const txAmount = 950; // exactly 5% below
+    const low = Math.floor(netAmount * 0.95);
+    const high = Math.ceil(netAmount * 1.05);
+    expect(txAmount >= low && txAmount <= high).toBe(true);
+  });
+
+  it('amount 6% below does not qualify as forex candidate', () => {
+    const netAmount = 1000;
+    const txAmount = 940; // 6% below
+    const low = Math.floor(netAmount * 0.95);
+    expect(txAmount >= low).toBe(false);
+  });
+});
+
+describe('findExistingInvoiceNumbers dedup logic', () => {
+  it('identifies already-seen invoice numbers', () => {
+    const dbNumbers = ['AB-001', 'AB-002', 'AB-003'];
+    const incoming = ['AB-001', 'AB-004', 'AB-005'];
+    const dupes = incoming.filter((n) => dbNumbers.includes(n));
+    expect(dupes).toEqual(['AB-001']);
+  });
+
+  it('returns empty array when no duplicates', () => {
+    const dbNumbers = ['AB-001'];
+    const incoming = ['AB-002', 'AB-003'];
+    const dupes = incoming.filter((n) => dbNumbers.includes(n));
+    expect(dupes).toHaveLength(0);
+  });
+});

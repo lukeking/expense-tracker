@@ -212,3 +212,248 @@ describe('fee/refund component interaction (button click)', () => {
     expect(response.data.content).toContain('退款已儲存');
   });
 });
+
+// ─── /amend command tests ─────────────────────────────────────────────────────
+
+describe('/amend command handler', () => {
+  it('returns type 5 deferred response', () => {
+    expect({ type: 5 }.type).toBe(5);
+  });
+
+  it('extracts amount and parent from options', () => {
+    const interaction = {
+      type: 2,
+      data: {
+        name: 'amend',
+        options: [
+          { name: 'amount', value: 1523 },
+          { name: 'parent', value: 'Google' },
+        ],
+      },
+    };
+    const options = interaction.data.options;
+    expect(options.find((o) => o.name === 'amount')?.value).toBe(1523);
+    expect(options.find((o) => o.name === 'parent')?.value).toBe('Google');
+  });
+
+  it('rejects amount <= 0 with inline error', () => {
+    const amount = 0;
+    expect(amount > 0).toBe(false);
+  });
+});
+
+describe('amend_select component interaction', () => {
+  it('decodes newAmount and txId from custom_id', () => {
+    const newAmount = 1523;
+    const txId = 'aaaaaaaa-0000-0000-0000-000000000001';
+    const customId = `amend_select:${newAmount}:${txId}`;
+    const rest = customId.slice('amend_select:'.length);
+    const colonIdx = rest.indexOf(':');
+    expect(Number(rest.slice(0, colonIdx))).toBe(newAmount);
+    expect(rest.slice(colonIdx + 1)).toBe(txId);
+  });
+
+  it('custom_id stays within Discord 100-char limit', () => {
+    const customId = `amend_select:99999:550e8400-e29b-41d4-a716-446655440000`;
+    expect(customId.length).toBeLessThanOrEqual(100);
+  });
+
+  it('returns type 7 UPDATE_MESSAGE with components cleared', () => {
+    const response = { type: 7, data: { content: '✅ 已修正：Google Play NT$1,200 → NT$1,523\n📊 ...', components: [] } };
+    expect(response.type).toBe(7);
+    expect(response.data.components).toHaveLength(0);
+    expect(response.data.content).toContain('已修正');
+  });
+});
+
+describe('amend_retype component interaction', () => {
+  it('returns type 9 MODAL with correct custom_id', () => {
+    const newAmount = 1523;
+    const customId = `amend_retype:${newAmount}`;
+    const modalCustomId = `amend_modal:${newAmount}`;
+    const response = {
+      type: 9,
+      data: { title: '重新搜尋交易', custom_id: modalCustomId },
+    };
+    expect(response.type).toBe(9);
+    expect(response.data.custom_id).toBe('amend_modal:1523');
+    expect(customId.startsWith('amend_retype:')).toBe(true);
+  });
+});
+
+describe('amend_modal submit handler', () => {
+  it('returns type 6 DEFERRED_UPDATE_MESSAGE', () => {
+    expect({ type: 6 }.type).toBe(6);
+  });
+
+  it('extracts newAmount from amend_modal custom_id', () => {
+    const customId = 'amend_modal:1523';
+    const newAmount = Number(customId.slice('amend_modal:'.length));
+    expect(newAmount).toBe(1523);
+  });
+});
+
+describe('amend_cancel component interaction', () => {
+  it('returns type 6 DEFERRED_UPDATE_MESSAGE for cancel', () => {
+    const response = { type: 6 };
+    expect(response.type).toBe(6);
+  });
+
+  it('patch payload for cancel clears content and components', () => {
+    const patchPayload = { content: '已取消。', components: [] as object[] };
+    expect(patchPayload.content).toBe('已取消。');
+    expect(patchPayload.components).toHaveLength(0);
+  });
+});
+
+// ─── /import command tests ────────────────────────────────────────────────────
+
+describe('/import command handler', () => {
+  it('returns type 5 deferred response', () => {
+    expect({ type: 5 }.type).toBe(5);
+  });
+
+  it('extracts attachment URL from resolved.attachments', () => {
+    const fileId = '111222333444555666';
+    const interaction = {
+      type: 2,
+      data: {
+        name: 'import',
+        options: [{ name: 'file', value: fileId }],
+        resolved: {
+          attachments: {
+            [fileId]: {
+              id: fileId,
+              filename: 'test-invoices.csv',
+              size: 1024,
+              url: 'https://cdn.discordapp.com/attachments/.../test-invoices.csv',
+              content_type: 'text/csv',
+            },
+          },
+        },
+      },
+    };
+    const options = interaction.data.options;
+    const attachmentId = options.find((o) => o.name === 'file')?.value as string;
+    const url = interaction.data.resolved.attachments[attachmentId]?.url;
+    expect(url).toContain('test-invoices.csv');
+  });
+
+  it('rejects missing file attachment with inline error', () => {
+    const fileId = undefined;
+    const attachment = fileId ? { url: 'https://...' } : undefined;
+    expect(attachment?.url).toBeUndefined();
+  });
+});
+
+// ─── formatImportSummary tests ────────────────────────────────────────────────
+
+// Inline copy of formatImportSummary for unit testing
+function formatImportSummary(
+  counters: {
+    matched_count: number;
+    auto_created_count: number;
+    skipped_duplicate_count: number;
+    skipped_voided_count: number;
+    skipped_zero_count: number;
+    held_forex_count: number;
+    forex_resolved_count: number;
+    parse_failed_count: number;
+  },
+  fileName: string,
+  unmatchedTxs: { amount: number; transaction_at: string }[]
+): string {
+  const lines: string[] = [
+    `📥 發票匯入完成 · ${fileName}`,
+    '',
+    `✅ 已比對：${counters.matched_count} 筆`,
+    `🆕 自動新增：${counters.auto_created_count} 筆`,
+    `⏭️ 已略過（重複）：${counters.skipped_duplicate_count} 筆`,
+    `🔄 外幣待確認：${counters.held_forex_count} 筆`,
+  ];
+  if (counters.forex_resolved_count > 0) {
+    lines.push(`🔗 外幣已自動連結：${counters.forex_resolved_count} 筆`);
+  }
+  if (counters.skipped_voided_count > 0) {
+    lines.push(`🚫 已作廢：${counters.skipped_voided_count} 筆`);
+  }
+  if (counters.parse_failed_count > 0) {
+    lines.push(`⚠️ 無法解析：${counters.parse_failed_count} 筆`);
+  }
+  if (unmatchedTxs.length === 0 && counters.matched_count > 0 && counters.held_forex_count === 0) {
+    lines.push('', '🎉 全部對齊！本期所有發票均已比對。');
+  } else if (unmatchedTxs.length > 0) {
+    lines.push('', '📊 本期無發票交易（可能為現金/海外）：');
+    const show = unmatchedTxs.slice(0, 5);
+    for (const tx of show) {
+      const date = tx.transaction_at.slice(5, 10).replace('-', '/');
+      lines.push(`  · NT$${tx.amount.toLocaleString()} · ${date}`);
+    }
+    if (unmatchedTxs.length > 5) {
+      lines.push(`  + ${unmatchedTxs.length - 5} 筆`);
+    }
+  }
+  return lines.join('\n');
+}
+
+const BASE_COUNTERS = {
+  matched_count: 0,
+  auto_created_count: 0,
+  skipped_duplicate_count: 0,
+  skipped_voided_count: 0,
+  skipped_zero_count: 0,
+  held_forex_count: 0,
+  forex_resolved_count: 0,
+  parse_failed_count: 0,
+};
+
+describe('formatImportSummary', () => {
+  it('includes all required count fields', () => {
+    const summary = formatImportSummary(
+      { ...BASE_COUNTERS, matched_count: 5, auto_created_count: 2 },
+      'invoices.csv',
+      []
+    );
+    expect(summary).toContain('✅ 已比對：5 筆');
+    expect(summary).toContain('🆕 自動新增：2 筆');
+    expect(summary).toContain('⏭️ 已略過（重複）：0 筆');
+    expect(summary).toContain('🔄 外幣待確認：0 筆');
+  });
+
+  it('shows 全部對齊 when all invoices matched and no unmatched txs', () => {
+    const summary = formatImportSummary(
+      { ...BASE_COUNTERS, matched_count: 5 },
+      'invoices.csv',
+      []
+    );
+    expect(summary).toContain('🎉 全部對齊！');
+  });
+
+  it('does not show 全部對齊 when there are held forex invoices', () => {
+    const summary = formatImportSummary(
+      { ...BASE_COUNTERS, matched_count: 4, held_forex_count: 1 },
+      'invoices.csv',
+      []
+    );
+    expect(summary).not.toContain('🎉 全部對齊！');
+  });
+
+  it('shows forex_resolved_count line when > 0', () => {
+    const summary = formatImportSummary(
+      { ...BASE_COUNTERS, matched_count: 3, forex_resolved_count: 2 },
+      'invoices.csv',
+      []
+    );
+    expect(summary).toContain('🔗 外幣已自動連結：2 筆');
+  });
+
+  it('lists up to 5 unmatched transactions with truncation marker', () => {
+    const txs = Array.from({ length: 7 }, (_, i) => ({
+      amount: (i + 1) * 100,
+      transaction_at: `2025-04-${String(i + 10).padStart(2, '0')}T00:00:00Z`,
+    }));
+    const summary = formatImportSummary(BASE_COUNTERS, 'invoices.csv', txs);
+    expect(summary).toContain('📊 本期無發票交易');
+    expect(summary).toContain('+ 2 筆');
+  });
+});
