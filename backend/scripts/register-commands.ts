@@ -120,6 +120,37 @@ const commands = [
       },
     ],
   },
+  {
+    name: 'amend',
+    description: '修正交易金額（例如：外幣結算後的實際金額）',
+    options: [
+      {
+        name: 'amount',
+        description: '修正後的金額 (NTD)',
+        type: 4, // INTEGER
+        required: true,
+        min_value: 1,
+      },
+      {
+        name: 'parent',
+        description: '要修正的交易關鍵字（例：Google）',
+        type: 3, // STRING
+        required: false,
+      },
+    ],
+  },
+  {
+    name: 'import',
+    description: '匯入電子發票 CSV（從 einvoice.nat.gov.tw 下載）',
+    options: [
+      {
+        name: 'file',
+        description: '電子發票 CSV 檔案',
+        type: 11, // ATTACHMENT
+        required: true,
+      },
+    ],
+  },
 ];
 
 async function registerCommands() {

@@ -11,10 +11,16 @@ import {
   resolvePendingMatch,
   findParentCandidates,
   updateParentTransactionId,
+  amendTransactionAmount,
+  createImportRun,
+  updateImportRun,
+  findTransactionsWithoutInvoiceInRange,
 } from '../db/queries';
 import { parseExpenseText } from '../services/gemini';
 import { getBudgetProgress } from '../services/budget';
 import { patchInteractionMessage, patchTransactionMatchedMessage } from '../services/discord-notify';
+import { decodeCSVBuffer, parseCSVRows, groupInvoices } from '../services/csv-parser';
+import { runImportPipeline } from '../services/invoice-matcher';
 
 interface DiscordInteraction {
   type: number;
@@ -26,6 +32,15 @@ interface DiscordInteraction {
     component_type?: number;
     options?: { name: string; value: string | number }[];
     components?: { type: number; components?: { type: number; custom_id?: string; value?: string }[] }[];
+    resolved?: {
+      attachments?: Record<string, {
+        id: string;
+        filename: string;
+        size: number;
+        url: string;
+        content_type?: string;
+      }>;
+    };
   };
 }
 
@@ -56,6 +71,12 @@ export async function discordHandler(c: Context<{ Bindings: Env }>) {
     }
     if (commandName === 'refund') {
       return handleRefundCommand(c, interaction);
+    }
+    if (commandName === 'amend') {
+      return handleAmendCommand(c, interaction);
+    }
+    if (commandName === 'import') {
+      return handleImportCommand(c, interaction);
     }
   }
 
@@ -469,6 +490,19 @@ async function handleComponentInteraction(
     });
   }
 
+  if (customId.startsWith('amend_select:')) {
+    return handleAmendSelect(c, interaction);
+  }
+
+  if (customId.startsWith('amend_retype:')) {
+    return handleAmendRetype(c, interaction);
+  }
+
+  if (customId === 'amend_cancel') {
+    c.executionCtx.waitUntil(patchInteractionMessage(c.env, interaction.token, '已取消。', []));
+    return c.json({ type: 6 });
+  }
+
   return c.json({ type: 4, data: { content: '❌ 未知的操作' } });
 }
 
@@ -477,6 +511,10 @@ async function handleModalSubmit(
   interaction: DiscordInteraction
 ) {
   const customId = interaction.data?.custom_id ?? '';
+
+  if (customId.startsWith('amend_modal:')) {
+    return handleAmendModalSubmit(c, interaction);
+  }
 
   if (customId.startsWith('fee_parent_search:') || customId.startsWith('refund_parent_search:')) {
     const txType = customId.startsWith('fee_parent_search:') ? 'fee' : 'refund';
@@ -537,4 +575,364 @@ async function handleModalSubmit(
   }
 
   return c.json({ type: 4, data: { content: '❌ 未知的操作' } });
+}
+
+// ─── /amend handlers ────────────────────────────────────────────────────────
+
+async function handleAmendCommand(
+  c: Context<{ Bindings: Env }>,
+  interaction: DiscordInteraction
+) {
+  const options = interaction.data?.options ?? [];
+  const newAmount = options.find((o) => o.name === 'amount')?.value as number;
+  const parent = options.find((o) => o.name === 'parent')?.value as string | undefined;
+
+  if (!newAmount || newAmount <= 0) {
+    return c.json({ type: 4, data: { content: '❌ 金額必須大於 0' } });
+  }
+
+  const supabase = getSupabaseClient(c.env);
+  const token = interaction.token;
+  const env = c.env;
+
+  c.executionCtx.waitUntil(
+    (async () => {
+      try {
+        if (parent) {
+          const candidates = await findParentCandidates(supabase, parent, 90);
+          if (candidates.length > 0) {
+            const content = `🔍 找到以下交易，請選擇要修正的項目：`;
+            const buttons = candidates.map((row) => {
+              const label = formatButtonLabel(row.amount, row.transaction_at);
+              return { type: 2, style: 1, label, custom_id: `amend_select:${newAmount}:${row.id}` };
+            });
+            const components: object[] = [{ type: 1, components: buttons }];
+            if (candidates.length < 5) {
+              components.push({
+                type: 1,
+                components: [
+                  { type: 2, style: 2, label: '🔍 重新搜尋', custom_id: `amend_retype:${newAmount}` },
+                  { type: 2, style: 4, label: '取消', custom_id: 'amend_cancel' },
+                ],
+              });
+            }
+            await patchInteractionMessage(env, token, content, components);
+          } else {
+            const content = `⚠️ 找不到「${parent}」相符的交易。`;
+            const components = [{
+              type: 1,
+              components: [
+                { type: 2, style: 1, label: '🔍 重新搜尋', custom_id: `amend_retype:${newAmount}` },
+                { type: 2, style: 4, label: '取消', custom_id: 'amend_cancel' },
+              ],
+            }];
+            await patchInteractionMessage(env, token, content, components);
+          }
+        } else {
+          const content = `請輸入要修正的交易關鍵字：`;
+          const components = [{
+            type: 1,
+            components: [
+              { type: 2, style: 1, label: '🔍 搜尋交易', custom_id: `amend_retype:${newAmount}` },
+              { type: 2, style: 4, label: '取消', custom_id: 'amend_cancel' },
+            ],
+          }];
+          await patchInteractionMessage(env, token, content, components);
+        }
+      } catch (err) {
+        console.error('handleAmendCommand async error:', err);
+        await patchInteractionMessage(env, token, '❌ 操作失敗，請稍後再試。');
+      }
+    })()
+  );
+
+  return c.json({ type: 5 });
+}
+
+async function handleAmendSelect(
+  c: Context<{ Bindings: Env }>,
+  interaction: DiscordInteraction
+) {
+  const customId = interaction.data?.custom_id ?? '';
+  // custom_id: amend_select:{newAmount}:{txId}
+  const rest = customId.slice('amend_select:'.length);
+  const colonIdx = rest.indexOf(':');
+  if (colonIdx === -1) return c.json({ type: 4, data: { content: '❌ 無效的操作' } });
+  const newAmount = Number(rest.slice(0, colonIdx));
+  const txId = rest.slice(colonIdx + 1);
+  if (!newAmount || !txId) return c.json({ type: 4, data: { content: '❌ 無效的操作' } });
+
+  const supabase = getSupabaseClient(c.env);
+  try {
+    const { data: txRow } = await supabase
+      .from('transactions')
+      .select('amount, items, note')
+      .eq('id', txId)
+      .single();
+    const oldAmount = txRow?.amount ?? '?';
+    const desc = (txRow?.items?.[0]?.name ?? txRow?.note ?? '?') as string;
+
+    await amendTransactionAmount(supabase, txId, newAmount);
+    const budgetProgress = await getBudgetProgress(supabase);
+    const content =
+      `✅ 已修正：${desc} NT$${oldAmount} → NT$${newAmount}\n` +
+      `📊 本月支出：$${budgetProgress.current_spend.toLocaleString()} / $${budgetProgress.monthly_budget.toLocaleString()} (${budgetProgress.percentage}%)`;
+    return c.json({ type: 7, data: { content, components: [] } });
+  } catch (err) {
+    console.error('handleAmendSelect error:', err);
+    return c.json({ type: 4, data: { content: '❌ 修正失敗，請稍後再試。' } });
+  }
+}
+
+async function handleAmendRetype(
+  c: Context<{ Bindings: Env }>,
+  interaction: DiscordInteraction
+) {
+  const customId = interaction.data?.custom_id ?? '';
+  const newAmount = customId.slice('amend_retype:'.length);
+  return c.json({
+    type: 9, // MODAL
+    data: {
+      title: '重新搜尋交易',
+      custom_id: `amend_modal:${newAmount}`,
+      components: [{
+        type: 1,
+        components: [{
+          type: 4, // TEXT_INPUT
+          custom_id: 'search_term',
+          style: 1,
+          label: '交易關鍵字',
+          placeholder: '例：Google Play',
+          required: true,
+        }],
+      }],
+    },
+  });
+}
+
+async function handleAmendModalSubmit(
+  c: Context<{ Bindings: Env }>,
+  interaction: DiscordInteraction
+) {
+  const customId = interaction.data?.custom_id ?? '';
+  const newAmountStr = customId.slice('amend_modal:'.length);
+  const newAmount = Number(newAmountStr);
+  const searchTerm = interaction.data?.components?.[0]?.components?.[0]?.value ?? '';
+
+  if (!newAmount || !searchTerm) {
+    return c.json({ type: 4, data: { content: '❌ 無效的操作' } });
+  }
+
+  const supabase = getSupabaseClient(c.env);
+  const token = interaction.token;
+  const env = c.env;
+
+  c.executionCtx.waitUntil(
+    (async () => {
+      try {
+        const candidates = await findParentCandidates(supabase, searchTerm, 90);
+        if (candidates.length > 0) {
+          const content = `🔍 找到以下交易，請選擇要修正的項目：`;
+          const buttons = candidates.map((row) => {
+            const label = formatButtonLabel(row.amount, row.transaction_at);
+            return { type: 2, style: 1, label, custom_id: `amend_select:${newAmount}:${row.id}` };
+          });
+          const components: object[] = [
+            { type: 1, components: buttons },
+            {
+              type: 1,
+              components: [
+                { type: 2, style: 2, label: '🔍 重新搜尋', custom_id: `amend_retype:${newAmount}` },
+                { type: 2, style: 4, label: '取消', custom_id: 'amend_cancel' },
+              ],
+            },
+          ];
+          await patchInteractionMessage(env, token, content, components);
+        } else {
+          const noMatchContent = `⚠️ 找不到「${searchTerm}」相符的交易。`;
+          const noMatchComponents = [{
+            type: 1,
+            components: [
+              { type: 2, style: 1, label: '🔍 重新搜尋', custom_id: `amend_retype:${newAmount}` },
+              { type: 2, style: 4, label: '取消', custom_id: 'amend_cancel' },
+            ],
+          }];
+          await patchInteractionMessage(env, token, noMatchContent, noMatchComponents);
+        }
+      } catch (err) {
+        console.error('handleAmendModalSubmit error:', err);
+        await patchInteractionMessage(env, token, '❌ 搜尋失敗，請稍後再試。');
+      }
+    })()
+  );
+
+  return c.json({ type: 6 }); // DEFERRED_UPDATE_MESSAGE
+}
+
+// ─── /import handlers ───────────────────────────────────────────────────────
+
+async function handleImportCommand(
+  c: Context<{ Bindings: Env }>,
+  interaction: DiscordInteraction
+) {
+  const options = interaction.data?.options ?? [];
+  const fileId = options.find((o) => o.name === 'file')?.value as string | undefined;
+  const attachment = fileId ? interaction.data?.resolved?.attachments?.[fileId] : undefined;
+
+  if (!attachment?.url) {
+    return c.json({ type: 4, data: { content: '❌ 無法取得檔案，請重新上傳。' } });
+  }
+
+  if (attachment.filename && !attachment.filename.toLowerCase().endsWith('.csv')) {
+    return c.json({ type: 4, data: { content: '❌ 請上傳 CSV 格式的電子發票檔案。' } });
+  }
+
+  const token = interaction.token;
+  const env = c.env;
+
+  c.executionCtx.waitUntil(
+    (async () => {
+      try {
+        const supabase = getSupabaseClient(env);
+
+        // Fetch CSV bytes
+        const res = await fetch(attachment.url);
+        if (!res.ok) {
+          await patchInteractionMessage(env, token, '❌ 無法取得檔案，請重新上傳。');
+          return;
+        }
+        const buffer = await res.arrayBuffer();
+        const csvText = decodeCSVBuffer(buffer);
+
+        // Parse rows
+        let rows;
+        let parseFailedCount = 0;
+        try {
+          const result = parseCSVRows(csvText);
+          rows = result.rows;
+          parseFailedCount = result.parseFailedCount;
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : String(e);
+          if (msg.includes('Invalid CSV headers')) {
+            await patchInteractionMessage(env, token, '❌ 發票格式不符，請確認為財政部電子發票平台匯出的 CSV。');
+          } else {
+            await patchInteractionMessage(env, token, '❌ 無法解析 CSV，請確認檔案格式。');
+          }
+          return;
+        }
+
+        const { invoices, skippedVoidedCount, skippedZeroCount } = groupInvoices(rows);
+
+        if (invoices.length === 0 && skippedVoidedCount === 0 && skippedZeroCount === 0 && parseFailedCount === 0) {
+          await patchInteractionMessage(env, token, '❌ CSV 中沒有有效的發票資料。');
+          return;
+        }
+
+        // Create import run record
+        const importRun = await createImportRun(supabase, attachment.filename ?? null);
+
+        // Run pipeline
+        const counters = await runImportPipeline(supabase, invoices, importRun.id, env, {
+          voidedCount: skippedVoidedCount,
+          zeroCount: skippedZeroCount,
+          parseFailedCount,
+        });
+
+        // Update import run counters
+        await updateImportRun(supabase, importRun.id, {
+          total_rows: counters.totalRows,
+          matched_count: counters.matchedCount,
+          auto_created_count: counters.autoCreatedCount,
+          skipped_duplicate_count: counters.skippedDuplicateCount,
+          skipped_voided_count: counters.skippedVoidedCount,
+          skipped_zero_count: counters.skippedZeroCount,
+          held_forex_count: counters.heldForexCount,
+          forex_resolved_count: counters.forexResolvedCount,
+          parse_failed_count: counters.parseFailedCount,
+        });
+
+        // Derive date range for spending audit
+        let unmatchedTxs: import('../types').Transaction[] = [];
+        if (invoices.length > 0) {
+          const dates = invoices.map((i) => i.invoice_date.getTime());
+          const rangeFrom = new Date(Math.min(...dates));
+          const rangeTo = new Date(Math.max(...dates));
+          unmatchedTxs = await findTransactionsWithoutInvoiceInRange(supabase, rangeFrom, rangeTo);
+        }
+
+        const summary = formatImportSummary(
+          {
+            matched_count: counters.matchedCount,
+            auto_created_count: counters.autoCreatedCount,
+            skipped_duplicate_count: counters.skippedDuplicateCount,
+            skipped_voided_count: counters.skippedVoidedCount,
+            skipped_zero_count: counters.skippedZeroCount,
+            held_forex_count: counters.heldForexCount,
+            forex_resolved_count: counters.forexResolvedCount,
+            parse_failed_count: counters.parseFailedCount,
+          },
+          attachment.filename ?? 'unknown',
+          unmatchedTxs
+        );
+        await patchInteractionMessage(env, token, summary);
+      } catch (err) {
+        console.error('handleImportCommand async error:', err);
+        await patchInteractionMessage(env, token, '❌ 匯入失敗，請稍後再試。');
+      }
+    })()
+  );
+
+  return c.json({ type: 5 });
+}
+
+function formatImportSummary(
+  counters: {
+    matched_count: number;
+    auto_created_count: number;
+    skipped_duplicate_count: number;
+    skipped_voided_count: number;
+    skipped_zero_count: number;
+    held_forex_count: number;
+    forex_resolved_count: number;
+    parse_failed_count: number;
+  },
+  fileName: string,
+  unmatchedTxs: import('../types').Transaction[]
+): string {
+  const lines: string[] = [
+    `📥 發票匯入完成 · ${fileName}`,
+    '',
+    `✅ 已比對：${counters.matched_count} 筆`,
+    `🆕 自動新增：${counters.auto_created_count} 筆`,
+    `⏭️ 已略過（重複）：${counters.skipped_duplicate_count} 筆`,
+    `🔄 外幣待確認：${counters.held_forex_count} 筆`,
+  ];
+
+  if (counters.forex_resolved_count > 0) {
+    lines.push(`🔗 外幣已自動連結：${counters.forex_resolved_count} 筆`);
+  }
+
+  if (counters.skipped_voided_count > 0) {
+    lines.push(`🚫 已作廢：${counters.skipped_voided_count} 筆`);
+  }
+
+  if (counters.parse_failed_count > 0) {
+    lines.push(`⚠️ 無法解析：${counters.parse_failed_count} 筆`);
+  }
+
+  if (unmatchedTxs.length === 0 && counters.matched_count > 0 && counters.held_forex_count === 0) {
+    lines.push('', '🎉 全部對齊！本期所有發票均已比對。');
+  } else if (unmatchedTxs.length > 0) {
+    lines.push('', '📊 本期無發票交易（可能為現金/海外）：');
+    const show = unmatchedTxs.slice(0, 5);
+    for (const tx of show) {
+      const date = tx.transaction_at.slice(5, 10).replace('-', '/');
+      lines.push(`  · NT$${tx.amount.toLocaleString()} · ${date}`);
+    }
+    if (unmatchedTxs.length > 5) {
+      lines.push(`  + ${unmatchedTxs.length - 5} 筆`);
+    }
+  }
+
+  return lines.join('\n');
 }

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Transaction, Receipt, BudgetSettings, TransactionItem, PaymentMethod, MobileWallet, TransactionType } from '../types';
+import type { Transaction, Receipt, BudgetSettings, TransactionItem, PaymentMethod, MobileWallet, TransactionType, Invoice, ImportRun, ParsedInvoice, InvoiceMatchStatus } from '../types';
 
 export async function insertTransaction(
   supabase: SupabaseClient,
@@ -215,6 +215,191 @@ export async function findExistingTransaction(
     .limit(1);
   if (error) throw new Error(`findExistingTransaction: ${error.message}`);
   return data && data.length > 0 ? (data[0] as Transaction) : null;
+}
+
+export async function amendTransactionAmount(
+  supabase: SupabaseClient,
+  txId: string,
+  newAmount: number
+): Promise<void> {
+  const { error } = await supabase
+    .from('transactions')
+    .update({ amount: newAmount })
+    .eq('id', txId);
+  if (error) throw new Error(`amendTransactionAmount: ${error.message}`);
+}
+
+export async function createImportRun(
+  supabase: SupabaseClient,
+  fileName: string | null
+): Promise<ImportRun> {
+  const { data, error } = await supabase
+    .from('import_runs')
+    .insert({ file_name: fileName })
+    .select()
+    .single();
+  if (error) throw new Error(`createImportRun: ${error.message}`);
+  return data as ImportRun;
+}
+
+export async function updateImportRun(
+  supabase: SupabaseClient,
+  runId: string,
+  counters: Partial<Omit<ImportRun, 'id' | 'file_name' | 'uploaded_at' | 'created_at'>>
+): Promise<void> {
+  const { error } = await supabase
+    .from('import_runs')
+    .update(counters)
+    .eq('id', runId);
+  if (error) throw new Error(`updateImportRun: ${error.message}`);
+}
+
+export async function findExistingInvoiceNumbers(
+  supabase: SupabaseClient,
+  invoiceNumbers: string[]
+): Promise<string[]> {
+  if (invoiceNumbers.length === 0) return [];
+  const { data, error } = await supabase
+    .from('invoices')
+    .select('invoice_number')
+    .in('invoice_number', invoiceNumbers);
+  if (error) throw new Error(`findExistingInvoiceNumbers: ${error.message}`);
+  return (data ?? []).map((r) => r.invoice_number as string);
+}
+
+export async function findMatchingExpenseTransaction(
+  supabase: SupabaseClient,
+  netAmount: number,
+  invoiceDate: Date
+): Promise<Transaction | null> {
+  const windowStart = new Date(invoiceDate.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const windowEnd = new Date(invoiceDate.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('transaction_type', 'expense')
+    .eq('amount', netAmount)
+    .is('matched_invoice_id', null)
+    .gte('transaction_at', windowStart)
+    .lte('transaction_at', windowEnd + 'T23:59:59Z')
+    .order('created_at', { ascending: false })
+    .limit(1);
+  if (error) throw new Error(`findMatchingExpenseTransaction: ${error.message}`);
+  return data && data.length > 0 ? (data[0] as Transaction) : null;
+}
+
+export async function findForexCandidateTransaction(
+  supabase: SupabaseClient,
+  netAmount: number,
+  invoiceDate: Date
+): Promise<Transaction | null> {
+  const windowStart = new Date(invoiceDate.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const windowEnd = new Date(invoiceDate.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const low = Math.floor(netAmount * 0.95);
+  const high = Math.ceil(netAmount * 1.05);
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('transaction_type', 'expense')
+    .is('matched_invoice_id', null)
+    .gte('amount', low)
+    .lte('amount', high)
+    .gte('transaction_at', windowStart)
+    .lte('transaction_at', windowEnd + 'T23:59:59Z')
+    .order('created_at', { ascending: false })
+    .limit(1);
+  if (error) throw new Error(`findForexCandidateTransaction: ${error.message}`);
+  return data && data.length > 0 ? (data[0] as Transaction) : null;
+}
+
+export async function insertInvoice(
+  supabase: SupabaseClient,
+  invoice: ParsedInvoice,
+  importRunId: string,
+  matchStatus: InvoiceMatchStatus,
+  matchedTxId?: string
+): Promise<Invoice> {
+  const { data, error } = await supabase
+    .from('invoices')
+    .insert({
+      import_run_id: importRunId,
+      invoice_number: invoice.invoice_number,
+      seller_name: invoice.seller_name,
+      seller_tax_id: invoice.seller_tax_id,
+      invoice_date: invoice.invoice_date.toISOString().slice(0, 10),
+      gross_amount: invoice.gross_amount,
+      allowance: invoice.allowance,
+      items: invoice.items.length > 0 ? invoice.items : null,
+      invoice_status: invoice.invoice_status,
+      match_status: matchStatus,
+      matched_transaction_id: matchedTxId ?? null,
+    })
+    .select()
+    .single();
+  if (error) throw new Error(`insertInvoice: ${error.message}`);
+  return data as Invoice;
+}
+
+export async function enrichTransaction(
+  supabase: SupabaseClient,
+  txId: string,
+  fields: {
+    invoiceNumber: string;
+    sellerName: string | null;
+    sellerTaxId: string | null;
+    invoiceId: string;
+  }
+): Promise<void> {
+  const { error } = await supabase
+    .from('transactions')
+    .update({
+      is_matched: true,
+      invoice_number: fields.invoiceNumber,
+      seller_name: fields.sellerName,
+      seller_tax_id: fields.sellerTaxId,
+      matched_invoice_id: fields.invoiceId,
+    })
+    .eq('id', txId);
+  if (error) throw new Error(`enrichTransaction: ${error.message}`);
+}
+
+export async function findAllHeldForexInvoices(supabase: SupabaseClient): Promise<Invoice[]> {
+  const { data, error } = await supabase
+    .from('invoices')
+    .select('*')
+    .eq('match_status', 'held_forex');
+  if (error) throw new Error(`findAllHeldForexInvoices: ${error.message}`);
+  return (data ?? []) as Invoice[];
+}
+
+export async function resolveHeldInvoice(
+  supabase: SupabaseClient,
+  invoiceId: string,
+  txId: string,
+  matchStatus: 'matched' | 'auto_created'
+): Promise<void> {
+  const { error } = await supabase
+    .from('invoices')
+    .update({ match_status: matchStatus, matched_transaction_id: txId })
+    .eq('id', invoiceId);
+  if (error) throw new Error(`resolveHeldInvoice: ${error.message}`);
+}
+
+export async function findTransactionsWithoutInvoiceInRange(
+  supabase: SupabaseClient,
+  from: Date,
+  to: Date
+): Promise<Transaction[]> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('transaction_type', 'expense')
+    .is('matched_invoice_id', null)
+    .gte('transaction_at', from.toISOString().slice(0, 10))
+    .lte('transaction_at', to.toISOString().slice(0, 10) + 'T23:59:59Z')
+    .order('transaction_at', { ascending: false });
+  if (error) throw new Error(`findTransactionsWithoutInvoiceInRange: ${error.message}`);
+  return (data ?? []) as Transaction[];
 }
 
 export async function mergeTransactionFields(

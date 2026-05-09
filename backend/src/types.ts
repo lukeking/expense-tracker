@@ -21,8 +21,91 @@ export interface Transaction {
   matched_receipt_id: string | null;
   parent_transaction_id: string | null;
   discord_message_id: string | null;
+  invoice_number: string | null;
+  seller_name: string | null;
+  seller_tax_id: string | null;
+  matched_invoice_id: string | null;
   transaction_at: string;
   created_at: string;
+}
+
+export type InvoiceMatchStatus =
+  | 'pending'
+  | 'matched'
+  | 'auto_created'
+  | 'held_forex'
+  | 'skipped_duplicate'
+  | 'skipped_voided'
+  | 'skipped_zero'
+  | 'parse_failed';
+
+export interface InvoiceItem {
+  name: string;
+  quantity: number;
+  unit_price: number;
+  amount: number;
+}
+
+export interface Invoice {
+  id: string;
+  import_run_id: string;
+  invoice_number: string;
+  seller_name: string | null;
+  seller_tax_id: string | null;
+  invoice_date: string;
+  gross_amount: number;
+  allowance: number;
+  net_amount: number;
+  items: InvoiceItem[] | null;
+  invoice_status: 'active' | 'voided';
+  match_status: InvoiceMatchStatus;
+  matched_transaction_id: string | null;
+  created_at: string;
+}
+
+export interface ImportRun {
+  id: string;
+  file_name: string | null;
+  total_rows: number;
+  matched_count: number;
+  auto_created_count: number;
+  skipped_duplicate_count: number;
+  skipped_voided_count: number;
+  skipped_zero_count: number;
+  held_forex_count: number;
+  forex_resolved_count: number;
+  parse_failed_count: number;
+  uploaded_at: string;
+  created_at: string;
+}
+
+export interface RawInvoiceRow {
+  '載具自訂名稱': string;
+  '發票日期': string;
+  '發票號碼': string;
+  '發票金額': string;
+  '發票狀態': string;
+  '折讓': string;
+  '賣方統一編號': string;
+  '賣方名稱': string;
+  '賣方地址': string;
+  '買方統編': string;
+  '消費明細_數量': string;
+  '消費明細_單價': string;
+  '消費明細_金額': string;
+  '消費明細_品名': string;
+}
+
+export interface ParsedInvoice {
+  invoice_number: string;
+  seller_name: string;
+  seller_tax_id: string;
+  invoice_date: Date;
+  gross_amount: number;
+  allowance: number;
+  net_amount: number;
+  invoice_status: 'active' | 'voided';
+  items: InvoiceItem[];
 }
 
 export interface ReceiptItem {
