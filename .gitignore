@@ -24,6 +24,10 @@ android/local.properties
 *.apk
 *.aab
 
+# Test data
+test-invoices.csv
+*.test.csv
+
 # OS
 .DS_Store
 Thumbs.db

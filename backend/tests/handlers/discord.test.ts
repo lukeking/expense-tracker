@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as ed from '@noble/ed25519';
+import { formatReminderMessage } from '../../src/index';
 
 // Signature verification tests
 describe('Discord ed25519 verification', () => {
@@ -455,5 +456,33 @@ describe('formatImportSummary', () => {
     const summary = formatImportSummary(BASE_COUNTERS, 'invoices.csv', txs);
     expect(summary).toContain('📊 本期無發票交易');
     expect(summary).toContain('+ 2 筆');
+  });
+});
+
+// ─── Invoice download reminder cron ──────────────────────────────────────────
+
+describe('formatReminderMessage', () => {
+  it('includes last import date and filename when a run exists', () => {
+    const msg = formatReminderMessage({ uploaded_at: '2026-03-01T01:00:00Z', file_name: 'march.csv' });
+    expect(msg).toContain('發票匯入提醒');
+    expect(msg).toContain('上次匯入：2026-03-01');
+    expect(msg).toContain('march.csv');
+  });
+
+  it('omits last-import line when no runs exist', () => {
+    const msg = formatReminderMessage(null);
+    expect(msg).toContain('發票匯入提醒');
+    expect(msg).not.toContain('上次匯入');
+  });
+
+  it('converts uploaded_at UTC to UTC+8 date for display', () => {
+    // 2026-01-31T16:30:00Z = 2026-02-01 00:30 UTC+8
+    const msg = formatReminderMessage({ uploaded_at: '2026-01-31T16:30:00Z', file_name: 'test.csv' });
+    expect(msg).toContain('上次匯入：2026-02-01');
+  });
+
+  it('uses 未知檔案 when file_name is null', () => {
+    const msg = formatReminderMessage({ uploaded_at: '2026-05-01T00:00:00Z', file_name: null });
+    expect(msg).toContain('未知檔案');
   });
 });

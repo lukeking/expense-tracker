@@ -4,7 +4,7 @@ compatibility_date = "2024-06-20"
 compatibility_flags = ["nodejs_compat"]
 
 [triggers]
-crons = ["0 2 * * *"]
+crons = ["0 2 * * *", "0 9 1 */2 *"]
 
 # All secrets set via `wrangler secret put`:
 # SUPABASE_URL

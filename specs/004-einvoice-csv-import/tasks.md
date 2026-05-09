@@ -114,9 +114,9 @@
 
 **Independent Test**: Configure cron; verify Discord message is sent at scheduled time containing a reminder with the date of the last import run.
 
-- [ ] T035 Add cron schedule to `backend/wrangler.toml`: `{ crons = ["0 9 1 */2 *"] }` (9am UTC on 1st of every other month)
-- [ ] T036 Add cron handler in `backend/src/index.ts` `scheduled()` export: query `import_runs` ORDER BY `uploaded_at DESC LIMIT 1`; send Discord message to `DISCORD_CHANNEL_ID` via `patchInteractionMessage` (or direct channel message POST) with reminder text including last import date; if no import runs exist, omit last-import reference
-- [ ] T037 [P] Add cron handler test in `backend/tests/handlers/discord.test.ts`: (a) reminder message includes last import date when runs exist, (b) reminder message omits last-import line when no runs exist
+- [x] T035 Add cron schedule to `backend/wrangler.toml`: `{ crons = ["0 9 1 */2 *"] }` (9am UTC on 1st of every other month)
+- [x] T036 Add cron handler in `backend/src/index.ts` `scheduled()` export: query `import_runs` ORDER BY `uploaded_at DESC LIMIT 1`; send Discord message to `DISCORD_CHANNEL_ID` via `patchInteractionMessage` (or direct channel message POST) with reminder text including last import date; if no import runs exist, omit last-import reference
+- [x] T037 [P] Add cron handler test in `backend/tests/handlers/discord.test.ts`: (a) reminder message includes last import date when runs exist, (b) reminder message omits last-import line when no runs exist
 
 **Checkpoint**: Periodic reminder operational. All four user stories complete.
 
@@ -127,9 +127,9 @@
 **Purpose**: Smoke-test the full flow end-to-end using quickstart.md, confirm no regressions.
 
 - [x] T038 Run full test suite: `cd backend && pnpm test` — all tests pass
-- [ ] T039 Execute `quickstart.md` Phase 1 smoke tests for `/amend` (happy path, retype, cancel) against deployed CF Worker
-- [ ] T040 Execute `quickstart.md` Phase 2 smoke tests for `/import` (basic import, re-import idempotency, forex → amend → reconcile workflow) against deployed CF Worker
-- [ ] T041 [P] Update `specs/003-discord-fee-refund/quickstart.md` if any existing commands are affected by schema changes (verify `/fee`, `/refund`, `/expense`, `/summary` still work correctly post-migration)
+- [x] T039 Execute `quickstart.md` Phase 1 smoke tests for `/amend` (happy path, retype, cancel) against deployed CF Worker
+- [x] T040 Execute `quickstart.md` Phase 2 smoke tests for `/import` (basic import, re-import idempotency, forex → amend → reconcile workflow) against deployed CF Worker
+- [x] T041 [P] Update `specs/003-discord-fee-refund/quickstart.md` if any existing commands are affected by schema changes (verify `/fee`, `/refund`, `/expense`, `/summary` still work correctly post-migration)
 
 ---
 
