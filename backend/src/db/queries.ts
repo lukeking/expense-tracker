@@ -271,7 +271,7 @@ export async function findMatchingExpenseTransaction(
   supabase: SupabaseClient,
   netAmount: number,
   invoiceDate: Date
-): Promise<Transaction | null> {
+): Promise<Transaction[]> {
   const windowStart = new Date(invoiceDate.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const windowEnd = new Date(invoiceDate.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const { data, error } = await supabase
@@ -282,10 +282,9 @@ export async function findMatchingExpenseTransaction(
     .is('matched_invoice_id', null)
     .gte('transaction_at', windowStart)
     .lte('transaction_at', windowEnd + 'T23:59:59Z')
-    .order('created_at', { ascending: false })
-    .limit(1);
+    .order('created_at', { ascending: false });
   if (error) throw new Error(`findMatchingExpenseTransaction: ${error.message}`);
-  return data && data.length > 0 ? (data[0] as Transaction) : null;
+  return (data ?? []) as Transaction[];
 }
 
 export async function findForexCandidateTransaction(

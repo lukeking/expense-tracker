@@ -133,6 +133,30 @@
 
 ---
 
+## Phase 9: Spec Amendment — FR-005 Ambiguous Match + FR-014 Batch Limit
+
+**Purpose**: Implement spec changes from `/speckit-clarify` session 2026-05-09. Two behaviour corrections: (1) ambiguous invoices (multiple same-amount candidates on same day) must be held without linking rather than auto-matched; (2) hard 1,000-row import limit with batch-of-100 processing. Also closes two test gaps from `/speckit-analyze` (E1, E3).
+
+**Prerequisite**: All T001–T041 must be complete (Phase 9 amends existing logic).
+
+- [x] T042 Write `backend/supabase/migrations/005_add_ambiguous_count.sql` — `ALTER TABLE import_runs ADD COLUMN ambiguous_count integer NOT NULL DEFAULT 0`; apply to Supabase via dashboard or CLI; verify column present
+- [x] T043 Update `backend/src/types.ts` — add `'ambiguous'` to `InvoiceMatchStatus` union; add `ambiguous_count: number` field to `ImportRun` type
+- [x] T044 Update `findMatchingExpenseTransaction` in `backend/src/db/queries.ts` — change return type from `Promise<Transaction | null>` to `Promise<Transaction[]>`; remove `LIMIT 1` from query so all matching expense transactions within ±2 days / exact amount are returned
+- [x] T045 Update `runPrimaryMatchPass` in `backend/src/services/invoice-matcher.ts` — consume `Transaction[]` from T044; if `candidates.length > 1` → insert invoice as `ambiguous`, increment `import_run.ambiguous_count`, leave all candidate transactions unenriched; if `candidates.length === 1` → existing exact-match logic; if `candidates.length === 0` → pass to unmatched list as before
+- [x] T046 Update `formatImportSummary` in `backend/src/handlers/discord.ts` — when `run.ambiguous_count > 0` add an `⚠️ 模糊配對 (N 筆)` section listing each ambiguous invoice as `• {賣方名稱} NT${amount} — 候選：{tx1.description} / {tx2.description} …`; omit section entirely when count is 0
+- [x] T047 Update `parseCSVRows` (or end of `groupInvoices`) in `backend/src/services/csv-parser.ts` — after grouping, if `invoices.length > 1000` throw a structured `RowLimitError({ actual: number })` before returning; import is rejected before any DB operations
+- [x] T048 Update `/import` handler in `backend/src/handlers/discord.ts` — inside `ctx.waitUntil` catch `RowLimitError` and patch Discord with: `"CSV 包含 {N} 筆發票，超過單次上限 1,000 筆。請依日期區間分批上傳。"` (no partial processing)
+- [x] T049 Update `runImportPipeline` in `backend/src/services/invoice-matcher.ts` — wrap the primary match pass loop in `chunk(invoices, 100)` slices so DB operations stay within CF Workers 30s wall time for large (≤1,000-row) imports
+- [x] T050 [P] Add test to `backend/tests/services/invoice-matcher.test.ts` — given two expense transactions with identical amount on same date, import one invoice matching both → invoice status is `ambiguous`, `ambiguous_count === 1`, both transactions have `is_matched = false`
+- [x] T051 [P] Add test to `backend/tests/handlers/discord.test.ts` — `formatImportSummary` with `ambiguous_count > 0` includes seller name and both candidate descriptions; `ambiguous_count === 0` omits the ambiguous section entirely
+- [x] T052 [P] Add test to `backend/tests/services/csv-parser.test.ts` — CSV with 1,001 grouped invoices throws `RowLimitError`; CSV with exactly 1,000 grouped invoices returns array without error
+- [x] T053 [P] Add test to `backend/tests/services/csv-parser.test.ts` — CSV containing a voided invoice and a valid replacement for the same purchase (same 發票號碼 prefix, differing 發票狀態) → only the valid invoice in output; voided counted in skipped, not matched or auto-created
+- [x] T054 Run full test suite `cd backend && pnpm test` — all T050–T053 tests pass alongside existing suite; no regressions
+
+**Checkpoint**: Ambiguous invoices are now held safely; large CSVs fail fast with a clear user message; test suite is green.
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -145,6 +169,7 @@
 - **Phase 6 (US3)**: Requires Phase 5 (needs complete import run counters)
 - **Phase 7 (US4)**: Requires Phase 2 (needs import_runs table) — independent of US1–US3
 - **Phase 8 (Polish)**: Requires all prior phases
+- **Phase 9 (Amendment)**: Requires Phase 8 — amends existing logic from T016, T017, T018, T025, T032, T034
 
 ### Within Each Phase
 
@@ -165,6 +190,12 @@ T030  # DB query tests
 # Phase 3 — start these together after T011:
 T014  # discord handler tests
 T015  # amendTransactionAmount DB test
+
+# Phase 9 — start these together after T045-T047 complete:
+T050  # invoice-matcher: ambiguous match test
+T051  # discord: formatImportSummary ambiguous section test
+T052  # csv-parser: row-limit rejection test
+T053  # csv-parser: voided+valid co-existence test
 ```
 
 ---
@@ -190,8 +221,8 @@ T015  # amendTransactionAmount DB test
 
 ## Notes
 
-- Total tasks: **41** | Completed: **37** (T001-T034) | Pending: T035-T041 (P3 + Polish)
-- Tasks per story: Phase 3 (/amend) = 10, US1 = 7, US2 = 8, US3 = 4, US4 = 3, Polish = 4, Setup/Foundation = 5
+- Total tasks: **55** | Completed: **55** (T001-T054) | Pending: none
+- Tasks per story: Phase 3 (/amend) = 10, US1 = 7, US2 = 8, US3 = 4, US4 = 3, Polish = 4, Setup/Foundation = 5, Amendment = 13
 - [P] tasks = different files, no mutual dependency within phase
 - Commit after each checkpoint or logical group (T006, T013, T021, T028, T033, T037)
 - ROC calendar conversion (T016) is a silent data bug if skipped — all date windows will be off by 1911 years

@@ -34,6 +34,7 @@ export type InvoiceMatchStatus =
   | 'matched'
   | 'auto_created'
   | 'held_forex'
+  | 'ambiguous'
   | 'skipped_duplicate'
   | 'skipped_voided'
   | 'skipped_zero'
@@ -73,6 +74,7 @@ export interface ImportRun {
   skipped_voided_count: number;
   skipped_zero_count: number;
   held_forex_count: number;
+  ambiguous_count: number;
   forex_resolved_count: number;
   parse_failed_count: number;
   uploaded_at: string;

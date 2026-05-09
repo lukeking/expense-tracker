@@ -1,5 +1,12 @@
 import type { RawInvoiceRow, ParsedInvoice, InvoiceItem } from '../types';
 
+export class RowLimitError extends Error {
+  constructor(public readonly actual: number) {
+    super(`CSV contains ${actual} invoices — maximum per import is 1,000. Split by date range and re-upload.`);
+    this.name = 'RowLimitError';
+  }
+}
+
 const EXPECTED_HEADERS = [
   '載具自訂名稱', '發票日期', '發票號碼', '發票金額', '發票狀態', '折讓',
   '賣方統一編號', '賣方名稱', '賣方地址', '買方統編',
@@ -134,5 +141,7 @@ export function groupInvoices(rows: RawInvoiceRow[]): {
     }
   }
 
-  return { invoices: Array.from(invoiceMap.values()), skippedVoidedCount, skippedZeroCount };
+  const invoices = Array.from(invoiceMap.values());
+  if (invoices.length > 1000) throw new RowLimitError(invoices.length);
+  return { invoices, skippedVoidedCount, skippedZeroCount };
 }

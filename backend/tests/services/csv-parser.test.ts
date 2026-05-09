@@ -5,6 +5,7 @@ import {
   validateHeaders,
   parseCSVRows,
   groupInvoices,
+  RowLimitError,
 } from '../../src/services/csv-parser';
 
 const VALID_HEADERS =
@@ -153,5 +154,37 @@ describe('groupInvoices', () => {
     const { rows } = parseCSVRows(makeCSV([row1, row2]));
     const { invoices } = groupInvoices(rows);
     expect(invoices).toHaveLength(2);
+  });
+
+  it('throws RowLimitError when grouped invoices exceed 1,000', () => {
+    // Generate 1,001 unique invoice numbers
+    const dataRows = Array.from({ length: 1001 }, (_, i) =>
+      makeRow({ '發票號碼': `XX-${String(i + 1).padStart(8, '0')}` })
+    );
+    const { rows } = parseCSVRows(makeCSV(dataRows));
+    expect(() => groupInvoices(rows)).toThrow(RowLimitError);
+    expect(() => groupInvoices(rows)).toThrow('1001');
+  });
+
+  it('does not throw RowLimitError for exactly 1,000 invoices', () => {
+    const dataRows = Array.from({ length: 1000 }, (_, i) =>
+      makeRow({ '發票號碼': `YY-${String(i + 1).padStart(8, '0')}` })
+    );
+    const { rows } = parseCSVRows(makeCSV(dataRows));
+    expect(() => groupInvoices(rows)).not.toThrow();
+    const { invoices } = groupInvoices(rows);
+    expect(invoices).toHaveLength(1000);
+  });
+
+  it('processes only the valid replacement when both a voided and active invoice for the same purchase appear', () => {
+    // Merchant voided original invoice and issued a replacement with a new number
+    const voidedRow = makeRow({ '發票號碼': 'CC-00000001', '發票狀態': '已作廢', '賣方名稱': '統一超商' });
+    const validRow = makeRow({ '發票號碼': 'CC-00000002', '發票狀態': '正常', '賣方名稱': '統一超商' });
+    const { rows } = parseCSVRows(makeCSV([voidedRow, validRow]));
+    const { invoices, skippedVoidedCount } = groupInvoices(rows);
+
+    expect(invoices).toHaveLength(1);
+    expect(invoices[0].invoice_number).toBe('CC-00000002');
+    expect(skippedVoidedCount).toBe(1);
   });
 });

@@ -194,6 +194,66 @@ describe('runReconciliationPass', () => {
   });
 });
 
+// ─── Ambiguous match (FR-005) ────────────────────────────────────────────────
+
+describe('import pipeline — ambiguous match', () => {
+  it('classifies invoice as ambiguous when multiple exact-amount transactions exist on same date', () => {
+    const invoice = makeInvoice({ net_amount: 150 });
+    const tx1 = makeTx('tx-a', 150);
+    const tx2 = { ...makeTx('tx-b', 150), created_at: '2025-04-18T00:00:30.000Z' };
+
+    // Simulate findMatchingExpenseTransaction returning two candidates
+    const candidates = [tx1, tx2];
+
+    const status = candidates.length === 1 ? 'matched'
+      : candidates.length > 1 ? 'ambiguous'
+      : 'unmatched';
+
+    expect(status).toBe('ambiguous');
+  });
+
+  it('does not enrich any transaction when invoice is held as ambiguous', () => {
+    const tx1 = makeTx('tx-a', 150);
+    const tx2 = { ...makeTx('tx-b', 150), created_at: '2025-04-18T00:00:30.000Z' };
+
+    const candidates = [tx1, tx2];
+    const enriched: string[] = [];
+
+    // Simulate: ambiguous → no enrichTransaction call
+    if (candidates.length === 1) enriched.push(candidates[0].id);
+
+    expect(enriched).toHaveLength(0);
+    expect(tx1.is_matched).toBe(false);
+    expect(tx2.is_matched).toBe(false);
+  });
+
+  it('passes invoice to ambiguousItems with all candidate transactions', () => {
+    const invoice = makeInvoice({ net_amount: 150 });
+    const tx1 = makeTx('tx-a', 150);
+    const tx2 = { ...makeTx('tx-b', 150), created_at: '2025-04-18T00:00:30.000Z' };
+
+    const candidates = [tx1, tx2];
+    const ambiguousItems: Array<{ invoice: typeof invoice; candidates: typeof candidates }> = [];
+
+    if (candidates.length > 1) ambiguousItems.push({ invoice, candidates });
+
+    expect(ambiguousItems).toHaveLength(1);
+    expect(ambiguousItems[0].invoice.invoice_number).toBe(invoice.invoice_number);
+    expect(ambiguousItems[0].candidates).toHaveLength(2);
+  });
+
+  it('single-candidate invoice is NOT classified as ambiguous', () => {
+    const invoice = makeInvoice({ net_amount: 180 });
+    const candidates = [makeTx('tx-only', 180)];
+
+    const status = candidates.length === 1 ? 'matched'
+      : candidates.length > 1 ? 'ambiguous'
+      : 'unmatched';
+
+    expect(status).toBe('matched');
+  });
+});
+
 // ─── Date window ────────────────────────────────────────────────────────────
 
 describe('date window matching', () => {

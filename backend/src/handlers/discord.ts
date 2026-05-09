@@ -19,7 +19,7 @@ import {
 import { parseExpenseText } from '../services/gemini';
 import { getBudgetProgress } from '../services/budget';
 import { patchInteractionMessage, patchTransactionMatchedMessage } from '../services/discord-notify';
-import { decodeCSVBuffer, parseCSVRows, groupInvoices } from '../services/csv-parser';
+import { decodeCSVBuffer, parseCSVRows, groupInvoices, RowLimitError } from '../services/csv-parser';
 import { runImportPipeline } from '../services/invoice-matcher';
 
 interface DiscordInteraction {
@@ -821,7 +821,18 @@ async function handleImportCommand(
           return;
         }
 
-        const { invoices, skippedVoidedCount, skippedZeroCount } = groupInvoices(rows);
+        let groupResult;
+        try {
+          groupResult = groupInvoices(rows);
+        } catch (e: unknown) {
+          if (e instanceof RowLimitError) {
+            await patchInteractionMessage(env, token,
+              `❌ CSV 包含 ${e.actual} 筆發票，超過單次上限 1,000 筆。請依日期區間分批上傳。`);
+            return;
+          }
+          throw e;
+        }
+        const { invoices, skippedVoidedCount, skippedZeroCount } = groupResult;
 
         if (invoices.length === 0 && skippedVoidedCount === 0 && skippedZeroCount === 0 && parseFailedCount === 0) {
           await patchInteractionMessage(env, token, '❌ CSV 中沒有有效的發票資料。');
@@ -847,6 +858,7 @@ async function handleImportCommand(
           skipped_voided_count: counters.skippedVoidedCount,
           skipped_zero_count: counters.skippedZeroCount,
           held_forex_count: counters.heldForexCount,
+          ambiguous_count: counters.ambiguousCount,
           forex_resolved_count: counters.forexResolvedCount,
           parse_failed_count: counters.parseFailedCount,
         });
@@ -868,11 +880,13 @@ async function handleImportCommand(
             skipped_voided_count: counters.skippedVoidedCount,
             skipped_zero_count: counters.skippedZeroCount,
             held_forex_count: counters.heldForexCount,
+            ambiguous_count: counters.ambiguousCount,
             forex_resolved_count: counters.forexResolvedCount,
             parse_failed_count: counters.parseFailedCount,
           },
           attachment.filename ?? 'unknown',
-          unmatchedTxs
+          unmatchedTxs,
+          counters.ambiguousItems
         );
         await patchInteractionMessage(env, token, summary);
       } catch (err) {
@@ -893,11 +907,13 @@ function formatImportSummary(
     skipped_voided_count: number;
     skipped_zero_count: number;
     held_forex_count: number;
+    ambiguous_count: number;
     forex_resolved_count: number;
     parse_failed_count: number;
   },
   fileName: string,
-  unmatchedTxs: import('../types').Transaction[]
+  unmatchedTxs: import('../types').Transaction[],
+  ambiguousItems: import('../services/invoice-matcher').AmbiguousItem[] = []
 ): string {
   const lines: string[] = [
     `📥 發票匯入完成 · ${fileName}`,
@@ -912,6 +928,18 @@ function formatImportSummary(
     lines.push(`🔗 外幣已自動連結：${counters.forex_resolved_count} 筆`);
   }
 
+  if (ambiguousItems.length > 0) {
+    lines.push('', `⚠️ 模糊配對（${ambiguousItems.length} 筆）— 同金額多筆交易，請手動確認：`);
+    for (const { invoice, candidates } of ambiguousItems) {
+      const date = invoice.invoice_date.toISOString().slice(5, 10).replace('-', '/');
+      const candidateDesc = candidates
+        .slice(0, 3)
+        .map((tx) => tx.note ?? tx.items?.[0]?.name ?? `NT$${tx.amount}`)
+        .join(' / ');
+      lines.push(`  · ${invoice.seller_name || '未知商家'} NT$${invoice.net_amount} (${date}) — 候選：${candidateDesc}`);
+    }
+  }
+
   if (counters.skipped_voided_count > 0) {
     lines.push(`🚫 已作廢：${counters.skipped_voided_count} 筆`);
   }
@@ -920,7 +948,7 @@ function formatImportSummary(
     lines.push(`⚠️ 無法解析：${counters.parse_failed_count} 筆`);
   }
 
-  if (unmatchedTxs.length === 0 && counters.matched_count > 0 && counters.held_forex_count === 0) {
+  if (unmatchedTxs.length === 0 && counters.matched_count > 0 && counters.held_forex_count === 0 && counters.ambiguous_count === 0) {
     lines.push('', '🎉 全部對齊！本期所有發票均已比對。');
   } else if (unmatchedTxs.length > 0) {
     lines.push('', '📊 本期無發票交易（可能為現金/海外）：');
