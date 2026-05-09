@@ -1,5 +1,5 @@
 import type { Context } from 'hono';
-import type { Env } from '../types';
+import type { Env, PaymentMethod } from '../types';
 import { getSupabaseClient } from '../db/client';
 import {
   insertTransaction,
@@ -25,6 +25,7 @@ interface DiscordInteraction {
     custom_id?: string;
     component_type?: number;
     options?: { name: string; value: string | number }[];
+    components?: { type: number; components?: { type: number; custom_id?: string; value?: string }[] }[];
   };
 }
 
@@ -61,6 +62,11 @@ export async function discordHandler(c: Context<{ Bindings: Env }>) {
   // MESSAGE_COMPONENT (button click)
   if (interaction.type === 3) {
     return handleComponentInteraction(c, interaction);
+  }
+
+  // MODAL_SUBMIT
+  if (interaction.type === 5) {
+    return handleModalSubmit(c, interaction);
   }
 
   return c.json({ error: 'Unknown interaction type' }, 400);
@@ -213,6 +219,10 @@ async function handleFeeOrRefundCommand(
   const defaultDesc = txType === 'fee' ? '國外交易服務費' : '退款';
   const description = (options.find((o) => o.name === 'description')?.value as string) ?? defaultDesc;
   const parent = options.find((o) => o.name === 'parent')?.value as string | undefined;
+  const paymentMethod: PaymentMethod =
+    txType === 'fee'
+      ? 'credit_card'
+      : ((options.find((o) => o.name === 'payment_method')?.value as string) ?? 'cash') as PaymentMethod;
 
   if (!amount || amount <= 0) {
     return c.json({ type: 4, data: { content: '❌ 金額必須大於 0' } });
@@ -228,7 +238,7 @@ async function handleFeeOrRefundCommand(
         const transaction = await insertTransaction(supabase, {
           amount,
           transaction_type: txType,
-          payment_method: txType === 'fee' ? 'credit_card' : 'cash',
+          payment_method: paymentMethod,
           items: [{ name: description, amount }],
           tags: [],
           note: description,
@@ -260,17 +270,29 @@ async function handleFeeOrRefundCommand(
                 ],
               },
             ];
-            await patchInteractionMessage(env, token, content, components);
+            const messageId = await patchInteractionMessage(env, token, content, components);
+            if (messageId) {
+              await updateDiscordMessageId(supabase, transaction.id, messageId);
+            }
             return;
           }
-          // No candidates found
-          const budgetProgress = await getBudgetProgress(supabase);
+          // No candidates found — offer retype or save unlinked
           const noMatchContent =
-            `⚠️ 找不到符合「${parent}」的消費記錄\n` +
-            `✅ 已儲存（未連結）\n` +
-            `💰 NT$${amount.toLocaleString()} · ${description}\n` +
-            `📊 本月支出：$${budgetProgress.current_spend.toLocaleString()} / $${budgetProgress.monthly_budget.toLocaleString()} (${budgetProgress.percentage}%)`;
-          await patchInteractionMessage(env, token, noMatchContent);
+            `⚠️ 找不到「${parent}」相符的消費記錄\n` +
+            `💰 NT$${amount.toLocaleString()} · ${description}`;
+          const noMatchComponents = [
+            {
+              type: 1,
+              components: [
+                { type: 2, style: 1, label: '🔍 重新搜尋', custom_id: `${txType}_retype:${transaction.id}` },
+                { type: 2, style: 2, label: '儲存（不連結）', custom_id: `${txType}_unlink:${transaction.id}` },
+              ],
+            },
+          ];
+          const messageId = await patchInteractionMessage(env, token, noMatchContent, noMatchComponents);
+          if (messageId) {
+            await updateDiscordMessageId(supabase, transaction.id, messageId);
+          }
         } else {
           const budgetProgress = await getBudgetProgress(supabase);
           const content =
@@ -375,13 +397,14 @@ async function handleComponentInteraction(
       const [budgetProgress, txResult, parentResult] = await Promise.all([
         getBudgetProgress(supabase),
         supabase.from('transactions').select('amount, note').eq('id', txId).single(),
-        supabase.from('transactions').select('amount, transaction_at').eq('id', parentId).single(),
+        supabase.from('transactions').select('amount, items, note, transaction_at').eq('id', parentId).single(),
       ]);
       const isRefund = customId.startsWith('refund_link:');
       const tx = txResult.data;
       const parent = parentResult.data;
+      const parentName = parent?.items?.[0]?.name ?? parent?.note ?? '?';
       const parentLabel = parent
-        ? `NT$${parent.amount.toLocaleString()} (${parent.transaction_at.slice(5, 10).replace('-', '/')})`
+        ? `NT$${parent.amount.toLocaleString()} · ${parentName} (${parent.transaction_at.slice(5, 10).replace('-', '/')})`
         : '已連結';
       const emoji = isRefund ? '💸' : '💳';
       const label = isRefund ? '退款已連結！' : '費用已連結！';
@@ -390,7 +413,7 @@ async function handleComponentInteraction(
         `${emoji} NT$${tx?.amount.toLocaleString() ?? '?'} · ${tx?.note ?? '?'}\n` +
         `🔗 已連結至：${parentLabel}\n` +
         `📊 本月支出：$${budgetProgress.current_spend.toLocaleString()} / $${budgetProgress.monthly_budget.toLocaleString()} (${budgetProgress.percentage}%)`;
-      return c.json({ type: 4, data: { content } });
+      return c.json({ type: 7, data: { content, components: [] } });
     } catch (err) {
       console.error('fee/refund link error:', err);
       return c.json({ type: 4, data: { content: '❌ 連結失敗，請稍後再試。' } });
@@ -410,11 +433,107 @@ async function handleComponentInteraction(
       const content =
         `✅ ${label}\n` +
         `📊 本月支出：$${budgetProgress.current_spend.toLocaleString()} / $${budgetProgress.monthly_budget.toLocaleString()} (${budgetProgress.percentage}%)`;
-      return c.json({ type: 4, data: { content } });
+      return c.json({ type: 7, data: { content, components: [] } });
     } catch (err) {
       console.error('fee/refund unlink error:', err);
       return c.json({ type: 4, data: { content: '❌ 操作失敗，請稍後再試。' } });
     }
+  }
+
+  if (customId.startsWith('fee_retype:') || customId.startsWith('refund_retype:')) {
+    const txType = customId.startsWith('fee_retype:') ? 'fee' : 'refund';
+    const txId = customId.slice(`${txType}_retype:`.length);
+    if (!txId) return c.json({ type: 4, data: { content: '❌ 無效的操作' } });
+
+    return c.json({
+      type: 9, // MODAL
+      data: {
+        title: '重新搜尋母交易',
+        custom_id: `${txType}_parent_search:${txId}`,
+        components: [
+          {
+            type: 1,
+            components: [
+              {
+                type: 4, // TEXT_INPUT
+                custom_id: 'parent_term',
+                style: 1, // SHORT
+                label: '搜尋關鍵字',
+                placeholder: '例：Google AI Pro',
+                required: true,
+              },
+            ],
+          },
+        ],
+      },
+    });
+  }
+
+  return c.json({ type: 4, data: { content: '❌ 未知的操作' } });
+}
+
+async function handleModalSubmit(
+  c: Context<{ Bindings: Env }>,
+  interaction: DiscordInteraction
+) {
+  const customId = interaction.data?.custom_id ?? '';
+
+  if (customId.startsWith('fee_parent_search:') || customId.startsWith('refund_parent_search:')) {
+    const txType = customId.startsWith('fee_parent_search:') ? 'fee' : 'refund';
+    const txId = customId.slice(`${txType}_parent_search:`.length);
+    const searchTerm = interaction.data?.components?.[0]?.components?.[0]?.value ?? '';
+
+    if (!txId || !searchTerm) {
+      return c.json({ type: 4, data: { content: '❌ 無效的操作' } });
+    }
+
+    const supabase = getSupabaseClient(c.env);
+    const token = interaction.token;
+    const env = c.env;
+
+    c.executionCtx.waitUntil(
+      (async () => {
+        try {
+          const candidates = await findParentCandidates(supabase, searchTerm, 90);
+          if (candidates.length > 0) {
+            const content = `💳 請選擇母交易：`;
+            const candidateButtons = candidates.map((row) => ({
+              type: 2,
+              style: 1,
+              label: formatButtonLabel(row.amount, row.transaction_at),
+              custom_id: `${txType}_link:${txId}:${row.id}`,
+            }));
+            const components = [
+              { type: 1, components: candidateButtons },
+              {
+                type: 1,
+                components: [
+                  { type: 2, style: 2, label: '儲存（不連結）', custom_id: `${txType}_unlink:${txId}` },
+                ],
+              },
+            ];
+            await patchInteractionMessage(env, token, content, components);
+          } else {
+            const noMatchContent = `⚠️ 找不到「${searchTerm}」相符的消費記錄`;
+            const noMatchComponents = [
+              {
+                type: 1,
+                components: [
+                  { type: 2, style: 1, label: '🔍 重新搜尋', custom_id: `${txType}_retype:${txId}` },
+                  { type: 2, style: 2, label: '儲存（不連結）', custom_id: `${txType}_unlink:${txId}` },
+                ],
+              },
+            ];
+            await patchInteractionMessage(env, token, noMatchContent, noMatchComponents);
+          }
+        } catch (err) {
+          console.error('handleModalSubmit error:', err);
+          await patchInteractionMessage(env, token, '❌ 搜尋失敗，請稍後再試。');
+        }
+      })()
+    );
+
+    return c.json({ type: 6 }); // DEFERRED_UPDATE_MESSAGE — updates the "not found" message in place
   }
 
   return c.json({ type: 4, data: { content: '❌ 未知的操作' } });

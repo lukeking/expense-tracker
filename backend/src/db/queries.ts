@@ -171,16 +171,22 @@ export async function findParentCandidates(
   windowDays: number
 ): Promise<Pick<Transaction, 'id' | 'amount' | 'items' | 'note' | 'transaction_at'>[]> {
   const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString();
+  // PostgREST cannot cast JSONB to text in filters, so fetch all expense rows in the
+  // window and filter in JS. At ~100 tx/month this is at most ~300 rows over 90 days.
   const { data, error } = await supabase
     .from('transactions')
     .select('id, amount, items, note, transaction_at')
     .eq('transaction_type', 'expense')
     .gte('transaction_at', since)
-    .or(`items::text.ilike.%${searchTerm}%,note.ilike.%${searchTerm}%`)
-    .order('transaction_at', { ascending: false })
-    .limit(5);
+    .order('transaction_at', { ascending: false });
   if (error) throw new Error(`findParentCandidates: ${error.message}`);
-  return (data ?? []) as Pick<Transaction, 'id' | 'amount' | 'items' | 'note' | 'transaction_at'>[];
+  const lower = searchTerm.toLowerCase();
+  const matches = (data ?? []).filter(
+    (row) =>
+      JSON.stringify(row.items ?? []).toLowerCase().includes(lower) ||
+      (row.note ?? '').toLowerCase().includes(lower)
+  );
+  return matches.slice(0, 5) as Pick<Transaction, 'id' | 'amount' | 'items' | 'note' | 'transaction_at'>[];
 }
 
 export async function updateParentTransactionId(

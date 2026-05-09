@@ -108,6 +108,16 @@ const commands = [
         type: 3, // STRING
         required: false,
       },
+      {
+        name: 'payment_method',
+        description: '退款方式（預設：cash）',
+        type: 3, // STRING
+        required: false,
+        choices: [
+          { name: '現金 (cash)', value: 'cash' },
+          { name: '信用卡 (credit_card)', value: 'credit_card' },
+        ],
+      },
     ],
   },
 ];
