@@ -51,12 +51,15 @@ export async function getMonthlySpend(
 
   const { data, error } = await supabase
     .from('transactions')
-    .select('amount')
+    .select('amount, transaction_type')
     .gte('transaction_at', start)
     .lt('transaction_at', end);
 
   if (error) throw new Error(`getMonthlySpend: ${error.message}`);
-  return (data ?? []).reduce((sum, row) => sum + (row.amount as number), 0);
+  return (data ?? []).reduce((sum, row) => {
+    const amount = row.amount as number;
+    return row.transaction_type === 'refund' ? sum - amount : sum + amount;
+  }, 0);
 }
 
 export async function getBudgetSettings(supabase: SupabaseClient): Promise<BudgetSettings> {
@@ -160,6 +163,42 @@ export async function resolvePendingMatch(
     .eq('transaction_id', transactionId)
     .eq('resolved', false);
   if (error) throw new Error(`resolvePendingMatch: ${error.message}`);
+}
+
+export async function findParentCandidates(
+  supabase: SupabaseClient,
+  searchTerm: string,
+  windowDays: number
+): Promise<Pick<Transaction, 'id' | 'amount' | 'items' | 'note' | 'transaction_at'>[]> {
+  const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString();
+  // PostgREST cannot cast JSONB to text in filters, so fetch all expense rows in the
+  // window and filter in JS. At ~100 tx/month this is at most ~300 rows over 90 days.
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('id, amount, items, note, transaction_at')
+    .eq('transaction_type', 'expense')
+    .gte('transaction_at', since)
+    .order('transaction_at', { ascending: false });
+  if (error) throw new Error(`findParentCandidates: ${error.message}`);
+  const lower = searchTerm.toLowerCase();
+  const matches = (data ?? []).filter(
+    (row) =>
+      JSON.stringify(row.items ?? []).toLowerCase().includes(lower) ||
+      (row.note ?? '').toLowerCase().includes(lower)
+  );
+  return matches.slice(0, 5) as Pick<Transaction, 'id' | 'amount' | 'items' | 'note' | 'transaction_at'>[];
+}
+
+export async function updateParentTransactionId(
+  supabase: SupabaseClient,
+  transactionId: string,
+  parentTransactionId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('transactions')
+    .update({ parent_transaction_id: parentTransactionId })
+    .eq('id', transactionId);
+  if (error) throw new Error(`updateParentTransactionId: ${error.message}`);
 }
 
 export async function findExistingTransaction(

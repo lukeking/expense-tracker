@@ -3,6 +3,9 @@
  * Registers Discord slash commands via the REST API.
  * Usage: DISCORD_APPLICATION_ID=... DISCORD_BOT_TOKEN=... npx tsx scripts/register-commands.ts
  */
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const APPLICATION_ID = process.env.DISCORD_APPLICATION_ID;
 const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
@@ -54,6 +57,66 @@ const commands = [
         description: '查詢月份，格式：YYYY-MM（預設當月）',
         type: 3, // STRING
         required: false,
+      },
+    ],
+  },
+  {
+    name: 'fee',
+    description: '記錄外幣交易服務費，連結至原始消費',
+    options: [
+      {
+        name: 'amount',
+        description: '服務費金額 (NTD)',
+        type: 4, // INTEGER
+        required: true,
+        min_value: 1,
+      },
+      {
+        name: 'description',
+        description: '費用名稱（預設：國外交易服務費）',
+        type: 3, // STRING
+        required: false,
+      },
+      {
+        name: 'parent',
+        description: '原始消費關鍵字，用於搜尋母交易（例：Airbnb）',
+        type: 3, // STRING
+        required: false,
+      },
+    ],
+  },
+  {
+    name: 'refund',
+    description: '記錄退款或出差請領，連結至原始消費',
+    options: [
+      {
+        name: 'amount',
+        description: '退款金額 (NTD)',
+        type: 4, // INTEGER
+        required: true,
+        min_value: 1,
+      },
+      {
+        name: 'description',
+        description: '退款說明（預設：退款）',
+        type: 3, // STRING
+        required: false,
+      },
+      {
+        name: 'parent',
+        description: '原始消費關鍵字，用於搜尋母交易（例：高鐵）',
+        type: 3, // STRING
+        required: false,
+      },
+      {
+        name: 'payment_method',
+        description: '退款方式（預設：cash）',
+        type: 3, // STRING
+        required: false,
+        choices: [
+          { name: '現金 (cash)', value: 'cash' },
+          { name: '信用卡 (credit_card)', value: 'credit_card' },
+        ],
       },
     ],
   },

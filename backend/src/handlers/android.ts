@@ -134,24 +134,15 @@ export async function androidInputHandler(c: Context<{ Bindings: Env }>) {
     parseText = trimmed.replace(/^refund\s+/i, '');
   }
 
-  // Detect payment method from keywords
-  let paymentMethod: PaymentMethod = 'cash';
+  // wallet sub-type that Gemini doesn't distinguish
   let wallet: MobileWallet | null = null;
-  if (/悠遊卡|easycard/i.test(parseText)) {
-    paymentMethod = 'easy_card';
-  } else if (/LINE Pay|LinePay/i.test(parseText)) {
-    paymentMethod = 'prepaid_wallet';
+  if (/LINE Pay|LinePay/i.test(parseText)) {
     wallet = 'line_pay';
   } else if (/Google Pay|GooglePay/i.test(parseText)) {
-    paymentMethod = 'prepaid_wallet';
     wallet = 'google_pay';
-  } else if (/信用卡/i.test(parseText)) {
-    paymentMethod = 'credit_card';
-  } else if (/轉帳|網銀|銀行帳戶/i.test(parseText)) {
-    paymentMethod = 'bank_account';
   }
 
-  // Parse amount and items via Gemini
+  // Parse amount, items, tags, and payment_method via Gemini
   let parsed;
   try {
     parsed = await parseRawExpenseText(c.env, parseText);
@@ -178,7 +169,7 @@ export async function androidInputHandler(c: Context<{ Bindings: Env }>) {
     amount: parsed.amount,
     items: parsed.items.map((i) => ({ name: i.name, amount: i.amount ?? 0 })),
     tags: parsed.tags,
-    payment_method: paymentMethod,
+    payment_method: parsed.payment_method,
     wallet,
     note: parseText,
     transaction_type: transactionType,
