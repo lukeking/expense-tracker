@@ -39,7 +39,7 @@ function makeCSV(dataRows: string[]): string {
 describe('decodeCSVBuffer', () => {
   it('decodes valid UTF-8 buffer', () => {
     const text = '載具自訂名稱,發票號碼';
-    const buf = new TextEncoder().encode(text).buffer;
+    const buf = new TextEncoder().encode(text).buffer as ArrayBuffer;
     expect(decodeCSVBuffer(buf)).toBe(text);
   });
 

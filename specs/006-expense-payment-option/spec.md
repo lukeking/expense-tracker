@@ -5,6 +5,14 @@
 **Status**: Draft  
 **Input**: User description: "explicitly separate payment_method from description for /expense, only those 5 predefined value acceptable (現金、信用卡、悠遊卡、銀行、行動支付)"
 
+## Clarifications
+
+### Session 2026-05-10
+
+- Q: Does the `payment_method` column already exist in the database, or does this feature need to introduce it via a new migration? → A: Column already exists with a CHECK constraint enforcing all 5 valid enum values (`credit_card`, `prepaid_wallet`, `easy_card`, `bank_account`, `cash`); no `ALTER TABLE` migration is needed.
+- Q: Besides the Discord `/expense` handler, does `parseDescription()` have other callers affected by removing payment keyword classification? → A: No — only the Discord `/expense` handler calls it; Android and other paths use separate parsers.
+- Q: Where does `payment_method` appear in the expense confirmation message? → A: Inline on the existing summary line, appended as a Chinese label in brackets (e.g., `✅ 午餐 $300 [信用卡]`).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 — Record Expense with Explicit Payment Method (Priority: P1)
@@ -40,7 +48,7 @@ A user records an expense by selecting their payment method from a dropdown list
 - **FR-002**: The `payment_method` option MUST be optional; when omitted, the transaction MUST be stored with `payment_method = cash` (現金).
 - **FR-003**: The `parseDescription()` function MUST NOT classify any token as a payment method — payment keyword matching is removed from the description parser entirely.
 - **FR-004**: The transaction stored in the database MUST reflect the value supplied via the `payment_method` Discord option, not any keyword found in the description.
-- **FR-005**: The expense confirmation message MUST display the selected payment method label in Traditional Chinese (e.g., `[信用卡]`).
+- **FR-005**: The expense confirmation message MUST display the selected payment method label in Traditional Chinese inline on the existing summary line, appended as a bracketed label (e.g., `✅ 午餐 $300 [信用卡]`).
 - **FR-006**: The updated `/expense` command definition MUST be re-registered with Discord so the dropdown appears in the slash command UI.
 
 ### Key Entities
@@ -58,8 +66,9 @@ A user records an expense by selecting their payment method from a dropdown list
 
 ## Assumptions
 
-- The five payment method choices map to existing enum values in the system; no new enum values are introduced.
+- The five payment method choices map to existing enum values already enforced by the database `CHECK` constraint on the `transactions` table (`payment_method` column); no schema migration is required for this feature.
 - `payment_method` remains optional with a `cash` default to preserve backwards compatibility (existing integrations that don't supply it will continue to work).
 - The Android expense notification path (`parseRawExpenseText` via Gemini) is out of scope — it is unchanged by this feature.
+- `parseDescription()` is called only by the Discord `/expense` handler; no other callers are affected by removing payment keyword classification.
 - The description field retains its existing format (comma-delimited tags, items, notes); only payment keyword classification is removed from parsing.
 - Discord command re-registration is a manual step executed after deployment; no automated registration pipeline exists.

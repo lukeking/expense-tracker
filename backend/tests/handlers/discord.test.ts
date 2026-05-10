@@ -54,6 +54,46 @@ describe('/expense command handler', () => {
     expect(description).toBe('燙青菜 牛肉麵');
   });
 
+  it('extracts payment_method from interaction options', () => {
+    const interaction = {
+      type: 2,
+      data: {
+        name: 'expense',
+        options: [
+          { name: 'amount', value: 300 },
+          { name: 'description', value: '#食:午餐, 麥當勞 大麥克套餐 250' },
+          { name: 'payment_method', value: 'credit_card' },
+        ],
+      },
+    };
+    const options = interaction.data.options;
+    const paymentMethod = (options.find((o) => o.name === 'payment_method')?.value as string) ?? 'cash';
+    expect(paymentMethod).toBe('credit_card');
+  });
+
+  it('defaults payment_method to cash when option is omitted', () => {
+    const interaction = {
+      type: 2,
+      data: {
+        name: 'expense',
+        options: [
+          { name: 'amount', value: 100 },
+          { name: 'description', value: '早餐' },
+        ],
+      },
+    };
+    const options = interaction.data.options;
+    const paymentMethod = (options.find((o) => o.name === 'payment_method')?.value as string) ?? 'cash';
+    expect(paymentMethod).toBe('cash');
+  });
+
+  it('confirmation message includes payment method label inline on amount line', () => {
+    const amount = 300;
+    const paymentMethodLabel = '信用卡';
+    const amountLine = `💰 金額：$${amount} [${paymentMethodLabel}]`;
+    expect(amountLine).toBe('💰 金額：$300 [信用卡]');
+  });
+
   it('rejects amount <= 0', () => {
     const amount = -1;
     expect(amount).toBeLessThanOrEqual(0);
@@ -330,7 +370,7 @@ describe('/import command handler', () => {
               url: 'https://cdn.discordapp.com/attachments/.../test-invoices.csv',
               content_type: 'text/csv',
             },
-          },
+          } as Record<string, { id: string; filename: string; size: number; url: string; content_type: string }>,
         },
       },
     };

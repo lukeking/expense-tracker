@@ -99,6 +99,7 @@ export async function handleMofSync(env: Env): Promise<void> {
     ),
     invoice_date: rocDateToCE(inv.invDate),
     carrier_type: 'mobile_barcode',
+    random_code: '',
     raw_data: inv,
   }));
 

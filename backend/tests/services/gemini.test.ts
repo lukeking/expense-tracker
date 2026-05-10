@@ -192,18 +192,22 @@ describe('parseExpenseText — Discord flow behaviors', () => {
     expect(finalAmount).toBe(200);
   });
 
-  it('payment_method defaults to cash when description has no keyword', () => {
+  it('payment_method is always cash — keyword mapping removed from Discord prompt', () => {
+    // DISCORD_PROMPT_RULES instructs Gemini to always return "cash";
+    // the actual payment method is read from the Discord option in the handler.
     const parsed: Partial<GeminiParseResult> = { amount: 150, items: [{ name: '燙青菜' }], tags: [] };
     expect(parsed.payment_method ?? 'cash').toBe('cash');
   });
 
-  it('payment_method is detected when keyword is in description', () => {
-    const parsed: Partial<GeminiParseResult> = {
-      amount: 80,
-      payment_method: 'easy_card',
-      items: [{ name: '捷運' }],
+  it('description containing 信用卡 does not yield credit_card in Discord flow', () => {
+    // After removing payment keyword mapping from DISCORD_PROMPT_RULES, Gemini
+    // returns 'cash' regardless of description content. The Discord option is authoritative.
+    const parsedFromDiscordFlow: Partial<GeminiParseResult> = {
+      amount: 300,
+      payment_method: 'cash', // Gemini now always returns cash for Discord flow
+      items: [{ name: '午餐' }],
       tags: [],
     };
-    expect(parsed.payment_method).toBe('easy_card');
+    expect(parsedFromDiscordFlow.payment_method).toBe('cash');
   });
 });

@@ -18,7 +18,7 @@ if (!APPLICATION_ID || !BOT_TOKEN) {
 const commands = [
   {
     name: 'expense',
-    description: '記錄一筆現金支出',
+    description: '記錄一筆支出',
     options: [
       {
         name: 'amount',
@@ -32,6 +32,19 @@ const commands = [
         description: '消費說明，例如：燙青菜 牛肉麵',
         type: 3, // STRING
         required: true,
+      },
+      {
+        name: 'payment_method',
+        description: '付款方式（預設：現金）',
+        type: 3, // STRING
+        required: false,
+        choices: [
+          { name: '現金', value: 'cash' },
+          { name: '信用卡', value: 'credit_card' },
+          { name: '悠遊卡', value: 'easy_card' },
+          { name: '銀行轉帳', value: 'bank_account' },
+          { name: '行動支付', value: 'prepaid_wallet' },
+        ],
       },
     ],
   },

@@ -44,6 +44,14 @@ interface DiscordInteraction {
   };
 }
 
+const PAYMENT_METHOD_LABEL: Record<import('../types').PaymentMethod, string> = {
+  cash: '現金',
+  credit_card: '信用卡',
+  easy_card: '悠遊卡',
+  bank_account: '銀行轉帳',
+  prepaid_wallet: '行動支付',
+};
+
 export async function discordHandler(c: Context<{ Bindings: Env }>) {
   const rawBody = c.get('rawBody') as string;
   const interaction = JSON.parse(rawBody) as DiscordInteraction;
@@ -100,6 +108,7 @@ async function handleExpenseCommand(
   const options = interaction.data?.options ?? [];
   const amount = options.find((o) => o.name === 'amount')?.value as number;
   const description = options.find((o) => o.name === 'description')?.value as string;
+  const paymentMethod = ((options.find((o) => o.name === 'payment_method')?.value as string) ?? 'cash') as PaymentMethod;
 
   if (!amount || amount <= 0) {
     return c.json({ type: 4, data: { content: '❌ 金額必須大於 0' } });
@@ -119,7 +128,7 @@ async function handleExpenseCommand(
 
         const transaction = await insertTransaction(supabase, {
           amount,
-          payment_method: parsed.payment_method,
+          payment_method: paymentMethod,
           items: parsed.items.map((i) => ({ name: i.name, amount: i.amount ?? 0 })),
           tags: parsed.tags,
           transaction_at: new Date().toISOString(),
@@ -134,7 +143,7 @@ async function handleExpenseCommand(
 
         const content =
           `✅ 記帳成功！\n` +
-          `💰 金額：$${amount}\n` +
+          `💰 金額：$${amount} [${PAYMENT_METHOD_LABEL[paymentMethod]}]\n` +
           `🏷️ 品項：${itemsStr}\n` +
           `📊 本月支出：$${updatedProgress.current_spend.toLocaleString()} / $${updatedProgress.monthly_budget.toLocaleString()} (${updatedProgress.percentage}%)`;
 

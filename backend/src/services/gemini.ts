@@ -35,7 +35,18 @@ Return ONLY valid JSON following this schema:
 }
 `;
 
-const COMMON_PROMPT_RULES = `
+const DISCORD_PROMPT_RULES = `
+Rules:
+- amount is the total NTD (no decimals)
+- payment_method: always return "cash" (payment method is provided as a separate Discord option)
+- items is a list of what was purchased, if amount comes along with item, bind them together into one element in items
+- If there is only one item in list, the 'items.amount' should to the same with total amount
+- Extract all words with a leading '#' as tags by removing the '#' prefix. no missing nor duplicate tags allowed.
+- If tags cannot be determined, tags = []
+- If no items are listed, items = []
+`;
+
+const ANDROID_PROMPT_RULES = `
 Rules:
 - amount is the total NTD (no decimals)
 - payment_method mapping:
@@ -54,13 +65,13 @@ Rules:
 const SYSTEM_PROMPT = `You are a Taiwanese expense parser. Given a free-text expense description, extract the total amount and individual items.
 ${COMMON_PROMPT_RESPONSE_FORMAT}
 
-${COMMON_PROMPT_RULES}
+${DISCORD_PROMPT_RULES}
 `;
 
 const RAW_TEXT_SYSTEM_PROMPT = `You are a Taiwanese expense parser. Given a raw expense entry typed by a user, extract the total amount, items purchased, payment method keywords, and tags.
 ${COMMON_PROMPT_RESPONSE_FORMAT}
 
-${COMMON_PROMPT_RULES}
+${ANDROID_PROMPT_RULES}
 - The first token is usually the total amount (e.g. "250 星巴克 拿鐵" → amount: 250)
 `;
 
