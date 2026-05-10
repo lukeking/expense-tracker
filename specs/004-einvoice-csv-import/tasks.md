@@ -190,7 +190,7 @@ T015  # amendTransactionAmount DB test
 
 ## Notes
 
-- Total tasks: **41** | Completed: **37** (T001-T034) | Pending: T035-T041 (P3 + Polish)
+- Total tasks: **41** | Completed: **41** (T001-T041) | Pending: none
 - Tasks per story: Phase 3 (/amend) = 10, US1 = 7, US2 = 8, US3 = 4, US4 = 3, Polish = 4, Setup/Foundation = 5
 - [P] tasks = different files, no mutual dependency within phase
 - Commit after each checkpoint or logical group (T006, T013, T021, T028, T033, T037)
