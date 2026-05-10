@@ -43,7 +43,7 @@ cd backend
 pnpm test
 ```
 
-All 3 test suites should pass (75+ tests).
+All test suites should pass (165+ tests across 8 files including 004-einvoice-csv-import).
 
 ### 3. Deploy
 
