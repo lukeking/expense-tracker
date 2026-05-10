@@ -6,11 +6,13 @@ export async function patchInteractionMessage(
   env: Env,
   token: string,
   content: string,
-  components?: object[]
+  components?: object[],
+  embeds?: object[]
 ): Promise<string | null> {
   const url = `${DISCORD_API}/webhooks/${env.DISCORD_APPLICATION_ID}/${token}/messages/@original`;
   const body: Record<string, unknown> = { content };
   if (components !== undefined) body.components = components;
+  if (embeds !== undefined) body.embeds = embeds;
   const res = await fetch(url, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },

@@ -86,6 +86,7 @@ export async function handleMofSync(env: Env): Promise<void> {
 
   const receipts = invoices.map((inv) => ({
     invoice_number: inv.invNum,
+    random_code: '',
     seller_name: inv.sellerName,
     seller_tax_id: inv.sellerBan,
     total_amount: parseInt(inv.amount),

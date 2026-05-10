@@ -271,7 +271,7 @@ export async function findMatchingExpenseTransaction(
   supabase: SupabaseClient,
   netAmount: number,
   invoiceDate: Date
-): Promise<Transaction | null> {
+): Promise<Transaction[]> {
   const windowStart = new Date(invoiceDate.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const windowEnd = new Date(invoiceDate.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const { data, error } = await supabase
@@ -282,10 +282,9 @@ export async function findMatchingExpenseTransaction(
     .is('matched_invoice_id', null)
     .gte('transaction_at', windowStart)
     .lte('transaction_at', windowEnd + 'T23:59:59Z')
-    .order('created_at', { ascending: false })
-    .limit(1);
+    .order('created_at', { ascending: false });
   if (error) throw new Error(`findMatchingExpenseTransaction: ${error.message}`);
-  return data && data.length > 0 ? (data[0] as Transaction) : null;
+  return (data ?? []) as Transaction[];
 }
 
 export async function findForexCandidateTransaction(
@@ -400,6 +399,22 @@ export async function findTransactionsWithoutInvoiceInRange(
     .order('transaction_at', { ascending: false });
   if (error) throw new Error(`findTransactionsWithoutInvoiceInRange: ${error.message}`);
   return (data ?? []) as Transaction[];
+}
+
+export async function getTransactionsForPeriod(
+  supabase: SupabaseClient,
+  start: Date,
+  end: Date
+): Promise<Pick<Transaction, 'id' | 'amount' | 'tags' | 'transaction_at'>[]> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('id, amount, tags, transaction_at')
+    .eq('transaction_type', 'expense')
+    .gte('transaction_at', start.toISOString())
+    .lt('transaction_at', end.toISOString())
+    .order('transaction_at', { ascending: true });
+  if (error) throw new Error(`getTransactionsForPeriod: ${error.message}`);
+  return (data ?? []) as Pick<Transaction, 'id' | 'amount' | 'tags' | 'transaction_at'>[];
 }
 
 export async function mergeTransactionFields(

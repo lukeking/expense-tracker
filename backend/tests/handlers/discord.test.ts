@@ -336,7 +336,7 @@ describe('/import command handler', () => {
     };
     const options = interaction.data.options;
     const attachmentId = options.find((o) => o.name === 'file')?.value as string;
-    const url = interaction.data.resolved.attachments[attachmentId]?.url;
+    const url = (interaction.data.resolved.attachments as Record<string, { url: string }>)[attachmentId]?.url;
     expect(url).toContain('test-invoices.csv');
   });
 
@@ -349,7 +349,7 @@ describe('/import command handler', () => {
 
 // ─── formatImportSummary tests ────────────────────────────────────────────────
 
-// Inline copy of formatImportSummary for unit testing
+// Inline copy of formatImportSummary for unit testing — keep in sync with discord.ts
 function formatImportSummary(
   counters: {
     matched_count: number;
@@ -358,11 +358,16 @@ function formatImportSummary(
     skipped_voided_count: number;
     skipped_zero_count: number;
     held_forex_count: number;
+    ambiguous_count: number;
     forex_resolved_count: number;
     parse_failed_count: number;
   },
   fileName: string,
-  unmatchedTxs: { amount: number; transaction_at: string }[]
+  unmatchedTxs: { amount: number; transaction_at: string }[],
+  ambiguousItems: Array<{
+    invoice: { seller_name: string; net_amount: number; invoice_date: Date };
+    candidates: Array<{ note: string | null; items: Array<{ name: string }> | null; amount: number }>;
+  }> = []
 ): string {
   const lines: string[] = [
     `📥 發票匯入完成 · ${fileName}`,
@@ -375,13 +380,24 @@ function formatImportSummary(
   if (counters.forex_resolved_count > 0) {
     lines.push(`🔗 外幣已自動連結：${counters.forex_resolved_count} 筆`);
   }
+  if (ambiguousItems.length > 0) {
+    lines.push('', `⚠️ 模糊配對（${ambiguousItems.length} 筆）— 同金額多筆交易，請手動確認：`);
+    for (const { invoice, candidates } of ambiguousItems) {
+      const date = invoice.invoice_date.toISOString().slice(5, 10).replace('-', '/');
+      const candidateDesc = candidates
+        .slice(0, 3)
+        .map((tx) => tx.note ?? tx.items?.[0]?.name ?? `NT$${tx.amount}`)
+        .join(' / ');
+      lines.push(`  · ${invoice.seller_name || '未知商家'} NT$${invoice.net_amount} (${date}) — 候選：${candidateDesc}`);
+    }
+  }
   if (counters.skipped_voided_count > 0) {
     lines.push(`🚫 已作廢：${counters.skipped_voided_count} 筆`);
   }
   if (counters.parse_failed_count > 0) {
     lines.push(`⚠️ 無法解析：${counters.parse_failed_count} 筆`);
   }
-  if (unmatchedTxs.length === 0 && counters.matched_count > 0 && counters.held_forex_count === 0) {
+  if (unmatchedTxs.length === 0 && counters.matched_count > 0 && counters.held_forex_count === 0 && counters.ambiguous_count === 0) {
     lines.push('', '🎉 全部對齊！本期所有發票均已比對。');
   } else if (unmatchedTxs.length > 0) {
     lines.push('', '📊 本期無發票交易（可能為現金/海外）：');
@@ -404,6 +420,7 @@ const BASE_COUNTERS = {
   skipped_voided_count: 0,
   skipped_zero_count: 0,
   held_forex_count: 0,
+  ambiguous_count: 0,
   forex_resolved_count: 0,
   parse_failed_count: 0,
 };
@@ -437,6 +454,52 @@ describe('formatImportSummary', () => {
       []
     );
     expect(summary).not.toContain('🎉 全部對齊！');
+  });
+
+  it('does not show 全部對齊 when there are ambiguous invoices', () => {
+    const summary = formatImportSummary(
+      { ...BASE_COUNTERS, matched_count: 4, ambiguous_count: 1 },
+      'invoices.csv',
+      []
+    );
+    expect(summary).not.toContain('🎉 全部對齊！');
+  });
+
+  it('shows ambiguous section with seller name and candidate descriptions when ambiguousItems provided', () => {
+    const ambiguousItems = [
+      {
+        invoice: {
+          seller_name: '星巴克咖啡',
+          net_amount: 150,
+          invoice_date: new Date('2025-04-18T00:00:00Z'),
+        },
+        candidates: [
+          { note: '早餐咖啡', items: null, amount: 150 },
+          { note: '下午咖啡', items: null, amount: 150 },
+        ],
+      },
+    ];
+    const summary = formatImportSummary(
+      { ...BASE_COUNTERS, ambiguous_count: 1 },
+      'invoices.csv',
+      [],
+      ambiguousItems
+    );
+    expect(summary).toContain('⚠️ 模糊配對（1 筆）');
+    expect(summary).toContain('星巴克咖啡');
+    expect(summary).toContain('NT$150');
+    expect(summary).toContain('早餐咖啡');
+    expect(summary).toContain('下午咖啡');
+  });
+
+  it('omits ambiguous section entirely when ambiguousItems is empty', () => {
+    const summary = formatImportSummary(
+      { ...BASE_COUNTERS, matched_count: 3 },
+      'invoices.csv',
+      [],
+      []
+    );
+    expect(summary).not.toContain('模糊配對');
   });
 
   it('shows forex_resolved_count line when > 0', () => {

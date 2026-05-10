@@ -50,13 +50,21 @@ const commands = [
   },
   {
     name: 'summary',
-    description: '查看月度支出摘要',
+    description: '查看支出分類圓餅圖',
     options: [
       {
-        name: 'month',
-        description: '查詢月份，格式：YYYY-MM（預設當月）',
+        name: 'period',
+        description: '時間區間',
         type: 3, // STRING
         required: false,
+        choices: [
+          { name: '本月', value: 'month' },
+          { name: '上個月', value: 'last-month' },
+          { name: '近3個月', value: '3months' },
+          { name: '近半年', value: 'half-year' },
+          { name: '近一年', value: 'year' },
+          { name: '全部', value: 'all' },
+        ],
       },
     ],
   },

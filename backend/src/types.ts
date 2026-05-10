@@ -34,6 +34,7 @@ export type InvoiceMatchStatus =
   | 'matched'
   | 'auto_created'
   | 'held_forex'
+  | 'ambiguous'
   | 'skipped_duplicate'
   | 'skipped_voided'
   | 'skipped_zero'
@@ -73,6 +74,7 @@ export interface ImportRun {
   skipped_voided_count: number;
   skipped_zero_count: number;
   held_forex_count: number;
+  ambiguous_count: number;
   forex_resolved_count: number;
   parse_failed_count: number;
   uploaded_at: string;
@@ -151,6 +153,18 @@ export interface BudgetSummary {
   percentage: number;
 }
 
+export type SummaryPeriod = 'month' | 'last-month' | '3months' | 'half-year' | 'year' | 'all';
+
+export interface CategoryTotal {
+  category: string;
+  total: number;
+}
+
+export interface SubcategoryTotal {
+  subcategory: string;
+  total: number;
+}
+
 export interface InputResponse {
   success: boolean;
   message: string;
@@ -171,6 +185,10 @@ export interface GeminiParseResult {
   payment_method: PaymentMethod;
   items: { name: string; amount?: number }[];
   tags: string[];
+}
+
+export interface HonoVariables {
+  rawBody: string;
 }
 
 export interface Env {

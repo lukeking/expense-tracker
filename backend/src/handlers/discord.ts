@@ -1,12 +1,10 @@
 import type { Context } from 'hono';
-import type { Env, PaymentMethod } from '../types';
+import type { Env, HonoVariables, PaymentMethod, SummaryPeriod } from '../types';
 import { getSupabaseClient } from '../db/client';
 import {
   insertTransaction,
   updateBudgetSettings,
   updateDiscordMessageId,
-  getMonthlySpend,
-  getBudgetSettings,
   matchTransaction,
   resolvePendingMatch,
   findParentCandidates,
@@ -15,11 +13,14 @@ import {
   createImportRun,
   updateImportRun,
   findTransactionsWithoutInvoiceInRange,
+  getTransactionsForPeriod,
 } from '../db/queries';
-import { parseExpenseText } from '../services/gemini';
+import { parseDescription } from '../services/expense-parser';
+import { periodToDateRange, aggregateByCategory, aggregateBySubcategory, formatCategoryTable } from '../services/summary';
+import { fetchPieChartUrl, fetchBarChartUrl } from '../services/chart';
 import { getBudgetProgress } from '../services/budget';
 import { patchInteractionMessage, patchTransactionMatchedMessage } from '../services/discord-notify';
-import { decodeCSVBuffer, parseCSVRows, groupInvoices } from '../services/csv-parser';
+import { decodeCSVBuffer, parseCSVRows, groupInvoices, RowLimitError } from '../services/csv-parser';
 import { runImportPipeline } from '../services/invoice-matcher';
 
 interface DiscordInteraction {
@@ -44,7 +45,7 @@ interface DiscordInteraction {
   };
 }
 
-export async function discordHandler(c: Context<{ Bindings: Env }>) {
+export async function discordHandler(c: Context<{ Bindings: Env; Variables: HonoVariables }>) {
   const rawBody = c.get('rawBody') as string;
   const interaction = JSON.parse(rawBody) as DiscordInteraction;
 
@@ -93,8 +94,39 @@ export async function discordHandler(c: Context<{ Bindings: Env }>) {
   return c.json({ error: 'Unknown interaction type' }, 400);
 }
 
+const PM_LABELS: Record<string, string> = {
+  cash: '現金',
+  credit_card: '信用卡',
+  easy_card: '悠遊卡',
+  prepaid_wallet: '行動支付',
+  bank_account: '銀行轉帳',
+};
+
+const PERIOD_LABELS: Record<string, string> = {
+  'month': '本月',
+  'last-month': '上個月',
+  '3months': '近3個月',
+  'half-year': '近半年',
+  'year': '近一年',
+  'all': '全部',
+};
+
+function encodeCategory(category: string): string {
+  const bytes = new TextEncoder().encode(category);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function decodeCategory(b64: string): string {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
 async function handleExpenseCommand(
-  c: Context<{ Bindings: Env }>,
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
   interaction: DiscordInteraction
 ) {
   const options = interaction.data?.options ?? [];
@@ -105,38 +137,38 @@ async function handleExpenseCommand(
     return c.json({ type: 4, data: { content: '❌ 金額必須大於 0' } });
   }
 
-  // Respond immediately with deferred type
   const supabase = getSupabaseClient(c.env);
   const token = interaction.token;
 
   c.executionCtx.waitUntil(
     (async () => {
       try {
-        const [parsed, budgetProgress] = await Promise.all([
-          parseExpenseText(c.env, amount, description ?? ''),
-          getBudgetProgress(supabase),
-        ]);
+        const parsed = parseDescription(description ?? '', amount);
+        const tags = [
+          ...(parsed.categoryTag ? [parsed.categoryTag] : []),
+          ...parsed.plainTags,
+        ];
 
         const transaction = await insertTransaction(supabase, {
           amount,
-          payment_method: parsed.payment_method,
-          items: parsed.items.map((i) => ({ name: i.name, amount: i.amount ?? 0 })),
-          tags: parsed.tags,
+          payment_method: parsed.paymentMethod ?? 'cash',
+          items: parsed.items,
+          tags,
+          note: parsed.note || null,
           transaction_at: new Date().toISOString(),
           transaction_type: 'expense',
         });
 
         const updatedProgress = await getBudgetProgress(supabase);
-        const itemsStr =
-          transaction.items && transaction.items.length > 0
-            ? transaction.items.map((i) => i.name).join('、')
-            : description ?? '未知';
+        const pmLabel = PM_LABELS[parsed.paymentMethod ?? 'cash'] ?? '現金';
+        const catStr = parsed.categoryTag ? ` · #${parsed.categoryTag}` : '';
+        const firstLine = `✅ NT$${amount}${parsed.note ? ' · ' + parsed.note : ''} [${pmLabel}${catStr}]`;
+        const itemLines = (transaction.items ?? []).map((i) => `  · ${i.name} NT$${i.amount}`).join('\n');
+        const budgetLine = `📊 本月支出：$${updatedProgress.current_spend.toLocaleString()} / $${updatedProgress.monthly_budget.toLocaleString()} (${updatedProgress.percentage}%)`;
 
-        const content =
-          `✅ 記帳成功！\n` +
-          `💰 金額：$${amount}\n` +
-          `🏷️ 品項：${itemsStr}\n` +
-          `📊 本月支出：$${updatedProgress.current_spend.toLocaleString()} / $${updatedProgress.monthly_budget.toLocaleString()} (${updatedProgress.percentage}%)`;
+        const content = [firstLine, itemLines, budgetLine, ...parsed.warnings]
+          .filter(Boolean)
+          .join('\n');
 
         const messageId = await patchInteractionMessage(c.env, token, content);
         if (messageId) {
@@ -153,7 +185,7 @@ async function handleExpenseCommand(
 }
 
 async function handleBudgetCommand(
-  c: Context<{ Bindings: Env }>,
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
   interaction: DiscordInteraction
 ) {
   const options = interaction.data?.options ?? [];
@@ -173,11 +205,11 @@ async function handleBudgetCommand(
 }
 
 async function handleSummaryCommand(
-  c: Context<{ Bindings: Env }>,
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
   interaction: DiscordInteraction
 ) {
   const options = interaction.data?.options ?? [];
-  const monthOption = options.find((o) => o.name === 'month')?.value as string | undefined;
+  const period = ((options.find((o) => o.name === 'period')?.value as string) ?? 'month') as SummaryPeriod;
 
   const token = interaction.token;
   const supabase = getSupabaseClient(c.env);
@@ -185,32 +217,29 @@ async function handleSummaryCommand(
   c.executionCtx.waitUntil(
     (async () => {
       try {
-        let year: number;
-        let month: number;
+        const { start, end } = periodToDateRange(period);
+        const transactions = await getTransactionsForPeriod(supabase, start, end);
 
-        if (monthOption) {
-          const [y, m] = monthOption.split('-').map(Number);
-          year = y;
-          month = m;
-        } else {
-          const now = new Date();
-          year = now.getUTCFullYear();
-          month = now.getUTCMonth() + 1;
+        if (transactions.length === 0) {
+          await patchInteractionMessage(c.env, token, '此期間無支出記錄');
+          return;
         }
 
-        const [totalSpend, budgetSettings] = await Promise.all([
-          getMonthlySpend(supabase, year, month),
-          getBudgetSettings(supabase),
-        ]);
+        const totals = aggregateByCategory(transactions);
+        const [chartUrl] = await Promise.all([fetchPieChartUrl(totals)]);
+        const periodLabel = PERIOD_LABELS[period] ?? period;
+        const tableContent = `📊 ${periodLabel} 支出分類\n\n${formatCategoryTable(totals)}`;
 
-        const percentage = Math.round((totalSpend / budgetSettings.monthly_budget) * 100);
-        const monthStr = `${year}年${month}月`;
+        const embeds = chartUrl ? [{ image: { url: chartUrl } }] : undefined;
+        const buttons = totals.map((t) => ({
+          type: 2,
+          style: 1,
+          label: t.category,
+          custom_id: `summary_drilldown:${encodeCategory(t.category)}:${period}`,
+        }));
+        const components = buttons.length > 0 ? [{ type: 1, components: buttons }] : [];
 
-        const content =
-          `📊 ${monthStr} 支出摘要\n\n` +
-          `總支出：$${totalSpend.toLocaleString()} / $${budgetSettings.monthly_budget.toLocaleString()} (${percentage}%)`;
-
-        await patchInteractionMessage(c.env, token, content);
+        await patchInteractionMessage(c.env, token, tableContent, components, embeds);
       } catch (err) {
         console.error('handleSummaryCommand async error:', err);
         await patchInteractionMessage(c.env, token, '❌ 無法取得摘要，請稍後再試。');
@@ -231,7 +260,7 @@ function formatButtonLabel(amount: number, transactionAt: string): string {
 }
 
 async function handleFeeOrRefundCommand(
-  c: Context<{ Bindings: Env }>,
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
   interaction: DiscordInteraction,
   txType: 'fee' | 'refund'
 ) {
@@ -336,21 +365,21 @@ async function handleFeeOrRefundCommand(
 }
 
 async function handleFeeCommand(
-  c: Context<{ Bindings: Env }>,
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
   interaction: DiscordInteraction
 ) {
   return handleFeeOrRefundCommand(c, interaction, 'fee');
 }
 
 async function handleRefundCommand(
-  c: Context<{ Bindings: Env }>,
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
   interaction: DiscordInteraction
 ) {
   return handleFeeOrRefundCommand(c, interaction, 'refund');
 }
 
 async function handleComponentInteraction(
-  c: Context<{ Bindings: Env }>,
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
   interaction: DiscordInteraction
 ) {
   const customId = interaction.data?.custom_id ?? '';
@@ -503,11 +532,15 @@ async function handleComponentInteraction(
     return c.json({ type: 6 });
   }
 
+  if (customId.startsWith('summary_drilldown:')) {
+    return handleDrilldownInteraction(c, interaction);
+  }
+
   return c.json({ type: 4, data: { content: '❌ 未知的操作' } });
 }
 
 async function handleModalSubmit(
-  c: Context<{ Bindings: Env }>,
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
   interaction: DiscordInteraction
 ) {
   const customId = interaction.data?.custom_id ?? '';
@@ -577,10 +610,73 @@ async function handleModalSubmit(
   return c.json({ type: 4, data: { content: '❌ 未知的操作' } });
 }
 
+// ─── Summary drilldown ───────────────────────────────────────────────────────
+
+async function handleDrilldownInteraction(
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
+  interaction: DiscordInteraction
+) {
+  const customId = interaction.data?.custom_id ?? '';
+  // custom_id format: summary_drilldown:{b64cat}:{period}
+  const parts = customId.split(':');
+  const b64cat = parts[1];
+  const period = parts[2] as SummaryPeriod;
+
+  if (!b64cat || !period) {
+    return c.json({ type: 4, data: { content: '❌ 無效的操作' } });
+  }
+
+  const category = decodeCategory(b64cat);
+  const token = interaction.token;
+  const supabase = getSupabaseClient(c.env);
+
+  c.executionCtx.waitUntil(
+    (async () => {
+      try {
+        const { start, end } = periodToDateRange(period);
+        const allTransactions = await getTransactionsForPeriod(supabase, start, end);
+
+        const categoryTransactions = allTransactions.filter((tx) => {
+          const hasCategoryTag = tx.tags.some((t) => t.includes(':'));
+          if (category === '其他') {
+            return !hasCategoryTag;
+          }
+          return tx.tags.some((t) => t.includes(':') && t.split(':')[0] === category);
+        });
+
+        if (categoryTransactions.length === 0) {
+          await patchInteractionMessage(c.env, token, '此分類在此期間無支出記錄');
+          return;
+        }
+
+        const subtotals = aggregateBySubcategory(categoryTransactions, category);
+        const chartUrl = await fetchBarChartUrl(subtotals, category);
+        const periodLabel = PERIOD_LABELS[period] ?? period;
+        const grandTotal = subtotals.reduce((s, t) => s + t.total, 0);
+
+        const tableHeader = '| 子分類 | 金額 |\n|--------|------|';
+        const tableRows = subtotals.map((t) => `| ${t.subcategory} | NT$${t.total.toLocaleString()} |`);
+        const tableContent =
+          `📊 ${category} — ${periodLabel} 子分類\n\n` +
+          `${tableHeader}\n${tableRows.join('\n')}\n\n` +
+          `💰 小計：NT$${grandTotal.toLocaleString()}`;
+
+        const embeds = chartUrl ? [{ image: { url: chartUrl } }] : undefined;
+        await patchInteractionMessage(c.env, token, tableContent, [], embeds);
+      } catch (err) {
+        console.error('handleDrilldownInteraction async error:', err);
+        await patchInteractionMessage(c.env, token, '❌ 無法取得子分類，請稍後再試。');
+      }
+    })()
+  );
+
+  return c.json({ type: 5 });
+}
+
 // ─── /amend handlers ────────────────────────────────────────────────────────
 
 async function handleAmendCommand(
-  c: Context<{ Bindings: Env }>,
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
   interaction: DiscordInteraction
 ) {
   const options = interaction.data?.options ?? [];
@@ -650,7 +746,7 @@ async function handleAmendCommand(
 }
 
 async function handleAmendSelect(
-  c: Context<{ Bindings: Env }>,
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
   interaction: DiscordInteraction
 ) {
   const customId = interaction.data?.custom_id ?? '';
@@ -685,7 +781,7 @@ async function handleAmendSelect(
 }
 
 async function handleAmendRetype(
-  c: Context<{ Bindings: Env }>,
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
   interaction: DiscordInteraction
 ) {
   const customId = interaction.data?.custom_id ?? '';
@@ -711,7 +807,7 @@ async function handleAmendRetype(
 }
 
 async function handleAmendModalSubmit(
-  c: Context<{ Bindings: Env }>,
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
   interaction: DiscordInteraction
 ) {
   const customId = interaction.data?.custom_id ?? '';
@@ -772,7 +868,7 @@ async function handleAmendModalSubmit(
 // ─── /import handlers ───────────────────────────────────────────────────────
 
 async function handleImportCommand(
-  c: Context<{ Bindings: Env }>,
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
   interaction: DiscordInteraction
 ) {
   const options = interaction.data?.options ?? [];
@@ -821,7 +917,18 @@ async function handleImportCommand(
           return;
         }
 
-        const { invoices, skippedVoidedCount, skippedZeroCount } = groupInvoices(rows);
+        let groupResult;
+        try {
+          groupResult = groupInvoices(rows);
+        } catch (e: unknown) {
+          if (e instanceof RowLimitError) {
+            await patchInteractionMessage(env, token,
+              `❌ CSV 包含 ${e.actual} 筆發票，超過單次上限 1,000 筆。請依日期區間分批上傳。`);
+            return;
+          }
+          throw e;
+        }
+        const { invoices, skippedVoidedCount, skippedZeroCount } = groupResult;
 
         if (invoices.length === 0 && skippedVoidedCount === 0 && skippedZeroCount === 0 && parseFailedCount === 0) {
           await patchInteractionMessage(env, token, '❌ CSV 中沒有有效的發票資料。');
@@ -847,6 +954,7 @@ async function handleImportCommand(
           skipped_voided_count: counters.skippedVoidedCount,
           skipped_zero_count: counters.skippedZeroCount,
           held_forex_count: counters.heldForexCount,
+          ambiguous_count: counters.ambiguousCount,
           forex_resolved_count: counters.forexResolvedCount,
           parse_failed_count: counters.parseFailedCount,
         });
@@ -868,11 +976,13 @@ async function handleImportCommand(
             skipped_voided_count: counters.skippedVoidedCount,
             skipped_zero_count: counters.skippedZeroCount,
             held_forex_count: counters.heldForexCount,
+            ambiguous_count: counters.ambiguousCount,
             forex_resolved_count: counters.forexResolvedCount,
             parse_failed_count: counters.parseFailedCount,
           },
           attachment.filename ?? 'unknown',
-          unmatchedTxs
+          unmatchedTxs,
+          counters.ambiguousItems
         );
         await patchInteractionMessage(env, token, summary);
       } catch (err) {
@@ -893,11 +1003,13 @@ function formatImportSummary(
     skipped_voided_count: number;
     skipped_zero_count: number;
     held_forex_count: number;
+    ambiguous_count: number;
     forex_resolved_count: number;
     parse_failed_count: number;
   },
   fileName: string,
-  unmatchedTxs: import('../types').Transaction[]
+  unmatchedTxs: import('../types').Transaction[],
+  ambiguousItems: import('../services/invoice-matcher').AmbiguousItem[] = []
 ): string {
   const lines: string[] = [
     `📥 發票匯入完成 · ${fileName}`,
@@ -912,6 +1024,18 @@ function formatImportSummary(
     lines.push(`🔗 外幣已自動連結：${counters.forex_resolved_count} 筆`);
   }
 
+  if (ambiguousItems.length > 0) {
+    lines.push('', `⚠️ 模糊配對（${ambiguousItems.length} 筆）— 同金額多筆交易，請手動確認：`);
+    for (const { invoice, candidates } of ambiguousItems) {
+      const date = invoice.invoice_date.toISOString().slice(5, 10).replace('-', '/');
+      const candidateDesc = candidates
+        .slice(0, 3)
+        .map((tx) => tx.note ?? tx.items?.[0]?.name ?? `NT$${tx.amount}`)
+        .join(' / ');
+      lines.push(`  · ${invoice.seller_name || '未知商家'} NT$${invoice.net_amount} (${date}) — 候選：${candidateDesc}`);
+    }
+  }
+
   if (counters.skipped_voided_count > 0) {
     lines.push(`🚫 已作廢：${counters.skipped_voided_count} 筆`);
   }
@@ -920,7 +1044,7 @@ function formatImportSummary(
     lines.push(`⚠️ 無法解析：${counters.parse_failed_count} 筆`);
   }
 
-  if (unmatchedTxs.length === 0 && counters.matched_count > 0 && counters.held_forex_count === 0) {
+  if (unmatchedTxs.length === 0 && counters.matched_count > 0 && counters.held_forex_count === 0 && counters.ambiguous_count === 0) {
     lines.push('', '🎉 全部對齊！本期所有發票均已比對。');
   } else if (unmatchedTxs.length > 0) {
     lines.push('', '📊 本期無發票交易（可能為現金/海外）：');

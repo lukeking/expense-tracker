@@ -12,6 +12,11 @@ import {
 } from '../db/queries';
 import { parseExpenseText } from './gemini';
 
+export interface AmbiguousItem {
+  invoice: ParsedInvoice;
+  candidates: import('../types').Transaction[];
+}
+
 export interface PipelineCounters {
   totalRows: number;
   matchedCount: number;
@@ -20,8 +25,16 @@ export interface PipelineCounters {
   skippedVoidedCount: number;
   skippedZeroCount: number;
   heldForexCount: number;
+  ambiguousCount: number;
+  ambiguousItems: AmbiguousItem[];
   forexResolvedCount: number;
   parseFailedCount: number;
+}
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
+  return chunks;
 }
 
 export async function runImportPipeline(
@@ -39,6 +52,8 @@ export async function runImportPipeline(
     skippedVoidedCount: initialSkipped.voidedCount,
     skippedZeroCount: initialSkipped.zeroCount,
     heldForexCount: 0,
+    ambiguousCount: 0,
+    ambiguousItems: [],
     forexResolvedCount: 0,
     parseFailedCount: initialSkipped.parseFailedCount,
   };
@@ -56,21 +71,28 @@ export async function runImportPipeline(
     }
   }
 
-  // Primary exact-match pass
+  // Primary exact-match pass — batched at 100 to stay within CF Workers wall time
   const unmatched: ParsedInvoice[] = [];
-  for (const invoice of toProcess) {
-    const tx = await findMatchingExpenseTransaction(supabase, invoice.net_amount, invoice.invoice_date);
-    if (tx) {
-      const inv = await insertInvoice(supabase, invoice, importRunId, 'matched', tx.id);
-      await enrichTransaction(supabase, tx.id, {
-        invoiceNumber: invoice.invoice_number,
-        sellerName: invoice.seller_name || null,
-        sellerTaxId: invoice.seller_tax_id || null,
-        invoiceId: inv.id,
-      });
-      counters.matchedCount++;
-    } else {
-      unmatched.push(invoice);
+  for (const batch of chunk(toProcess, 100)) {
+    for (const invoice of batch) {
+      const candidates = await findMatchingExpenseTransaction(supabase, invoice.net_amount, invoice.invoice_date);
+      if (candidates.length === 1) {
+        const tx = candidates[0];
+        const inv = await insertInvoice(supabase, invoice, importRunId, 'matched', tx.id);
+        await enrichTransaction(supabase, tx.id, {
+          invoiceNumber: invoice.invoice_number,
+          sellerName: invoice.seller_name || null,
+          sellerTaxId: invoice.seller_tax_id || null,
+          invoiceId: inv.id,
+        });
+        counters.matchedCount++;
+      } else if (candidates.length > 1) {
+        await insertInvoice(supabase, invoice, importRunId, 'ambiguous');
+        counters.ambiguousCount++;
+        counters.ambiguousItems.push({ invoice, candidates });
+      } else {
+        unmatched.push(invoice);
+      }
     }
   }
 
@@ -124,8 +146,9 @@ export async function runReconciliationPass(supabase: SupabaseClient, env: Env):
   for (const heldInvoice of heldInvoices) {
     const invoiceDate = new Date(heldInvoice.invoice_date);
 
-    // Try exact match first
-    const exactTx = await findMatchingExpenseTransaction(supabase, heldInvoice.net_amount, invoiceDate);
+    // Try exact match first (pick most-recently-created candidate for reconciliation)
+    const exactCandidates = await findMatchingExpenseTransaction(supabase, heldInvoice.net_amount, invoiceDate);
+    const exactTx = exactCandidates[0] ?? null;
     if (exactTx) {
       await resolveHeldInvoice(supabase, heldInvoice.id, exactTx.id, 'matched');
       await enrichTransaction(supabase, exactTx.id, {
