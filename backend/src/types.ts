@@ -1,3 +1,10 @@
+// Augment Hono's ContextVariableMap so c.get/c.set('rawBody') is typed on any Context.
+declare module 'hono' {
+  interface ContextVariableMap {
+    rawBody: string;
+  }
+}
+
 export type PaymentMethod = 'credit_card' | 'prepaid_wallet' | 'easy_card' | 'bank_account' | 'cash';
 export type MobileWallet = 'line_pay' | 'google_pay';
 export type TransactionType = 'expense' | 'refund' | 'fee';

@@ -132,6 +132,7 @@ async function handleExpenseCommand(
   const options = interaction.data?.options ?? [];
   const amount = options.find((o) => o.name === 'amount')?.value as number;
   const description = options.find((o) => o.name === 'description')?.value as string;
+  const paymentMethod = ((options.find((o) => o.name === 'payment_method')?.value as string) ?? 'cash') as PaymentMethod;
 
   if (!amount || amount <= 0) {
     return c.json({ type: 4, data: { content: '❌ 金額必須大於 0' } });
@@ -151,16 +152,15 @@ async function handleExpenseCommand(
 
         const transaction = await insertTransaction(supabase, {
           amount,
-          payment_method: parsed.paymentMethod ?? 'cash',
-          items: parsed.items,
+          payment_method: paymentMethod,
+          items: parsed.items.map((i) => ({ name: i.name, amount: i.amount ?? 0 })),
           tags,
-          note: parsed.note || null,
           transaction_at: new Date().toISOString(),
           transaction_type: 'expense',
         });
 
         const updatedProgress = await getBudgetProgress(supabase);
-        const pmLabel = PM_LABELS[parsed.paymentMethod ?? 'cash'] ?? '現金';
+        const pmLabel = PM_LABELS[paymentMethod] ?? '現金';
         const catStr = parsed.categoryTag ? ` · #${parsed.categoryTag}` : '';
         const firstLine = `✅ NT$${amount}${parsed.note ? ' · ' + parsed.note : ''} [${pmLabel}${catStr}]`;
         const itemLines = (transaction.items ?? []).map((i) => `  · ${i.name} NT$${i.amount}`).join('\n');
