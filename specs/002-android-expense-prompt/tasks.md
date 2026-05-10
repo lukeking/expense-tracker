@@ -74,9 +74,9 @@ No additional foundational phase needed. Phase 1 covers all shared prerequisites
 
 **Purpose**: Validation, deployment, and regression checks.
 
-- [ ] T018 [P] Run existing Android unit tests and confirm no regressions: `./gradlew test` in `android/` — `NotificationParserTest` and `TransactionSyncWorkerTest` must remain green
-- [ ] T019 [P] Deploy updated CF Worker with new routes by running `wrangler deploy` from `backend/` — confirm `/android/input` and `/android/transactions/recent` respond correctly via quickstart.md curl commands
-- [ ] T020 Validate all 8 quickstart.md integration scenarios manually on device or emulator — mark each scenario in `specs/002-android-expense-prompt/quickstart.md` Definition of Done checklist
+- [X] T018 [P] Run existing Android unit tests and confirm no regressions: `./gradlew test` in `android/` — `NotificationParserTest` and `TransactionSyncWorkerTest` must remain green
+- [X] T019 [P] Deploy updated CF Worker with new routes by running `wrangler deploy` from `backend/` — confirm `/android/input` and `/android/transactions/recent` respond correctly via quickstart.md curl commands
+- [X] T020 Validate all 8 quickstart.md integration scenarios manually on device or emulator — mark each scenario in `specs/002-android-expense-prompt/quickstart.md` Definition of Done checklist
 
 ---
 

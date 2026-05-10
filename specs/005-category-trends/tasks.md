@@ -102,7 +102,7 @@ Based on plan.md: `backend/src/` for source; `backend/tests/services/` for unit 
 **Purpose**: Discord command registration and end-to-end validation.
 
 - [X] T014 [P] Re-register `/summary` command with Discord API to publish the updated command definition with the new `period` option (run existing registration script or POST updated command payload to Discord application commands endpoint)
-- [ ] T015 Run all 8 quickstart.md scenarios against the deployed CF Worker, confirm expected responses for each, and log any deviations
+- [X] T015 Run all 8 quickstart.md scenarios against the deployed CF Worker, confirm expected responses for each, and log any deviations
 
 ---
 

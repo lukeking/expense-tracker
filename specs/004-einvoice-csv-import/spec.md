@@ -23,7 +23,7 @@ This spec also captures the broader automation opportunities that remain availab
 
 The user downloads their e-invoice history CSV from the government portal (covering roughly the last 1–2 months) and sends it to the Discord bot as a file attachment with a `/import` command. The system parses each invoice, finds the matching transaction records by amount and date, and fills in merchant name, invoice number, and any itemized line items that the CSV provides. The user receives a summary of how many transactions were enriched.
 
-**Why this priority**: This is the core value delivery — replacing the MOF API pipeline with a user-driven equivalent. Every enriched transaction means one fewer record the user has to annotate manually.
+**Why this priority**: This is the core value delivery — replacing the original real-time API sync pipeline with a user-driven equivalent. Every enriched transaction means one fewer record the user has to annotate manually.
 
 **Independent Test**: Upload a CSV containing 5 invoices, each with a corresponding transaction already recorded in the database with matching amount and approximate date. Verify all 5 transactions now have `seller_name`, `invoice_number`, and `is_matched = true` populated. Verify no duplicate invoice records are created on a second upload of the same file.
 

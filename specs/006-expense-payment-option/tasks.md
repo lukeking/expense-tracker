@@ -95,10 +95,10 @@ Task: "Update gemini.test.ts: verify parseExpenseText no longer extracts payment
 
 ### Post-Deployment Checklist
 
-- [ ] Re-register Discord commands (manual step: `DISCORD_APPLICATION_ID=... DISCORD_BOT_TOKEN=... npx tsx scripts/register-commands.ts`)
-- [ ] Verify `/expense` in Discord shows the `payment_method` dropdown with 5 labelled choices
-- [ ] Test: omit `payment_method` → confirmation shows `[現金]`
-- [ ] Test: select `信用卡` → confirmation shows `[信用卡]`; DB stores `credit_card`
+- [X] Re-register Discord commands (manual step: `DISCORD_APPLICATION_ID=... DISCORD_BOT_TOKEN=... npx tsx scripts/register-commands.ts`)
+- [X] Verify `/expense` in Discord shows the `payment_method` dropdown with 5 labelled choices
+- [X] Test: omit `payment_method` → confirmation shows `[現金]`
+- [X] Test: select `信用卡` → confirmation shows `[信用卡]`; DB stores `credit_card`
 
 ---
 

@@ -4,7 +4,7 @@ compatibility_date = "2024-06-20"
 compatibility_flags = ["nodejs_compat"]
 
 [triggers]
-crons = ["0 2 * * *", "0 9 1 */2 *"]
+crons = ["0 9 1 */2 *"]
 
 # All secrets set via `wrangler secret put`:
 # SUPABASE_URL
@@ -14,7 +14,4 @@ crons = ["0 2 * * *", "0 9 1 */2 *"]
 # DISCORD_BOT_TOKEN
 # GEMINI_API_KEY
 # ANDROID_API_KEY
-# MOF_CARRIER_ID
-# MOF_VERIFICATION_CODE
-# MOF_API_KEY
 # DISCORD_CHANNEL_ID

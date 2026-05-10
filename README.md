@@ -53,7 +53,6 @@ Cron Triggers  ─────────▶     │──▶  Gemini API (NLP 
 - Discord notification on every transaction with month-to-date spend
 
 ### Cron Triggers
-- **MoF sync**: Periodic Ministry of Finance carrier API sync
 - **Invoice reminder**: Discord reminder every 2 months to upload the latest CSV
 
 ## Project Structure
@@ -62,7 +61,7 @@ Cron Triggers  ─────────▶     │──▶  Gemini API (NLP 
 expense-tracker/
 ├── backend/                    # Cloudflare Workers backend
 │   ├── src/
-│   │   ├── handlers/           # Discord, Android, MoF sync handlers
+│   │   ├── handlers/           # Discord, Android handlers
 │   │   ├── services/           # Budget, CSV parser, invoice matcher, Gemini, Discord notify
 │   │   ├── db/                 # Supabase client and query functions
 │   │   └── types.ts
@@ -107,8 +106,6 @@ pnpm deploy       # deploy to Cloudflare Workers
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key |
 | `GEMINI_API_KEY` | Gemini API key for NLP parsing |
 | `ANDROID_API_KEY` | Static key for Android → Worker auth |
-| `MOF_BARCODE_ID` | Mobile barcode ID for MoF carrier API |
-| `MOF_VERIFICATION_CODE` | Verification code for MoF carrier API |
 
 ### Android
 

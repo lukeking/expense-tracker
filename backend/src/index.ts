@@ -4,7 +4,6 @@ import { discordVerify } from './middleware/discord-verify';
 import { androidAuth } from './middleware/android-auth';
 import { discordHandler } from './handlers/discord';
 import { androidNotificationHandler, androidInputHandler, recentTransactionsHandler, healthHandler } from './handlers/android';
-import { handleMofSync } from './handlers/mof-sync';
 import { getSupabaseClient } from './db/client';
 import { sendChannelMessage } from './services/discord-notify';
 
@@ -43,11 +42,7 @@ async function sendInvoiceReminder(env: Env): Promise<void> {
 
 export default {
   fetch: app.fetch,
-  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    if (event.cron === '0 9 1 */2 *') {
-      ctx.waitUntil(sendInvoiceReminder(env));
-    } else {
-      ctx.waitUntil(handleMofSync(env));
-    }
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(sendInvoiceReminder(env));
   },
 };
