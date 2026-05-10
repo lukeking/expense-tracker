@@ -187,6 +187,10 @@ export interface GeminiParseResult {
   tags: string[];
 }
 
+export interface HonoVariables {
+  rawBody: string;
+}
+
 export interface Env {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE_KEY: string;

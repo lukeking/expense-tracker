@@ -1,8 +1,8 @@
 import type { Context, Next } from 'hono';
 import * as ed from '@noble/ed25519';
-import type { Env } from '../types';
+import type { Env, HonoVariables } from '../types';
 
-export async function discordVerify(c: Context<{ Bindings: Env }>, next: Next) {
+export async function discordVerify(c: Context<{ Bindings: Env; Variables: HonoVariables }>, next: Next) {
   const signature = c.req.header('x-signature-ed25519');
   const timestamp = c.req.header('x-signature-timestamp');
 

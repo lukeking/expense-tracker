@@ -1,5 +1,5 @@
 import type { Context } from 'hono';
-import type { Env, PaymentMethod, SummaryPeriod } from '../types';
+import type { Env, HonoVariables, PaymentMethod, SummaryPeriod } from '../types';
 import { getSupabaseClient } from '../db/client';
 import {
   insertTransaction,
@@ -45,7 +45,7 @@ interface DiscordInteraction {
   };
 }
 
-export async function discordHandler(c: Context<{ Bindings: Env }>) {
+export async function discordHandler(c: Context<{ Bindings: Env; Variables: HonoVariables }>) {
   const rawBody = c.get('rawBody') as string;
   const interaction = JSON.parse(rawBody) as DiscordInteraction;
 
@@ -126,7 +126,7 @@ function decodeCategory(b64: string): string {
 }
 
 async function handleExpenseCommand(
-  c: Context<{ Bindings: Env }>,
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
   interaction: DiscordInteraction
 ) {
   const options = interaction.data?.options ?? [];
@@ -185,7 +185,7 @@ async function handleExpenseCommand(
 }
 
 async function handleBudgetCommand(
-  c: Context<{ Bindings: Env }>,
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
   interaction: DiscordInteraction
 ) {
   const options = interaction.data?.options ?? [];
@@ -205,7 +205,7 @@ async function handleBudgetCommand(
 }
 
 async function handleSummaryCommand(
-  c: Context<{ Bindings: Env }>,
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
   interaction: DiscordInteraction
 ) {
   const options = interaction.data?.options ?? [];
@@ -260,7 +260,7 @@ function formatButtonLabel(amount: number, transactionAt: string): string {
 }
 
 async function handleFeeOrRefundCommand(
-  c: Context<{ Bindings: Env }>,
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
   interaction: DiscordInteraction,
   txType: 'fee' | 'refund'
 ) {
@@ -365,21 +365,21 @@ async function handleFeeOrRefundCommand(
 }
 
 async function handleFeeCommand(
-  c: Context<{ Bindings: Env }>,
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
   interaction: DiscordInteraction
 ) {
   return handleFeeOrRefundCommand(c, interaction, 'fee');
 }
 
 async function handleRefundCommand(
-  c: Context<{ Bindings: Env }>,
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
   interaction: DiscordInteraction
 ) {
   return handleFeeOrRefundCommand(c, interaction, 'refund');
 }
 
 async function handleComponentInteraction(
-  c: Context<{ Bindings: Env }>,
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
   interaction: DiscordInteraction
 ) {
   const customId = interaction.data?.custom_id ?? '';
@@ -540,7 +540,7 @@ async function handleComponentInteraction(
 }
 
 async function handleModalSubmit(
-  c: Context<{ Bindings: Env }>,
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
   interaction: DiscordInteraction
 ) {
   const customId = interaction.data?.custom_id ?? '';
@@ -613,7 +613,7 @@ async function handleModalSubmit(
 // ─── Summary drilldown ───────────────────────────────────────────────────────
 
 async function handleDrilldownInteraction(
-  c: Context<{ Bindings: Env }>,
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
   interaction: DiscordInteraction
 ) {
   const customId = interaction.data?.custom_id ?? '';
@@ -676,7 +676,7 @@ async function handleDrilldownInteraction(
 // ─── /amend handlers ────────────────────────────────────────────────────────
 
 async function handleAmendCommand(
-  c: Context<{ Bindings: Env }>,
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
   interaction: DiscordInteraction
 ) {
   const options = interaction.data?.options ?? [];
@@ -746,7 +746,7 @@ async function handleAmendCommand(
 }
 
 async function handleAmendSelect(
-  c: Context<{ Bindings: Env }>,
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
   interaction: DiscordInteraction
 ) {
   const customId = interaction.data?.custom_id ?? '';
@@ -781,7 +781,7 @@ async function handleAmendSelect(
 }
 
 async function handleAmendRetype(
-  c: Context<{ Bindings: Env }>,
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
   interaction: DiscordInteraction
 ) {
   const customId = interaction.data?.custom_id ?? '';
@@ -807,7 +807,7 @@ async function handleAmendRetype(
 }
 
 async function handleAmendModalSubmit(
-  c: Context<{ Bindings: Env }>,
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
   interaction: DiscordInteraction
 ) {
   const customId = interaction.data?.custom_id ?? '';
@@ -868,7 +868,7 @@ async function handleAmendModalSubmit(
 // ─── /import handlers ───────────────────────────────────────────────────────
 
 async function handleImportCommand(
-  c: Context<{ Bindings: Env }>,
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
   interaction: DiscordInteraction
 ) {
   const options = interaction.data?.options ?? [];

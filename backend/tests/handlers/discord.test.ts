@@ -336,7 +336,7 @@ describe('/import command handler', () => {
     };
     const options = interaction.data.options;
     const attachmentId = options.find((o) => o.name === 'file')?.value as string;
-    const url = interaction.data.resolved.attachments[attachmentId]?.url;
+    const url = (interaction.data.resolved.attachments as Record<string, { url: string }>)[attachmentId]?.url;
     expect(url).toContain('test-invoices.csv');
   });
 

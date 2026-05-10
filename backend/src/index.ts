@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import type { Env } from './types';
+import type { Env, HonoVariables } from './types';
 import { discordVerify } from './middleware/discord-verify';
 import { androidAuth } from './middleware/android-auth';
 import { discordHandler } from './handlers/discord';
@@ -8,7 +8,7 @@ import { handleMofSync } from './handlers/mof-sync';
 import { getSupabaseClient } from './db/client';
 import { sendChannelMessage } from './services/discord-notify';
 
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<{ Bindings: Env; Variables: HonoVariables }>();
 
 app.post('/discord/interactions', discordVerify, discordHandler);
 app.post('/api/notification', androidAuth, androidNotificationHandler);

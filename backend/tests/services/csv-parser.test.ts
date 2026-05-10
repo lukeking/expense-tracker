@@ -39,13 +39,13 @@ function makeCSV(dataRows: string[]): string {
 describe('decodeCSVBuffer', () => {
   it('decodes valid UTF-8 buffer', () => {
     const text = '載具自訂名稱,發票號碼';
-    const buf = new TextEncoder().encode(text).buffer;
+    const buf = new TextEncoder().encode(text).buffer as ArrayBuffer;
     expect(decodeCSVBuffer(buf)).toBe(text);
   });
 
   it('falls back to big5 when UTF-8 strict decode fails', () => {
     // Create a buffer with an invalid UTF-8 byte sequence
-    const invalidUtf8 = new Uint8Array([0x80, 0x81]).buffer;
+    const invalidUtf8 = new Uint8Array([0x80, 0x81]).buffer as ArrayBuffer;
     // Should not throw; returns decoded string (may be garbled but no crash)
     expect(() => decodeCSVBuffer(invalidUtf8)).not.toThrow();
   });
