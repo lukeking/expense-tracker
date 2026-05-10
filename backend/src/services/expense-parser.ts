@@ -81,6 +81,13 @@ export function parseDescription(description: string, totalAmount: number): Pars
     warnings.push(`⚠️ 僅使用第一個分類標籤 #${categoryTag}，其餘忽略`);
   }
 
+  if (items.length === 0 && categoryTag !== null) {
+    const subcategory = categoryTag.split(':')[1] ?? '';
+    if (subcategory.trim().length > 0) {
+      items.push({ name: subcategory, amount: totalAmount });
+    }
+  }
+
   if (items.length > 0) {
     const itemTotal = items.reduce((sum, i) => sum + i.amount, 0);
     if (itemTotal !== totalAmount) {

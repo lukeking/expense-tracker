@@ -14,12 +14,12 @@ describe('parseDescription — contract examples', () => {
     expect(result.warnings).toHaveLength(0);
   });
 
-  it('easy card + category tag + note, no items → no warnings', () => {
+  it('easy card + category tag + note, no explicit items → auto-creates item from subcategory, no warnings', () => {
     const result = parseDescription('悠遊卡, 亞東醫院→忠孝復興, #行:捷運', 35);
     expect(result.paymentMethod).toBe('easy_card');
     expect(result.categoryTag).toBe('行:捷運');
     expect(result.note).toBe('亞東醫院→忠孝復興');
-    expect(result.items).toHaveLength(0);
+    expect(result.items).toEqual([{ name: '捷運', amount: 35 }]);
     expect(result.warnings).toHaveLength(0);
   });
 
@@ -149,5 +149,50 @@ describe('parseDescription — note accumulation', () => {
     expect(result.items).toHaveLength(0);
     expect(result.note).toBe('');
     expect(result.warnings).toHaveLength(0);
+  });
+});
+
+describe('parseDescription — auto-create item from subcategory (FR-001)', () => {
+  it('#category:subcategory only → auto-creates item with subcategory name and total amount', () => {
+    const result = parseDescription('#food:餐飲', 300);
+    expect(result.items).toEqual([{ name: '餐飲', amount: 300 }]);
+    expect(result.categoryTag).toBe('food:餐飲');
+    expect(result.warnings).toHaveLength(0);
+  });
+
+  it('#category:subcategory + free-text note, no explicit items → auto-creates item', () => {
+    const result = parseDescription('早餐, #food:餐飲', 150);
+    expect(result.items).toEqual([{ name: '餐飲', amount: 150 }]);
+    expect(result.note).toBe('早餐');
+    expect(result.warnings).toHaveLength(0);
+  });
+
+  it('#category:subcategory + explicit item tokens → explicit items win, no auto-create', () => {
+    const result = parseDescription('#food:餐飲, 牛肉麵 120, 飲料 60', 180);
+    expect(result.items).toEqual([
+      { name: '牛肉麵', amount: 120 },
+      { name: '飲料', amount: 60 },
+    ]);
+    expect(result.warnings).toHaveLength(0);
+  });
+
+  it('plain #tag only (no colon) → no auto-create', () => {
+    const result = parseDescription('#lunch', 100);
+    expect(result.items).toHaveLength(0);
+    expect(result.categoryTag).toBeNull();
+    expect(result.plainTags).toEqual(['lunch']);
+  });
+
+  it('empty subcategory #food: → no auto-create', () => {
+    const result = parseDescription('#food:', 200);
+    expect(result.items).toHaveLength(0);
+  });
+
+  it('multiple category tags, no items → auto-create from first subcategory only', () => {
+    const result = parseDescription('#食:午餐, #行:捷運', 300);
+    expect(result.items).toEqual([{ name: '午餐', amount: 300 }]);
+    expect(result.categoryTag).toBe('食:午餐');
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toContain('僅使用第一個分類標籤');
   });
 });
