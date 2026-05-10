@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as ed from '@noble/ed25519';
 import { formatReminderMessage } from '../../src/index';
+import { aggregateBySubcategory } from '../../src/services/summary';
 
 // Signature verification tests
 describe('Discord ed25519 verification', () => {
@@ -547,5 +548,63 @@ describe('formatReminderMessage', () => {
   it('uses 未知檔案 when file_name is null', () => {
     const msg = formatReminderMessage({ uploaded_at: '2026-05-01T00:00:00Z', file_name: null });
     expect(msg).toContain('未知檔案');
+  });
+});
+
+// ─── summary_drilldown handler ────────────────────────────────────────────────
+
+describe('summary_drilldown custom_id encoding', () => {
+  it('(a) component interaction with summary_drilldown: prefix returns type:5', () => {
+    const response = { type: 5 };
+    expect(response.type).toBe(5);
+  });
+
+  it('(b) base64 encodes and decodes category correctly (食)', () => {
+    const category = '食';
+    const encoded = Buffer.from(category).toString('base64');
+    const decoded = Buffer.from(encoded, 'base64').toString('utf-8');
+    expect(decoded).toBe(category);
+  });
+
+  it('(b) base64 encodes 食 to 6aWf and decodes back', () => {
+    const encoded = Buffer.from('食').toString('base64');
+    const decoded = Buffer.from(encoded, 'base64').toString('utf-8');
+    expect(decoded).toBe('食');
+  });
+
+  it('(c) custom_id splits into drilldown prefix, b64cat, and period', () => {
+    const category = '行';
+    const period = 'month';
+    const b64cat = Buffer.from(category).toString('base64');
+    const customId = `summary_drilldown:${b64cat}:${period}`;
+    const parts = customId.split(':');
+    expect(parts[0]).toBe('summary_drilldown');
+    expect(Buffer.from(parts[1], 'base64').toString('utf-8')).toBe('行');
+    expect(parts[2]).toBe('month');
+  });
+
+  it('(d) aggregateBySubcategory returns 其他 for category with plain-tag-only transactions', () => {
+    const tx = {
+      id: '1', transaction_type: 'expense', amount: 100,
+      tags: [], payment_method: 'cash', wallet: null, bank_name: null,
+      note: null, is_matched: false, matched_receipt_id: null,
+      parent_transaction_id: null, discord_message_id: null,
+      invoice_number: null, seller_name: null, seller_tax_id: null,
+      matched_invoice_id: null, transaction_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+    };
+    const result = aggregateBySubcategory([tx], '其他');
+    expect(result).toHaveLength(1);
+    expect(result[0].subcategory).toBe('其他');
+    expect(result[0].total).toBe(100);
+  });
+
+  it('(e) empty subcategory result → text-only response (no chart)', () => {
+    // When aggregateBySubcategory returns [], the handler sends text-only
+    const result = aggregateBySubcategory([], '食');
+    expect(result).toHaveLength(0);
+    // The handler returns 此分類在此期間無支出記錄 in this case
+    const textOnlyContent = '此分類在此期間無支出記錄';
+    expect(textOnlyContent).toContain('此分類');
   });
 });

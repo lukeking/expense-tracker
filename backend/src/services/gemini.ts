@@ -49,6 +49,7 @@ Rules:
 - Extract all words with a leading '#' as tags by removing the '#' prefix. no missing nor duplicate tags allowed.
 - If tags cannot be determined, tags = []
 - If no items are listed, items = []
+- Freeform text tokens that do not start with '#' and do not end with a number must NOT be created as line items; treat them as note context only
 `;
 
 const SYSTEM_PROMPT = `You are a Taiwanese expense parser. Given a free-text expense description, extract the total amount and individual items.

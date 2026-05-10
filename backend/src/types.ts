@@ -175,6 +175,8 @@ export interface GeminiParseResult {
   tags: string[];
 }
 
+export type SummaryPeriod = 'month' | 'last-month' | '3months' | 'half-year' | 'year' | 'all';
+
 export interface Env {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE_KEY: string;

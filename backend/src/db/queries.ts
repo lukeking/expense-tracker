@@ -401,6 +401,22 @@ export async function findTransactionsWithoutInvoiceInRange(
   return (data ?? []) as Transaction[];
 }
 
+export async function getTransactionsForPeriod(
+  supabase: SupabaseClient,
+  from: Date,
+  to: Date
+): Promise<Transaction[]> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('id, amount, tags, transaction_at')
+    .eq('transaction_type', 'expense')
+    .gte('transaction_at', from.toISOString())
+    .lt('transaction_at', to.toISOString())
+    .order('transaction_at', { ascending: false });
+  if (error) throw new Error(`getTransactionsForPeriod: ${error.message}`);
+  return (data ?? []) as Transaction[];
+}
+
 export async function mergeTransactionFields(
   supabase: SupabaseClient,
   transactionId: string,

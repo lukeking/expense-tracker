@@ -1,5 +1,5 @@
 import type { Context } from 'hono';
-import type { Env, PaymentMethod } from '../types';
+import type { Env, PaymentMethod, SummaryPeriod } from '../types';
 import { getSupabaseClient } from '../db/client';
 import {
   insertTransaction,
@@ -15,12 +15,15 @@ import {
   createImportRun,
   updateImportRun,
   findTransactionsWithoutInvoiceInRange,
+  getTransactionsForPeriod,
 } from '../db/queries';
-import { parseExpenseText } from '../services/gemini';
+import { parseDescription } from '../services/expense-parser';
 import { getBudgetProgress } from '../services/budget';
 import { patchInteractionMessage, patchTransactionMatchedMessage } from '../services/discord-notify';
 import { decodeCSVBuffer, parseCSVRows, groupInvoices, RowLimitError } from '../services/csv-parser';
 import { runImportPipeline } from '../services/invoice-matcher';
+import { periodToDateRange, aggregateByCategory, aggregateBySubcategory } from '../services/summary';
+import { fetchPieChartUrl, fetchBarChartUrl } from '../services/chart';
 
 interface DiscordInteraction {
   type: number;
@@ -112,31 +115,40 @@ async function handleExpenseCommand(
   c.executionCtx.waitUntil(
     (async () => {
       try {
-        const [parsed, budgetProgress] = await Promise.all([
-          parseExpenseText(c.env, amount, description ?? ''),
+        const parsed = parseDescription(description ?? '', amount);
+        const tags = [parsed.categoryTag, ...parsed.plainTags].filter((t): t is string => t !== null);
+        const pmDisplay: Record<string, string> = {
+          cash: '現金', credit_card: '信用卡', easy_card: '悠遊卡',
+          prepaid_wallet: '行動支付', bank_account: '銀行轉帳',
+        };
+
+        const [transaction, budgetProgress] = await Promise.all([
+          insertTransaction(supabase, {
+            amount,
+            payment_method: parsed.paymentMethod ?? 'cash',
+            items: parsed.items,
+            tags,
+            note: parsed.note || null,
+            transaction_at: new Date().toISOString(),
+            transaction_type: 'expense',
+          }),
           getBudgetProgress(supabase),
         ]);
 
-        const transaction = await insertTransaction(supabase, {
-          amount,
-          payment_method: parsed.payment_method,
-          items: parsed.items.map((i) => ({ name: i.name, amount: i.amount ?? 0 })),
-          tags: parsed.tags,
-          transaction_at: new Date().toISOString(),
-          transaction_type: 'expense',
-        });
+        const headerParts: string[] = [];
+        if (parsed.paymentMethod) headerParts.push(pmDisplay[parsed.paymentMethod]);
+        if (parsed.categoryTag) headerParts.push(`#${parsed.categoryTag}`);
+        const headerMeta = headerParts.length > 0 ? ` [${headerParts.join(' · ')}]` : '';
+        const descLabel = parsed.note || (parsed.items[0]?.name ?? description ?? '未知');
 
-        const updatedProgress = await getBudgetProgress(supabase);
-        const itemsStr =
-          transaction.items && transaction.items.length > 0
-            ? transaction.items.map((i) => i.name).join('、')
-            : description ?? '未知';
-
-        const content =
-          `✅ 記帳成功！\n` +
-          `💰 金額：$${amount}\n` +
-          `🏷️ 品項：${itemsStr}\n` +
-          `📊 本月支出：$${updatedProgress.current_spend.toLocaleString()} / $${updatedProgress.monthly_budget.toLocaleString()} (${updatedProgress.percentage}%)`;
+        let content = `✅ NT$${amount.toLocaleString()} · ${descLabel}${headerMeta}`;
+        for (const item of parsed.items) {
+          content += `\n  · ${item.name} NT$${item.amount.toLocaleString()}`;
+        }
+        for (const warning of parsed.warnings) {
+          content += `\n${warning}`;
+        }
+        content += `\n📊 本月支出：$${budgetProgress.current_spend.toLocaleString()} / $${budgetProgress.monthly_budget.toLocaleString()} (${budgetProgress.percentage}%)`;
 
         const messageId = await patchInteractionMessage(c.env, token, content);
         if (messageId) {
@@ -172,45 +184,70 @@ async function handleBudgetCommand(
   });
 }
 
+const PERIOD_LABELS: Record<SummaryPeriod, string> = {
+  'month': '本月',
+  'last-month': '上個月',
+  '3months': '近3個月',
+  'half-year': '近半年',
+  'year': '近一年',
+  'all': '全部',
+};
+
 async function handleSummaryCommand(
   c: Context<{ Bindings: Env }>,
   interaction: DiscordInteraction
 ) {
   const options = interaction.data?.options ?? [];
-  const monthOption = options.find((o) => o.name === 'month')?.value as string | undefined;
-
+  const period = (options.find((o) => o.name === 'period')?.value as SummaryPeriod | undefined) ?? 'month';
   const token = interaction.token;
   const supabase = getSupabaseClient(c.env);
 
   c.executionCtx.waitUntil(
     (async () => {
       try {
-        let year: number;
-        let month: number;
+        const { from, to } = periodToDateRange(period);
+        const transactions = await getTransactionsForPeriod(supabase, from, to);
 
-        if (monthOption) {
-          const [y, m] = monthOption.split('-').map(Number);
-          year = y;
-          month = m;
-        } else {
-          const now = new Date();
-          year = now.getUTCFullYear();
-          month = now.getUTCMonth() + 1;
+        if (transactions.length === 0) {
+          await patchInteractionMessage(c.env, token, '此期間無支出記錄');
+          return;
         }
 
-        const [totalSpend, budgetSettings] = await Promise.all([
-          getMonthlySpend(supabase, year, month),
-          getBudgetSettings(supabase),
-        ]);
+        const categoryTotals = aggregateByCategory(transactions);
+        const grandTotal = categoryTotals.reduce((sum, c) => sum + c.total, 0);
+        const periodLabel = PERIOD_LABELS[period];
 
-        const percentage = Math.round((totalSpend / budgetSettings.monthly_budget) * 100);
-        const monthStr = `${year}年${month}月`;
+        const chartUrl = await fetchPieChartUrl(categoryTotals);
 
-        const content =
-          `📊 ${monthStr} 支出摘要\n\n` +
-          `總支出：$${totalSpend.toLocaleString()} / $${budgetSettings.monthly_budget.toLocaleString()} (${percentage}%)`;
+        const tableRows = categoryTotals.map((ct) => {
+          const pct = Math.round((ct.total / grandTotal) * 100);
+          return `| ${ct.category} | NT$${ct.total.toLocaleString()} | ${pct}% |`;
+        });
+        const table =
+          `| 分類 | 金額 | 占比 |\n|------|------|------|\n` +
+          tableRows.join('\n');
 
-        await patchInteractionMessage(c.env, token, content);
+        let content = `📊 ${periodLabel} 支出分類\n\n${table}\n\n💰 合計：NT$${grandTotal.toLocaleString()}`;
+
+        const embeds = chartUrl ? [{ image: { url: chartUrl } }] : undefined;
+
+        // Up to 5 drill-down buttons (categories that are not 其他 from merging)
+        const buttonCategories = categoryTotals
+          .filter((ct) => ct.category !== '其他' || categoryTotals.length <= 5)
+          .slice(0, 5);
+        const components = buttonCategories.length > 0
+          ? [{
+              type: 1,
+              components: buttonCategories.map((ct) => ({
+                type: 2,
+                style: 2,
+                label: ct.category,
+                custom_id: `summary_drilldown:${Buffer.from(ct.category).toString('base64')}:${period}`,
+              })),
+            }]
+          : [];
+
+        await patchInteractionMessage(c.env, token, content, components, embeds);
       } catch (err) {
         console.error('handleSummaryCommand async error:', err);
         await patchInteractionMessage(c.env, token, '❌ 無法取得摘要，請稍後再試。');
@@ -490,6 +527,10 @@ async function handleComponentInteraction(
     });
   }
 
+  if (customId.startsWith('summary_drilldown:')) {
+    return handleSummaryDrilldown(c, interaction);
+  }
+
   if (customId.startsWith('amend_select:')) {
     return handleAmendSelect(c, interaction);
   }
@@ -575,6 +616,63 @@ async function handleModalSubmit(
   }
 
   return c.json({ type: 4, data: { content: '❌ 未知的操作' } });
+}
+
+// ─── summary_drilldown handler ───────────────────────────────────────────────
+
+async function handleSummaryDrilldown(
+  c: Context<{ Bindings: Env }>,
+  interaction: DiscordInteraction
+) {
+  const customId = interaction.data?.custom_id ?? '';
+  // custom_id: summary_drilldown:{b64category}:{period}
+  const parts = customId.split(':');
+  // parts[0] = 'summary_drilldown', parts[1] = b64cat, parts[2] = period
+  const b64cat = parts[1];
+  const period = parts[2] as SummaryPeriod;
+
+  if (!b64cat || !period) {
+    return c.json({ type: 4, data: { content: '❌ 無效的操作' } });
+  }
+
+  const token = interaction.token;
+  const supabase = getSupabaseClient(c.env);
+
+  c.executionCtx.waitUntil(
+    (async () => {
+      try {
+        const category = Buffer.from(b64cat, 'base64').toString('utf-8');
+        const { from, to } = periodToDateRange(period);
+        const transactions = await getTransactionsForPeriod(supabase, from, to);
+        const subcategoryTotals = aggregateBySubcategory(transactions, category);
+        const periodLabel = PERIOD_LABELS[period] ?? period;
+
+        if (subcategoryTotals.length === 0) {
+          await patchInteractionMessage(c.env, token, `此分類在此期間無支出記錄`);
+          return;
+        }
+
+        const grandTotal = subcategoryTotals.reduce((sum, s) => sum + s.total, 0);
+        const tableRows = subcategoryTotals.map(
+          (s) => `| ${s.subcategory} | NT$${s.total.toLocaleString()} |`
+        );
+        const table = `| 子分類 | 金額 |\n|--------|------|\n` + tableRows.join('\n');
+
+        const content =
+          `📊 ${category} — ${periodLabel} 子分類\n\n${table}\n\n💰 小計：NT$${grandTotal.toLocaleString()}`;
+
+        const chartUrl = await fetchBarChartUrl(subcategoryTotals, category);
+        const embeds = chartUrl ? [{ image: { url: chartUrl } }] : undefined;
+
+        await patchInteractionMessage(c.env, token, content, [], embeds);
+      } catch (err) {
+        console.error('handleSummaryDrilldown async error:', err);
+        await patchInteractionMessage(c.env, token, '❌ 無法取得子分類，請稍後再試。');
+      }
+    })()
+  );
+
+  return c.json({ type: 5 });
 }
 
 // ─── /amend handlers ────────────────────────────────────────────────────────
