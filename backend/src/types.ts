@@ -153,6 +153,18 @@ export interface BudgetSummary {
   percentage: number;
 }
 
+export type SummaryPeriod = 'month' | 'last-month' | '3months' | 'half-year' | 'year' | 'all';
+
+export interface CategoryTotal {
+  category: string;
+  total: number;
+}
+
+export interface SubcategoryTotal {
+  subcategory: string;
+  total: number;
+}
+
 export interface InputResponse {
   success: boolean;
   message: string;

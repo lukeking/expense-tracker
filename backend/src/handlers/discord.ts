@@ -1,12 +1,10 @@
 import type { Context } from 'hono';
-import type { Env, PaymentMethod } from '../types';
+import type { Env, PaymentMethod, SummaryPeriod } from '../types';
 import { getSupabaseClient } from '../db/client';
 import {
   insertTransaction,
   updateBudgetSettings,
   updateDiscordMessageId,
-  getMonthlySpend,
-  getBudgetSettings,
   matchTransaction,
   resolvePendingMatch,
   findParentCandidates,
@@ -15,8 +13,11 @@ import {
   createImportRun,
   updateImportRun,
   findTransactionsWithoutInvoiceInRange,
+  getTransactionsForPeriod,
 } from '../db/queries';
-import { parseExpenseText } from '../services/gemini';
+import { parseDescription } from '../services/expense-parser';
+import { periodToDateRange, aggregateByCategory, aggregateBySubcategory, formatCategoryTable } from '../services/summary';
+import { fetchPieChartUrl, fetchBarChartUrl } from '../services/chart';
 import { getBudgetProgress } from '../services/budget';
 import { patchInteractionMessage, patchTransactionMatchedMessage } from '../services/discord-notify';
 import { decodeCSVBuffer, parseCSVRows, groupInvoices, RowLimitError } from '../services/csv-parser';
@@ -93,6 +94,37 @@ export async function discordHandler(c: Context<{ Bindings: Env }>) {
   return c.json({ error: 'Unknown interaction type' }, 400);
 }
 
+const PM_LABELS: Record<string, string> = {
+  cash: '現金',
+  credit_card: '信用卡',
+  easy_card: '悠遊卡',
+  prepaid_wallet: '行動支付',
+  bank_account: '銀行轉帳',
+};
+
+const PERIOD_LABELS: Record<string, string> = {
+  'month': '本月',
+  'last-month': '上個月',
+  '3months': '近3個月',
+  'half-year': '近半年',
+  'year': '近一年',
+  'all': '全部',
+};
+
+function encodeCategory(category: string): string {
+  const bytes = new TextEncoder().encode(category);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function decodeCategory(b64: string): string {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
 async function handleExpenseCommand(
   c: Context<{ Bindings: Env }>,
   interaction: DiscordInteraction
@@ -105,38 +137,38 @@ async function handleExpenseCommand(
     return c.json({ type: 4, data: { content: '❌ 金額必須大於 0' } });
   }
 
-  // Respond immediately with deferred type
   const supabase = getSupabaseClient(c.env);
   const token = interaction.token;
 
   c.executionCtx.waitUntil(
     (async () => {
       try {
-        const [parsed, budgetProgress] = await Promise.all([
-          parseExpenseText(c.env, amount, description ?? ''),
-          getBudgetProgress(supabase),
-        ]);
+        const parsed = parseDescription(description ?? '', amount);
+        const tags = [
+          ...(parsed.categoryTag ? [parsed.categoryTag] : []),
+          ...parsed.plainTags,
+        ];
 
         const transaction = await insertTransaction(supabase, {
           amount,
-          payment_method: parsed.payment_method,
-          items: parsed.items.map((i) => ({ name: i.name, amount: i.amount ?? 0 })),
-          tags: parsed.tags,
+          payment_method: parsed.paymentMethod ?? 'cash',
+          items: parsed.items,
+          tags,
+          note: parsed.note || null,
           transaction_at: new Date().toISOString(),
           transaction_type: 'expense',
         });
 
         const updatedProgress = await getBudgetProgress(supabase);
-        const itemsStr =
-          transaction.items && transaction.items.length > 0
-            ? transaction.items.map((i) => i.name).join('、')
-            : description ?? '未知';
+        const pmLabel = PM_LABELS[parsed.paymentMethod ?? 'cash'] ?? '現金';
+        const catStr = parsed.categoryTag ? ` · #${parsed.categoryTag}` : '';
+        const firstLine = `✅ NT$${amount}${parsed.note ? ' · ' + parsed.note : ''} [${pmLabel}${catStr}]`;
+        const itemLines = (transaction.items ?? []).map((i) => `  · ${i.name} NT$${i.amount}`).join('\n');
+        const budgetLine = `📊 本月支出：$${updatedProgress.current_spend.toLocaleString()} / $${updatedProgress.monthly_budget.toLocaleString()} (${updatedProgress.percentage}%)`;
 
-        const content =
-          `✅ 記帳成功！\n` +
-          `💰 金額：$${amount}\n` +
-          `🏷️ 品項：${itemsStr}\n` +
-          `📊 本月支出：$${updatedProgress.current_spend.toLocaleString()} / $${updatedProgress.monthly_budget.toLocaleString()} (${updatedProgress.percentage}%)`;
+        const content = [firstLine, itemLines, budgetLine, ...parsed.warnings]
+          .filter(Boolean)
+          .join('\n');
 
         const messageId = await patchInteractionMessage(c.env, token, content);
         if (messageId) {
@@ -177,7 +209,7 @@ async function handleSummaryCommand(
   interaction: DiscordInteraction
 ) {
   const options = interaction.data?.options ?? [];
-  const monthOption = options.find((o) => o.name === 'month')?.value as string | undefined;
+  const period = ((options.find((o) => o.name === 'period')?.value as string) ?? 'month') as SummaryPeriod;
 
   const token = interaction.token;
   const supabase = getSupabaseClient(c.env);
@@ -185,32 +217,29 @@ async function handleSummaryCommand(
   c.executionCtx.waitUntil(
     (async () => {
       try {
-        let year: number;
-        let month: number;
+        const { start, end } = periodToDateRange(period);
+        const transactions = await getTransactionsForPeriod(supabase, start, end);
 
-        if (monthOption) {
-          const [y, m] = monthOption.split('-').map(Number);
-          year = y;
-          month = m;
-        } else {
-          const now = new Date();
-          year = now.getUTCFullYear();
-          month = now.getUTCMonth() + 1;
+        if (transactions.length === 0) {
+          await patchInteractionMessage(c.env, token, '此期間無支出記錄');
+          return;
         }
 
-        const [totalSpend, budgetSettings] = await Promise.all([
-          getMonthlySpend(supabase, year, month),
-          getBudgetSettings(supabase),
-        ]);
+        const totals = aggregateByCategory(transactions);
+        const [chartUrl] = await Promise.all([fetchPieChartUrl(totals)]);
+        const periodLabel = PERIOD_LABELS[period] ?? period;
+        const tableContent = `📊 ${periodLabel} 支出分類\n\n${formatCategoryTable(totals)}`;
 
-        const percentage = Math.round((totalSpend / budgetSettings.monthly_budget) * 100);
-        const monthStr = `${year}年${month}月`;
+        const embeds = chartUrl ? [{ image: { url: chartUrl } }] : undefined;
+        const buttons = totals.map((t) => ({
+          type: 2,
+          style: 1,
+          label: t.category,
+          custom_id: `summary_drilldown:${encodeCategory(t.category)}:${period}`,
+        }));
+        const components = buttons.length > 0 ? [{ type: 1, components: buttons }] : [];
 
-        const content =
-          `📊 ${monthStr} 支出摘要\n\n` +
-          `總支出：$${totalSpend.toLocaleString()} / $${budgetSettings.monthly_budget.toLocaleString()} (${percentage}%)`;
-
-        await patchInteractionMessage(c.env, token, content);
+        await patchInteractionMessage(c.env, token, tableContent, components, embeds);
       } catch (err) {
         console.error('handleSummaryCommand async error:', err);
         await patchInteractionMessage(c.env, token, '❌ 無法取得摘要，請稍後再試。');
@@ -503,6 +532,10 @@ async function handleComponentInteraction(
     return c.json({ type: 6 });
   }
 
+  if (customId.startsWith('summary_drilldown:')) {
+    return handleDrilldownInteraction(c, interaction);
+  }
+
   return c.json({ type: 4, data: { content: '❌ 未知的操作' } });
 }
 
@@ -575,6 +608,69 @@ async function handleModalSubmit(
   }
 
   return c.json({ type: 4, data: { content: '❌ 未知的操作' } });
+}
+
+// ─── Summary drilldown ───────────────────────────────────────────────────────
+
+async function handleDrilldownInteraction(
+  c: Context<{ Bindings: Env }>,
+  interaction: DiscordInteraction
+) {
+  const customId = interaction.data?.custom_id ?? '';
+  // custom_id format: summary_drilldown:{b64cat}:{period}
+  const parts = customId.split(':');
+  const b64cat = parts[1];
+  const period = parts[2] as SummaryPeriod;
+
+  if (!b64cat || !period) {
+    return c.json({ type: 4, data: { content: '❌ 無效的操作' } });
+  }
+
+  const category = decodeCategory(b64cat);
+  const token = interaction.token;
+  const supabase = getSupabaseClient(c.env);
+
+  c.executionCtx.waitUntil(
+    (async () => {
+      try {
+        const { start, end } = periodToDateRange(period);
+        const allTransactions = await getTransactionsForPeriod(supabase, start, end);
+
+        const categoryTransactions = allTransactions.filter((tx) => {
+          const hasCategoryTag = tx.tags.some((t) => t.includes(':'));
+          if (category === '其他') {
+            return !hasCategoryTag;
+          }
+          return tx.tags.some((t) => t.includes(':') && t.split(':')[0] === category);
+        });
+
+        if (categoryTransactions.length === 0) {
+          await patchInteractionMessage(c.env, token, '此分類在此期間無支出記錄');
+          return;
+        }
+
+        const subtotals = aggregateBySubcategory(categoryTransactions, category);
+        const chartUrl = await fetchBarChartUrl(subtotals, category);
+        const periodLabel = PERIOD_LABELS[period] ?? period;
+        const grandTotal = subtotals.reduce((s, t) => s + t.total, 0);
+
+        const tableHeader = '| 子分類 | 金額 |\n|--------|------|';
+        const tableRows = subtotals.map((t) => `| ${t.subcategory} | NT$${t.total.toLocaleString()} |`);
+        const tableContent =
+          `📊 ${category} — ${periodLabel} 子分類\n\n` +
+          `${tableHeader}\n${tableRows.join('\n')}\n\n` +
+          `💰 小計：NT$${grandTotal.toLocaleString()}`;
+
+        const embeds = chartUrl ? [{ image: { url: chartUrl } }] : undefined;
+        await patchInteractionMessage(c.env, token, tableContent, [], embeds);
+      } catch (err) {
+        console.error('handleDrilldownInteraction async error:', err);
+        await patchInteractionMessage(c.env, token, '❌ 無法取得子分類，請稍後再試。');
+      }
+    })()
+  );
+
+  return c.json({ type: 5 });
 }
 
 // ─── /amend handlers ────────────────────────────────────────────────────────
