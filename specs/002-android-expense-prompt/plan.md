@@ -33,15 +33,15 @@
 
 Verify compliance with each Core Principle from `.specify/memory/constitution.md`:
 
-- [ ] **I. Simplicity-First** — No unnecessary abstractions, multi-user patterns,
+- [X] **I. Simplicity-First** — No unnecessary abstractions, multi-user patterns,
   or new components without justification in Complexity Tracking.
-- [ ] **II. Offline-First on Android** — Android uses Room + WorkManager for
+- [X] **II. Offline-First on Android** — Android uses Room + WorkManager for
   offline queuing; no direct network calls from NotificationListenerService.
-- [ ] **III. Serverless Boundary Compliance** — All slow operations use
+- [X] **III. Serverless Boundary Compliance** — All slow operations use
   `ctx.waitUntil()` + deferred Discord response; no gateway/WebSocket connections.
-- [ ] **IV. Automation Over Manual Input** — Auto-capture ≥95% of transactions;
+- [X] **IV. Automation Over Manual Input** — Auto-capture ≥95% of transactions;
   manual Discord input stays a single command; auto-match unambiguous receipts.
-- [ ] **V. Security at System Boundaries** — All secrets in CF Workers secrets;
+- [X] **V. Security at System Boundaries** — All secrets in CF Workers secrets;
   ed25519 Discord verification; Android never touches Supabase directly.
 
 *ERROR if any gate fails without a justified entry in Complexity Tracking.*

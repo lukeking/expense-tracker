@@ -95,9 +95,6 @@ wrangler secret put DISCORD_CHANNEL_ID          # from Step 2
 wrangler secret put GEMINI_API_KEY              # from aistudio.google.com → Get API key
 wrangler secret put ANDROID_API_KEY             # generate any random 32-char string, e.g.:
                                                 #   openssl rand -hex 16
-wrangler secret put MOF_CARRIER_ID              # your mobile barcode, e.g. /AB12CD3
-wrangler secret put MOF_VERIFICATION_CODE       # 4-char code from MOF member centre
-wrangler secret put MOF_API_KEY                 # from Step 4 (can add later)
 ```
 
 Deploy:
@@ -116,18 +113,7 @@ pnpm run register-commands
 Go back to **Discord Developer Portal → your app → General Information** and paste the worker URL + `/discord/interactions` into **Interactions Endpoint URL** → Save.
 Discord will ping the endpoint to verify — the worker must already be deployed for this to succeed.
 
-### Step 4 — 財政部 e-invoice API (can do later)
-
-1. Go to **einvoice.nat.gov.tw** → 開發者中心 → 申請 API Key.
-2. Fill in application (personal use). Approval takes 1–2 days.
-3. After approval, copy the API key and run:
-   ```bash
-   wrangler secret put MOF_API_KEY
-   ```
-4. In 會員中心 → 載具管理, find your **Verification Code** (4 chars).
-5. Your **Carrier ID** is `/` + the 7-char code on your receipt QR (e.g. `/AB12CD3`).
-
-### Step 5 — Android app
+### Step 4 — Android app
 
 1. Open `android/` in **Android Studio**.
 2. Create `android/app/src/main/res/values/secrets.xml` (already in `.gitignore`):
@@ -143,7 +129,7 @@ Discord will ping the endpoint to verify — the worker must already be deployed
    - Settings → Notification Access (or Special App Access → Notification Access)
    - Enable **Expense Tracker**
 
-### Step 6 — Verify everything works
+### Step 5 — Verify everything works
 
 1. In Discord type `/expense 150 燙青菜 牛肉麵` — expect a confirmation reply.
 2. Check **Supabase → Table Editor → transactions** — the row should appear.

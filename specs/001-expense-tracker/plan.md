@@ -5,7 +5,7 @@
 
 ## Summary
 
-Build a personal, single-user automated expense tracking system combining: an Android notification listener (Kotlin) that intercepts bank push notifications; a Cloudflare Workers TypeScript backend that processes events, calls Gemini for NLP parsing, and manages matching logic; Supabase (PostgreSQL) for storage; Discord Interactions Webhook as the primary UI; and 財政部 mobile barcode API for receipt reconciliation. Phase 1 delivers manual Discord input + AI parsing; Phase 2 adds Android automation and receipt matching.
+Build a personal, single-user automated expense tracking system combining: an Android notification listener (Kotlin) that intercepts bank push notifications; a Cloudflare Workers TypeScript backend that processes events, calls Gemini for NLP parsing, and manages matching logic; Supabase (PostgreSQL) for storage; Discord Interactions Webhook as the primary UI; and user-driven e-invoice CSV import for receipt reconciliation. Phase 1 delivers manual Discord input + AI parsing; Phase 2 adds Android automation and receipt matching.
 
 ## Technical Context
 
@@ -18,7 +18,7 @@ Build a personal, single-user automated expense tracking system combining: an An
 **Testing**: Vitest + `@cloudflare/vitest-pool-workers` (backend unit/integration), JUnit 4 + MockK (Android unit)
 **Target Platform**: Cloudflare Workers (serverless, 128MB memory, 10ms CPU free tier), Android 8.0+ (API 26+)
 **Project Type**: Personal tool — serverless backend + Discord bot + Android companion app
-**Performance Goals**: Discord interactions must respond <3s (Discord hard timeout); notification ingestion <1s P95; MOF sync completes within CF Worker 30s CPU limit
+**Performance Goals**: Discord interactions must respond <3s (Discord hard timeout); notification ingestion <1s P95
 **Constraints**: CF Workers 128MB memory / 10ms CPU (free tier); Android must handle offline with WorkManager exponential backoff; no user accounts — single static API key for Android auth
 **Scale/Scope**: Single user, ~50–100 transactions/month, ~30–50 invoices/month
 **Payment Methods**: `credit_card` | `prepaid_wallet` | `easy_card` | `bank_account` | `cash`; optional `wallet` field (`'line_pay'` | `'google_pay'`) for credit_card/prepaid_wallet; multi-app notification dedup via upsert on `amount + 3-minute window`
@@ -43,8 +43,7 @@ specs/001-expense-tracker/
 ├── quickstart.md        # Phase 1 output: setup guide
 ├── contracts/           # Phase 1 output: API contracts
 │   ├── discord-webhook.md
-│   ├── android-api.md
-│   └── mof-api.md
+│   └── android-api.md
 └── tasks.md             # Phase 2 output (/speckit-tasks — NOT created here)
 ```
 
@@ -56,8 +55,7 @@ backend/                         # Cloudflare Workers TypeScript project
 │   ├── index.ts                 # Worker entry point (Hono router + Cron handler)
 │   ├── handlers/
 │   │   ├── discord.ts           # Discord interactions (slash commands + component buttons)
-│   │   ├── android.ts           # Android notification ingestion endpoint
-│   │   └── mof-sync.ts          # 財政部 API sync (Cron Trigger handler)
+│   │   └── android.ts           # Android notification ingestion endpoint
 │   ├── services/
 │   │   ├── gemini.ts            # NLP parsing via Gemini API (raw HTTP)
 │   │   ├── matcher.ts           # Amount + date matching algorithm

@@ -109,8 +109,8 @@ curl "<WORKER_URL>/android/transactions/recent" \
 
 ## Definition of Done
 
-- [ ] All 8 integration scenarios pass manually on a physical device or emulator
-- [ ] Backend routes return correct response shapes for success, parse error, and 409
-- [ ] Offline queued expenses appear in Supabase within 30 seconds of reconnecting
-- [ ] `ManualInputSyncWorkerTest` passes: offline insert, sync success, 409 discard, retry backoff
-- [ ] Existing `TransactionSyncWorker` tests remain green (no regressions)
+- [X] All 8 integration scenarios pass manually on a physical device or emulator
+- [X] Backend routes return correct response shapes for success, parse error, and 409
+- [X] Offline queued expenses appear in Supabase within 30 seconds of reconnecting
+- [X] `ManualInputSyncWorkerTest` passes: offline insert, sync success, 409 discard, retry backoff
+- [X] Existing `TransactionSyncWorker` tests remain green (no regressions)

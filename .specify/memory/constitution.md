@@ -60,11 +60,9 @@ silent failures or unexpected billing.
   with the 10 ms free-tier limit in mind.
 - No WebSocket connections, no long-polling, no Discord gateway. Discord integration
   MUST use the Interactions Webhook (HTTP POST) model exclusively.
-- Any operation that may exceed 3 seconds (Gemini API call, Supabase write, MOF API
-  call) MUST be deferred: return a Discord `type: 5` deferred response immediately
-  then complete the operation inside `ctx.waitUntil()`.
-- The MOF Cron Trigger handler MUST complete within the CF Workers 30-second CPU
-  wall-time limit. Long receipt lists MUST be processed in batches if needed.
+- Any operation that may exceed 3 seconds (Gemini API call, Supabase write) MUST be
+  deferred: return a Discord `type: 5` deferred response immediately then complete
+  the operation inside `ctx.waitUntil()`.
 
 ### IV. Automation Over Manual Input
 
@@ -93,8 +91,6 @@ client-facing artifacts or source code.
 - The Android API key MUST be stored as a CF Workers secret (`wrangler secret put
   ANDROID_API_KEY`) and validated in the worker. It MUST NOT appear in source code,
   `wrangler.toml`, or committed config files.
-- 財政部 API credentials (carrier ID, verification code, API key) MUST be stored
-  exclusively as CF Workers secrets.
 - The Supabase service role key MUST never be transmitted to any client (Android
   app or Discord user). All Supabase access goes through the CF Worker exclusively.
 - Android clients MUST communicate only through the CF Worker HTTP API; direct
@@ -108,9 +104,9 @@ Phase 1 (Core Engine) and Phase 2 (Automation) are the two delivery milestones.
   work begins. Phase 1 scope: manual Discord expense entry, Gemini NLP parsing,
   monthly budget reporting.
 - Phase 2 MUST extend Phase 1 without breaking it. Phase 2 scope: Android
-  notification listener, 財政部 MOF API sync, automatic receipt matching.
+  notification listener, e-invoice CSV import, automatic receipt matching.
 - Each phase MUST be demonstrable independently using only the quickstart guide.
-- No Phase 2 infrastructure (e.g., `pending_matches` table, MOF Cron Trigger) is
+- No Phase 2 infrastructure (e.g., `pending_matches` table, CSV import handler) is
   required in Phase 1, but schema MUST be forward-compatible with Phase 2 additions.
 
 ## Quality Standards
@@ -126,7 +122,6 @@ financial data.
 - The following edge cases MUST have explicit test coverage:
   - Duplicate notification received within 5-minute window
   - Ambiguous match (two same-amount receipts in time window)
-  - MOF API returning `401` (bad credentials)
   - Discord ed25519 verification failure
   - Android notification received while offline
 - Deduplication MUST be enforced at the server ingestion layer; client-side

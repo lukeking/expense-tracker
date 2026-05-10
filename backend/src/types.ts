@@ -207,8 +207,5 @@ export interface Env {
   GEMINI_API_KEY: string;
   GEMINI_MODEL_NAME: string;
   ANDROID_API_KEY: string;
-  MOF_CARRIER_ID: string;
-  MOF_VERIFICATION_CODE: string;
-  MOF_API_KEY: string;
   DISCORD_CHANNEL_ID: string;
 }

@@ -8,7 +8,6 @@
 - Supabase account
 - Cloudflare account (free tier sufficient)
 - Discord developer account
-- 財政部電子發票平台 developer account
 
 ---
 
@@ -57,9 +56,6 @@ wrangler secret put DISCORD_APPLICATION_ID
 wrangler secret put DISCORD_BOT_TOKEN        # for sending proactive messages
 wrangler secret put GEMINI_API_KEY
 wrangler secret put ANDROID_API_KEY          # generate a random 32-char string
-wrangler secret put MOF_CARRIER_ID           # your mobile barcode e.g. /AB12CD3
-wrangler secret put MOF_VERIFICATION_CODE    # 4-char code from MOF platform
-wrangler secret put MOF_API_KEY              # from MOF developer registration
 wrangler secret put DISCORD_CHANNEL_ID       # Discord channel for proactive messages
 
 # Deploy
@@ -70,17 +66,7 @@ Copy the deployed worker URL and set it as the Discord Interactions Endpoint URL
 
 ---
 
-## 4. 財政部 API Registration
-
-1. Go to einvoice.nat.gov.tw → 開發者中心 → 申請 API Key.
-2. Fill in application details (personal use).
-3. After approval (~1-2 days), copy the API key.
-4. Set your mobile barcode verification code in 會員中心 → 載具管理.
-5. Your mobile barcode ID is the `/` + 7-char code printed on your receipt QR.
-
----
-
-## 5. Android App Setup
+## 4. Android App Setup
 
 1. Open `android/` in Android Studio.
 2. Create `android/app/src/main/res/values/secrets.xml`:
@@ -98,7 +84,7 @@ Copy the deployed worker URL and set it as the Discord Interactions Endpoint URL
 
 ---
 
-## 6. Local Development
+## 5. Local Development
 
 ```bash
 cd backend
@@ -119,8 +105,7 @@ To test Discord interactions locally, use a tunnel (e.g. `cloudflared tunnel --u
 
 ---
 
-## 7. Verify Setup
+## 6. Verify Setup
 
 1. In Discord, type `/expense 150 燙青菜 牛肉麵` — should get a confirmation message.
 2. Check Supabase → Table Editor → transactions — should see the new row.
-3. Trigger a manual MOF sync: `wrangler dev` → visit `http://localhost:8787/__scheduled?cron=*+*+*+*+*` (Cron Trigger test endpoint).
