@@ -57,7 +57,8 @@ Rules:
   - 銀行轉帳 -> bank_account
 - items is a list of what was purchased, if amount comes along with item, bind them together into one element in items
 - If there is only one item in list, the 'items.amount' should to the same with total amount
-- Extract all words with a leading '#' as tags by removing the '#' prefix. no missing nor duplicate tags allowed.
+- A token is a line item ONLY if its last whitespace-separated word is a number. Freeform text tokens without a trailing numeric word MUST NOT be extracted as line items.
+- Extract all words with a leading '#' as tags by removing the '#' prefix. Preserve any ':' characters within the tag (e.g. '#食:午餐' -> '食:午餐'). No missing nor duplicate tags allowed.
 - If tags cannot be determined, tags = []
 - If no items are listed, items = []
 `;
