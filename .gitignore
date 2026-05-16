@@ -28,6 +28,10 @@ android/local.properties
 test-invoices.csv
 *.test.csv
 
+# Migration script output files
+dry-run-*.txt
+beiZhu-analysis-*.txt
+
 # OS
 .DS_Store
 Thumbs.db
