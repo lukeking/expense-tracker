@@ -287,6 +287,25 @@ export async function findMatchingExpenseTransaction(
   return (data ?? []) as Transaction[];
 }
 
+export async function findExactMatchIncludingLinked(
+  supabase: SupabaseClient,
+  netAmount: number,
+  invoiceDate: Date
+): Promise<Transaction[]> {
+  const windowStart = new Date(invoiceDate.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const windowEnd = new Date(invoiceDate.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('transaction_type', 'expense')
+    .eq('amount', netAmount)
+    .gte('transaction_at', windowStart)
+    .lte('transaction_at', windowEnd + 'T23:59:59Z')
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(`findExactMatchIncludingLinked: ${error.message}`);
+  return (data ?? []) as Transaction[];
+}
+
 export async function findForexCandidateTransaction(
   supabase: SupabaseClient,
   netAmount: number,
@@ -368,6 +387,16 @@ export async function findAllHeldForexInvoices(supabase: SupabaseClient): Promis
     .select('*')
     .eq('match_status', 'held_forex');
   if (error) throw new Error(`findAllHeldForexInvoices: ${error.message}`);
+  return (data ?? []) as Invoice[];
+}
+
+export async function findAllAmbiguousInvoices(supabase: SupabaseClient): Promise<Invoice[]> {
+  const { data, error } = await supabase
+    .from('invoices')
+    .select('*')
+    .eq('match_status', 'ambiguous')
+    .order('invoice_date', { ascending: true });
+  if (error) throw new Error(`findAllAmbiguousInvoices: ${error.message}`);
   return (data ?? []) as Invoice[];
 }
 

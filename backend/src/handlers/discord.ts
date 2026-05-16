@@ -1,5 +1,5 @@
 import type { Context } from 'hono';
-import type { Env, HonoVariables, PaymentMethod, SummaryPeriod } from '../types';
+import type { Env, HonoVariables, PaymentMethod, SummaryPeriod, Invoice, Transaction } from '../types';
 import { getSupabaseClient } from '../db/client';
 import {
   insertTransaction,
@@ -14,14 +14,19 @@ import {
   updateImportRun,
   findTransactionsWithoutInvoiceInRange,
   getTransactionsForPeriod,
+  resolveHeldInvoice,
+  enrichTransaction,
+  findMatchingExpenseTransaction,
+  findAllAmbiguousInvoices,
 } from '../db/queries';
 import { parseDescription } from '../services/expense-parser';
+import { parseExpenseText } from '../services/gemini';
 import { periodToDateRange, aggregateByCategory, aggregateBySubcategory, formatCategoryTable } from '../services/summary';
 import { fetchPieChartUrl, fetchBarChartUrl } from '../services/chart';
 import { getBudgetProgress } from '../services/budget';
-import { patchInteractionMessage, patchTransactionMatchedMessage } from '../services/discord-notify';
+import { patchInteractionMessage, patchTransactionMatchedMessage, sendChannelMessage, sendFollowupMessage } from '../services/discord-notify';
 import { decodeCSVBuffer, parseCSVRows, groupInvoices, RowLimitError } from '../services/csv-parser';
-import { runImportPipeline } from '../services/invoice-matcher';
+import { runImportPipeline, runReconciliationPass, type ReconciliationResult } from '../services/invoice-matcher';
 
 interface DiscordInteraction {
   type: number;
@@ -78,6 +83,9 @@ export async function discordHandler(c: Context<{ Bindings: Env; Variables: Hono
     }
     if (commandName === 'import') {
       return handleImportCommand(c, interaction);
+    }
+    if (commandName === 'reconcile') {
+      return handleReconcileCommand(c, interaction);
     }
   }
 
@@ -534,6 +542,14 @@ async function handleComponentInteraction(
 
   if (customId.startsWith('summary_drilldown:')) {
     return handleDrilldownInteraction(c, interaction);
+  }
+
+  if (customId.startsWith('reconcile_link:')) {
+    return handleReconcileLink(c, interaction);
+  }
+
+  if (customId.startsWith('reconcile_skip:')) {
+    return handleReconcileSkip(c, interaction);
   }
 
   return c.json({ type: 4, data: { content: '❌ 未知的操作' } });
@@ -1059,4 +1075,238 @@ function formatImportSummary(
   }
 
   return lines.join('\n');
+}
+
+// ─── /reconcile handlers ─────────────────────────────────────────────────────
+
+function formatReconcileSummary(result: ReconciliationResult): string {
+  const totalProcessed =
+    result.forexLinked + result.forexAutoCreated + result.forexStillHeld +
+    result.ambiguousAutoLinked + result.ambiguousAutoCreated + result.ambiguousRemaining.length;
+
+  if (totalProcessed === 0) {
+    return '🔄 比對完成 — 無待確認發票';
+  }
+
+  const lines: string[] = ['🔄 比對完成', ''];
+  if (result.forexLinked > 0) lines.push(`🔗 外幣已連結：${result.forexLinked} 筆`);
+  if (result.forexAutoCreated > 0) lines.push(`🆕 外幣自動新增：${result.forexAutoCreated} 筆`);
+  if (result.ambiguousAutoLinked > 0) lines.push(`🔗 模糊已自動連結：${result.ambiguousAutoLinked} 筆（候選數降為 1）`);
+  if (result.ambiguousAutoCreated > 0) lines.push(`🆕 模糊自動新增：${result.ambiguousAutoCreated} 筆`);
+  if (result.collisionCount > 0) lines.push(`⚠️ 衝突跳過：${result.collisionCount} 筆`);
+
+  if (result.forexStillHeld > 0 || result.ambiguousRemaining.length > 0) {
+    lines.push('');
+    if (result.forexStillHeld > 0) lines.push(`⏳ 仍待確認（外幣）：${result.forexStillHeld} 筆`);
+    if (result.ambiguousRemaining.length > 0) lines.push(`❓ 仍待手動確認（模糊）：${result.ambiguousRemaining.length} 筆`);
+  }
+
+  return lines.join('\n');
+}
+
+function formatAmbiguousPrompt(
+  invoice: Invoice,
+  candidates: Transaction[]
+): { content: string; components: object[] } {
+  const date = invoice.invoice_date.slice(0, 10);
+  const content =
+    `❓ 模糊發票 — 請選擇正確交易：\n` +
+    `🏪 ${invoice.seller_name ?? '未知商家'}  NT$${invoice.net_amount}  (${date})` +
+    `\n\n候選交易：`;
+
+  const candidateButtons = candidates.slice(0, 5).map((tx) => {
+    const utc8 = new Date(new Date(tx.transaction_at).getTime() + 8 * 60 * 60 * 1000);
+    const mm = String(utc8.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(utc8.getUTCDate()).padStart(2, '0');
+    const hh = String(utc8.getUTCHours()).padStart(2, '0');
+    const min = String(utc8.getUTCMinutes()).padStart(2, '0');
+    const desc = tx.items?.[0]?.name ?? tx.note ?? `NT$${tx.amount}`;
+    return {
+      type: 2,
+      style: 1,
+      label: `NT$${tx.amount.toLocaleString()} · ${desc} (${mm}/${dd} ${hh}:${min})`,
+      custom_id: `reconcile_link:${invoice.id}:${tx.id}`,
+    };
+  });
+
+  return {
+    content,
+    components: [
+      { type: 1, components: candidateButtons },
+      {
+        type: 1,
+        components: [
+          { type: 2, style: 2, label: '跳過（保留待確認）', custom_id: `reconcile_skip:${invoice.id}` },
+        ],
+      },
+    ],
+  };
+}
+
+async function handleReconcileCommand(
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
+  interaction: DiscordInteraction
+) {
+  const supabase = getSupabaseClient(c.env);
+  const token = interaction.token;
+  const env = c.env;
+
+  c.executionCtx.waitUntil(
+    (async () => {
+      try {
+        const result = await runReconciliationPass(supabase, env);
+        await patchInteractionMessage(env, token, formatReconcileSummary(result));
+
+        if (result.ambiguousRemaining.length > 0) {
+          const first = result.ambiguousRemaining[0];
+          const candidates = await findMatchingExpenseTransaction(supabase, first.net_amount, new Date(first.invoice_date));
+          const prompt = formatAmbiguousPrompt(first, candidates);
+          await sendFollowupMessage(env, token, prompt.content, prompt.components);
+        }
+      } catch (err) {
+        console.error('handleReconcileCommand async error:', err);
+        await patchInteractionMessage(env, token, '❌ 比對失敗，請稍後再試。');
+      }
+    })()
+  );
+
+  return c.json({ type: 5 });
+}
+
+async function handleReconcileLink(
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
+  interaction: DiscordInteraction
+) {
+  const customId = interaction.data?.custom_id ?? '';
+  const rest = customId.slice('reconcile_link:'.length);
+  const firstColon = rest.indexOf(':');
+  if (firstColon === -1) return c.json({ type: 4, data: { content: '❌ 無效的操作' } });
+  const invoiceId = rest.slice(0, firstColon);
+  const transactionId = rest.slice(firstColon + 1);
+  if (!invoiceId || !transactionId) return c.json({ type: 4, data: { content: '❌ 無效的操作' } });
+
+  const supabase = getSupabaseClient(c.env);
+  const env = c.env;
+
+  try {
+    const { data: invoiceRow, error: invErr } = await supabase
+      .from('invoices').select('*').eq('id', invoiceId).single();
+    if (invErr || !invoiceRow) return c.json({ type: 4, data: { content: '❌ 發票不存在或已處理' } });
+    const invoice = invoiceRow as Invoice;
+
+    const { data: txRow, error: txErr } = await supabase
+      .from('transactions').select('*').eq('id', transactionId).eq('transaction_type', 'expense').single();
+    if (txErr || !txRow) return c.json({ type: 4, data: { content: '❌ 交易不存在' } });
+    const tx = txRow as Transaction;
+
+    if (tx.matched_invoice_id !== null) {
+      // Collision — re-query fresh candidates excluding the conflicting tx
+      const invoiceDate = new Date(invoice.invoice_date);
+      const allCandidates = await findMatchingExpenseTransaction(supabase, invoice.net_amount, invoiceDate);
+      const remaining = allCandidates.filter((t) => t.id !== transactionId);
+
+      if (remaining.length === 0) {
+        const parsed = await parseExpenseText(env, invoice.net_amount, invoice.seller_name ?? '');
+        const newTx = await insertTransaction(supabase, {
+          amount: invoice.net_amount,
+          transaction_type: 'expense',
+          payment_method: 'cash',
+          items: parsed.items.map((i) => ({ name: i.name, amount: i.amount ?? 0 })),
+          tags: parsed.tags,
+          note: invoice.seller_name || null,
+          transaction_at: invoiceDate.toISOString(),
+        });
+        await resolveHeldInvoice(supabase, invoiceId, newTx.id, 'auto_created');
+        await enrichTransaction(supabase, newTx.id, {
+          invoiceNumber: invoice.invoice_number,
+          sellerName: invoice.seller_name,
+          sellerTaxId: invoice.seller_tax_id,
+          invoiceId: invoice.id,
+        });
+        const nextAmbiguous = await findAllAmbiguousInvoices(supabase);
+        if (nextAmbiguous.length > 0) {
+          const nextInv = nextAmbiguous[0];
+          const nextCandidates = await findMatchingExpenseTransaction(supabase, nextInv.net_amount, new Date(nextInv.invoice_date));
+          const prompt = formatAmbiguousPrompt(nextInv, nextCandidates);
+          c.executionCtx.waitUntil(sendFollowupMessage(env, interaction.token, prompt.content, prompt.components));
+        }
+        return c.json({
+          type: 7,
+          data: {
+            content: `⚠️ 所有候選交易已被其他發票連結。已自動新增一筆支出：NT$${invoice.net_amount} · ${invoice.seller_name ?? '未知商家'}`,
+            components: [],
+          },
+        });
+      }
+
+      const prompt = formatAmbiguousPrompt(invoice, remaining);
+      return c.json({
+        type: 7,
+        data: {
+          content: `⚠️ 此交易已連結其他發票，請選擇其他候選：\n🏪 ${invoice.seller_name ?? '未知商家'}  NT$${invoice.net_amount}\n\n候選交易：`,
+          components: prompt.components,
+        },
+      });
+    }
+
+    await resolveHeldInvoice(supabase, invoiceId, transactionId, 'matched');
+    await enrichTransaction(supabase, transactionId, {
+      invoiceNumber: invoice.invoice_number,
+      sellerName: invoice.seller_name,
+      sellerTaxId: invoice.seller_tax_id,
+      invoiceId: invoice.id,
+    });
+
+    const desc = tx.items?.[0]?.name ?? tx.note ?? `NT$${tx.amount}`;
+    const nextAmbiguous = await findAllAmbiguousInvoices(supabase);
+    if (nextAmbiguous.length > 0) {
+      const nextInv = nextAmbiguous[0];
+      const nextCandidates = await findMatchingExpenseTransaction(supabase, nextInv.net_amount, new Date(nextInv.invoice_date));
+      const prompt = formatAmbiguousPrompt(nextInv, nextCandidates);
+      c.executionCtx.waitUntil(sendFollowupMessage(env, interaction.token, prompt.content, prompt.components));
+    }
+
+    return c.json({
+      type: 7,
+      data: {
+        content: `✅ 已連結：${invoice.seller_name ?? '未知商家'} NT$${invoice.net_amount} → ${desc}`,
+        components: [],
+      },
+    });
+  } catch (err) {
+    console.error('handleReconcileLink error:', err);
+    return c.json({ type: 4, data: { content: '❌ 連結失敗，請稍後再試。' } });
+  }
+}
+
+async function handleReconcileSkip(
+  c: Context<{ Bindings: Env; Variables: HonoVariables }>,
+  interaction: DiscordInteraction
+) {
+  const customId = interaction.data?.custom_id ?? '';
+  const invoiceId = customId.slice('reconcile_skip:'.length);
+  if (!invoiceId) return c.json({ type: 4, data: { content: '❌ 無效的操作' } });
+
+  const supabase = getSupabaseClient(c.env);
+  const env = c.env;
+
+  try {
+    const allAmbiguous = await findAllAmbiguousInvoices(supabase);
+    const next = allAmbiguous.find((inv) => inv.id !== invoiceId);
+
+    if (next) {
+      const nextCandidates = await findMatchingExpenseTransaction(supabase, next.net_amount, new Date(next.invoice_date));
+      const prompt = formatAmbiguousPrompt(next, nextCandidates);
+      c.executionCtx.waitUntil(sendFollowupMessage(env, interaction.token, prompt.content, prompt.components));
+      return c.json({ type: 7, data: { content: '⏭️ 已跳過，保留待確認。', components: [] } });
+    }
+
+    return c.json({
+      type: 7,
+      data: { content: '⏭️ 已跳過，保留待確認。（無更多待確認發票）', components: [] },
+    });
+  } catch (err) {
+    console.error('handleReconcileSkip error:', err);
+    return c.json({ type: 4, data: { content: '❌ 操作失敗，請稍後再試。' } });
+  }
 }

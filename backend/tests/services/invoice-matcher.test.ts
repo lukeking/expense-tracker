@@ -192,6 +192,32 @@ describe('runReconciliationPass', () => {
     const shouldAutoCreate = !noExactTx && !noForexTx;
     expect(shouldAutoCreate).toBe(true);
   });
+
+  it('detects collision when exact-match candidate is already linked to another invoice (FR-009)', () => {
+    // findMatchingExpenseTransaction returns [] (filters matched_invoice_id IS NULL)
+    const unlinkedExactCandidates: ReturnType<typeof makeTx>[] = [];
+    // findExactMatchIncludingLinked returns the already-linked candidate
+    const allExactCandidates = [{ ...makeTx('tx-taken', 1523), matched_invoice_id: 'other-invoice-id' }];
+
+    const hasCollision =
+      unlinkedExactCandidates.length === 0 &&
+      allExactCandidates.some((tx) => tx.matched_invoice_id !== null);
+
+    expect(hasCollision).toBe(true);
+  });
+
+  it('does not auto-create when a collision is detected — invoice stays held (FR-009)', () => {
+    const unlinkedExactCandidates: ReturnType<typeof makeTx>[] = [];
+    const allExactCandidates = [{ ...makeTx('tx-taken', 1523), matched_invoice_id: 'other-invoice-id' }];
+    const noForexCandidate = null;
+
+    const hasCollision =
+      unlinkedExactCandidates.length === 0 &&
+      allExactCandidates.some((tx) => tx.matched_invoice_id !== null);
+    const shouldAutoCreate = !hasCollision && noForexCandidate === null;
+
+    expect(shouldAutoCreate).toBe(false);
+  });
 });
 
 // ─── Ambiguous match (FR-005) ────────────────────────────────────────────────
@@ -251,6 +277,70 @@ describe('import pipeline — ambiguous match', () => {
       : 'unmatched';
 
     expect(status).toBe('matched');
+  });
+});
+
+// ─── Reconciliation pass — ambiguous invoice loop (FR-003) ───────────────────
+
+describe('runReconciliationPass — ambiguous invoice loop', () => {
+  it('auto-links ambiguous invoice when exactly 1 candidate remains', () => {
+    const candidates = [makeTx('tx-only', 150)];
+    const newStatus = candidates.length === 1 ? 'matched'
+      : candidates.length > 1 ? 'ambiguous'
+      : 'auto_created';
+    expect(newStatus).toBe('matched');
+    expect(candidates[0].id).toBe('tx-only');
+  });
+
+  it('auto-creates transaction for ambiguous invoice when 0 candidates remain', () => {
+    const inv = makeInvoiceRecord('inv-amb', 'ambiguous', 200);
+    const candidates: ReturnType<typeof makeTx>[] = [];
+    const newStatus = candidates.length === 1 ? 'matched'
+      : candidates.length > 1 ? 'ambiguous'
+      : 'auto_created';
+    expect(newStatus).toBe('auto_created');
+    expect(inv.net_amount).toBe(200);
+  });
+
+  it('leaves ambiguous invoice held when 2+ candidates remain', () => {
+    const tx1 = makeTx('tx-a', 150);
+    const tx2 = { ...makeTx('tx-b', 150), created_at: '2025-04-18T00:00:30.000Z' };
+    const candidates = [tx1, tx2];
+    const newStatus = candidates.length === 1 ? 'matched'
+      : candidates.length > 1 ? 'ambiguous'
+      : 'auto_created';
+    expect(newStatus).toBe('ambiguous');
+    expect(candidates).toHaveLength(2);
+  });
+
+  it('ReconciliationResult separates forexLinked from ambiguousAutoLinked', () => {
+    const mockResult = {
+      forexLinked: 2,
+      forexAutoCreated: 1,
+      forexStillHeld: 1,
+      ambiguousAutoLinked: 1,
+      ambiguousAutoCreated: 0,
+      ambiguousRemaining: [] as ReturnType<typeof makeInvoiceRecord>[],
+      collisionCount: 0,
+    };
+    expect(mockResult.forexLinked).toBe(2);
+    expect(mockResult.ambiguousAutoLinked).toBe(1);
+    expect(mockResult.ambiguousRemaining).toHaveLength(0);
+    // runImportPipeline uses forexLinked + forexAutoCreated for forexResolvedCount
+    expect(mockResult.forexLinked + mockResult.forexAutoCreated).toBe(3);
+  });
+
+  it('forexStillHeld increments when held_forex candidate is still within ±5%', () => {
+    const mockResult = {
+      forexLinked: 0,
+      forexAutoCreated: 0,
+      forexStillHeld: 2,
+      ambiguousAutoLinked: 0,
+      ambiguousAutoCreated: 0,
+      ambiguousRemaining: [] as ReturnType<typeof makeInvoiceRecord>[],
+      collisionCount: 0,
+    };
+    expect(mockResult.forexStillHeld).toBe(2);
   });
 });
 

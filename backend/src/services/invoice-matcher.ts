@@ -1,12 +1,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { ParsedInvoice, ImportRun, Env } from '../types';
+import type { ParsedInvoice, ImportRun, Invoice, Env } from '../types';
 import {
   findExistingInvoiceNumbers,
   findMatchingExpenseTransaction,
+  findExactMatchIncludingLinked,
   findForexCandidateTransaction,
   insertInvoice,
   enrichTransaction,
   findAllHeldForexInvoices,
+  findAllAmbiguousInvoices,
   resolveHeldInvoice,
   insertTransaction,
 } from '../db/queries';
@@ -15,6 +17,16 @@ import { parseExpenseText } from './gemini';
 export interface AmbiguousItem {
   invoice: ParsedInvoice;
   candidates: import('../types').Transaction[];
+}
+
+export interface ReconciliationResult {
+  forexLinked: number;
+  forexAutoCreated: number;
+  forexStillHeld: number;
+  ambiguousAutoLinked: number;
+  ambiguousAutoCreated: number;
+  ambiguousRemaining: Invoice[];
+  collisionCount: number;
 }
 
 export interface PipelineCounters {
@@ -133,20 +145,28 @@ export async function runImportPipeline(
   }
 
   // Post-import reconciliation pass over all held_forex invoices in DB
-  const forexResolved = await runReconciliationPass(supabase, env);
-  counters.forexResolvedCount = forexResolved;
+  const reconcileResult = await runReconciliationPass(supabase, env);
+  counters.forexResolvedCount = reconcileResult.forexLinked + reconcileResult.forexAutoCreated;
 
   return counters;
 }
 
-export async function runReconciliationPass(supabase: SupabaseClient, env: Env): Promise<number> {
-  const heldInvoices = await findAllHeldForexInvoices(supabase);
-  let resolved = 0;
+export async function runReconciliationPass(supabase: SupabaseClient, env: Env): Promise<ReconciliationResult> {
+  const result: ReconciliationResult = {
+    forexLinked: 0,
+    forexAutoCreated: 0,
+    forexStillHeld: 0,
+    ambiguousAutoLinked: 0,
+    ambiguousAutoCreated: 0,
+    ambiguousRemaining: [],
+    collisionCount: 0,
+  };
 
+  // Loop 1: held_forex invoices
+  const heldInvoices = await findAllHeldForexInvoices(supabase);
   for (const heldInvoice of heldInvoices) {
     const invoiceDate = new Date(heldInvoice.invoice_date);
 
-    // Try exact match first (pick most-recently-created candidate for reconciliation)
     const exactCandidates = await findMatchingExpenseTransaction(supabase, heldInvoice.net_amount, invoiceDate);
     const exactTx = exactCandidates[0] ?? null;
     if (exactTx) {
@@ -157,14 +177,20 @@ export async function runReconciliationPass(supabase: SupabaseClient, env: Env):
         sellerTaxId: heldInvoice.seller_tax_id,
         invoiceId: heldInvoice.id,
       });
-      resolved++;
+      result.forexLinked++;
       continue;
     }
 
-    // Try forex candidate still within ±5%
+    // No unlinked exact match — check if an already-linked transaction would have matched (collision)
+    const allExactCandidates = await findExactMatchIncludingLinked(supabase, heldInvoice.net_amount, invoiceDate);
+    if (allExactCandidates.some((tx) => tx.matched_invoice_id !== null)) {
+      result.collisionCount++;
+      continue;
+    }
+
     const forexTx = await findForexCandidateTransaction(supabase, heldInvoice.net_amount, invoiceDate);
     if (forexTx) {
-      // Still a forex candidate — leave as held_forex
+      result.forexStillHeld++;
       continue;
     }
 
@@ -186,8 +212,48 @@ export async function runReconciliationPass(supabase: SupabaseClient, env: Env):
       sellerTaxId: heldInvoice.seller_tax_id,
       invoiceId: heldInvoice.id,
     });
-    resolved++;
+    result.forexAutoCreated++;
   }
 
-  return resolved;
+  // Loop 2: ambiguous invoices — auto-link if candidate count has dropped to 1
+  const ambiguousInvoices = await findAllAmbiguousInvoices(supabase);
+  for (const inv of ambiguousInvoices) {
+    const invoiceDate = new Date(inv.invoice_date);
+    const candidates = await findMatchingExpenseTransaction(supabase, inv.net_amount, invoiceDate);
+
+    if (candidates.length === 1) {
+      const tx = candidates[0];
+      await resolveHeldInvoice(supabase, inv.id, tx.id, 'matched');
+      await enrichTransaction(supabase, tx.id, {
+        invoiceNumber: inv.invoice_number,
+        sellerName: inv.seller_name,
+        sellerTaxId: inv.seller_tax_id,
+        invoiceId: inv.id,
+      });
+      result.ambiguousAutoLinked++;
+    } else if (candidates.length === 0) {
+      const parsed = await parseExpenseText(env, inv.net_amount, inv.seller_name ?? '');
+      const newTx = await insertTransaction(supabase, {
+        amount: inv.net_amount,
+        transaction_type: 'expense',
+        payment_method: 'cash',
+        items: parsed.items.map((i) => ({ name: i.name, amount: i.amount ?? 0 })),
+        tags: parsed.tags,
+        note: inv.seller_name || null,
+        transaction_at: invoiceDate.toISOString(),
+      });
+      await resolveHeldInvoice(supabase, inv.id, newTx.id, 'auto_created');
+      await enrichTransaction(supabase, newTx.id, {
+        invoiceNumber: inv.invoice_number,
+        sellerName: inv.seller_name,
+        sellerTaxId: inv.seller_tax_id,
+        invoiceId: inv.id,
+      });
+      result.ambiguousAutoCreated++;
+    } else {
+      result.ambiguousRemaining.push(inv);
+    }
+  }
+
+  return result;
 }

@@ -172,6 +172,10 @@ const commands = [
       },
     ],
   },
+  {
+    name: 'reconcile',
+    description: '重新比對所有待確認發票（外幣/模糊）',
+  },
 ];
 
 async function registerCommands() {

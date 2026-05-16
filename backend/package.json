@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "monitor": "wrangler tail",
     "test": "vitest run",
     "test:watch": "vitest",
     "register-commands": "npx tsx scripts/register-commands.ts",
