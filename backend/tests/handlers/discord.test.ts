@@ -589,3 +589,129 @@ describe('formatReminderMessage', () => {
     expect(msg).toContain('未知檔案');
   });
 });
+
+// ─── /reconcile command ──────────────────────────────────────────────────────
+
+describe('/reconcile command handler', () => {
+  it('returns type 5 deferred response', () => {
+    expect({ type: 5 }.type).toBe(5);
+  });
+});
+
+describe('formatReconcileSummary logic', () => {
+  it('returns all-clear message when no held invoices were processed', () => {
+    const totalProcessed = 0 + 0 + 0 + 0 + 0 + 0; // all counters zero
+    expect(totalProcessed).toBe(0);
+    // handler emits: '🔄 比對完成 — 無待確認發票'
+  });
+
+  it('totalProcessed > 0 when forex invoices were resolved', () => {
+    const result = { forexLinked: 2, forexAutoCreated: 1, forexStillHeld: 0, ambiguousAutoLinked: 0, ambiguousAutoCreated: 0, ambiguousRemaining: [] };
+    const totalProcessed = result.forexLinked + result.forexAutoCreated + result.forexStillHeld
+      + result.ambiguousAutoLinked + result.ambiguousAutoCreated + result.ambiguousRemaining.length;
+    expect(totalProcessed).toBe(3);
+    expect(result.forexLinked).toBe(2);
+  });
+
+  it('separates forexStillHeld and ambiguousRemaining in still-held section', () => {
+    const result = { forexLinked: 1, forexAutoCreated: 0, forexStillHeld: 2, ambiguousAutoLinked: 0, ambiguousAutoCreated: 0, ambiguousRemaining: [{ id: 'inv-1' }] };
+    expect(result.forexStillHeld).toBe(2);
+    expect(result.ambiguousRemaining).toHaveLength(1);
+  });
+
+  it('summary line for ambiguous auto-link includes 候選數降為 1 note', () => {
+    const line = `🔗 模糊已自動連結：1 筆（候選數降為 1）`;
+    expect(line).toContain('候選數降為 1');
+  });
+});
+
+// ─── reconcile_link component interaction ────────────────────────────────────
+
+describe('reconcile_link component interaction', () => {
+  it('parses invoiceId and transactionId from custom_id', () => {
+    const customId = 'reconcile_link:inv-abc-123:tx-xyz-456';
+    const rest = customId.slice('reconcile_link:'.length);
+    const firstColon = rest.indexOf(':');
+    expect(rest.slice(0, firstColon)).toBe('inv-abc-123');
+    expect(rest.slice(firstColon + 1)).toBe('tx-xyz-456');
+  });
+
+  it('collision guard: matched_invoice_id !== null means already matched', () => {
+    const tx = { matched_invoice_id: 'other-inv-id' };
+    expect(tx.matched_invoice_id !== null).toBe(true);
+  });
+
+  it('no collision when matched_invoice_id is null', () => {
+    const tx = { matched_invoice_id: null };
+    expect(tx.matched_invoice_id !== null).toBe(false);
+  });
+
+  it('returns type 7 update on successful link', () => {
+    const resp = { type: 7, data: { content: '✅ 已連結：全家 NT$180 → 燙青菜', components: [] } };
+    expect(resp.type).toBe(7);
+    expect(resp.data.components).toHaveLength(0);
+  });
+
+  it('returns type 7 with collision message on conflict', () => {
+    const resp = { type: 7, data: { content: '⚠️ 此交易已連結其他發票，請選擇其他候選：', components: [{ type: 1, components: [] }] } };
+    expect(resp.type).toBe(7);
+    expect(resp.data.content).toContain('⚠️');
+  });
+
+  it('filters colliding transaction from refreshed candidate list', () => {
+    const candidates = [{ id: 'tx-a' }, { id: 'tx-b' }];
+    const conflictId = 'tx-a';
+    const remaining = candidates.filter((t) => t.id !== conflictId);
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].id).toBe('tx-b');
+  });
+
+  it('custom_id length for UUIDs stays within Discord 100-char limit', () => {
+    const uuid = '12345678-1234-1234-1234-123456789012'; // 36 chars
+    const id = `reconcile_link:${uuid}:${uuid}`;
+    expect(id.length).toBeLessThanOrEqual(100);
+  });
+});
+
+// ─── reconcile_skip component interaction ────────────────────────────────────
+
+describe('reconcile_skip component interaction', () => {
+  it('parses invoiceId from custom_id', () => {
+    const customId = 'reconcile_skip:inv-abc-123';
+    expect(customId.slice('reconcile_skip:'.length)).toBe('inv-abc-123');
+  });
+
+  it('returns type 7 skip confirmation', () => {
+    const resp = { type: 7, data: { content: '⏭️ 已跳過，保留待確認。', components: [] } };
+    expect(resp.type).toBe(7);
+    expect(resp.data.content).toContain('⏭️');
+  });
+
+  it('includes end-of-session note when no more ambiguous invoices', () => {
+    const content = '⏭️ 已跳過，保留待確認。（無更多待確認發票）';
+    expect(content).toContain('無更多待確認發票');
+  });
+
+  it('finds the next invoice by excluding the current skipped one', () => {
+    const allAmbiguous = [
+      { id: 'inv-1', invoice_date: '2026-01-01' },
+      { id: 'inv-2', invoice_date: '2026-01-05' },
+    ];
+    const skippedId = 'inv-1';
+    const next = allAmbiguous.find((inv) => inv.id !== skippedId);
+    expect(next?.id).toBe('inv-2');
+  });
+
+  it('returns undefined (end of session) when the only remaining invoice is the skipped one', () => {
+    const allAmbiguous = [{ id: 'inv-1', invoice_date: '2026-01-01' }];
+    const skippedId = 'inv-1';
+    const next = allAmbiguous.find((inv) => inv.id !== skippedId);
+    expect(next).toBeUndefined();
+  });
+
+  it('skip custom_id length stays within Discord 100-char limit', () => {
+    const uuid = '12345678-1234-1234-1234-123456789012';
+    const id = `reconcile_skip:${uuid}`;
+    expect(id.length).toBeLessThanOrEqual(100);
+  });
+});

@@ -26,6 +26,28 @@ export async function patchInteractionMessage(
   return data.id;
 }
 
+export async function sendFollowupMessage(
+  env: Env,
+  token: string,
+  content: string,
+  components?: object[]
+): Promise<string | null> {
+  const url = `${DISCORD_API}/webhooks/${env.DISCORD_APPLICATION_ID}/${token}`;
+  const body: Record<string, unknown> = { content };
+  if (components !== undefined) body.components = components;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    console.error('sendFollowupMessage failed:', res.status, await res.text());
+    return null;
+  }
+  const data = (await res.json()) as { id: string };
+  return data.id;
+}
+
 export async function sendChannelMessage(
   env: Env,
   content: string,
