@@ -115,6 +115,7 @@ function resolveStoreRow(
 export interface BeizhuRule {
   tag?: string;
   note?: string;
+  items?: Array<{ name: string; amount: number }>;
 }
 
 export const BEIZHU_RULES: Record<string, BeizhuRule> = {
@@ -187,6 +188,9 @@ export const BEIZHU_RULES: Record<string, BeizhuRule> = {
   '機油350 後輪1450': { note: '機油350 後輪1450' },
   '機油+齒輪油': { note: '機油+齒輪油' },
   '迪爵 機油': { note: '迪爵 機油' },
+  // Rentals with mileage/duration notes
+  '租金 850 里程 668': { note: '里程 668', items: [{ name: '租金', amount: 850 }] },
+  '48hr 800 油錢 100': { note: '48hr', items: [{ name: '租金', amount: 800 }, { name: '油錢', amount: 100 }] },
   // Reimbursable work travel — suppress tag
   '公出 待請款': {},
   // Drug store + item
@@ -402,9 +406,11 @@ export function parseRow(cols: string[], lineNum: number, stats: ParseStats): Pa
   const categoryTag = tags.find((t) => t.includes(':')) ?? '';
   const itemTags = categoryTag ? [categoryTag] : [];
 
-  const parsedItems = beiZhu ? parseBeiZhuItems(beiZhu) : null;
-  const items = parsedItems
-    ? parsedItems.map((it) => ({ name: it.name, amount: it.amount, tags: itemTags }))
+  const beiZhuRuleItems = beiZhu ? BEIZHU_RULES[beiZhu]?.items : undefined;
+  const parsedItems = !beiZhuRuleItems && beiZhu ? parseBeiZhuItems(beiZhu) : null;
+  const itemList = beiZhuRuleItems ?? parsedItems;
+  const items = itemList
+    ? itemList.map((it) => ({ name: it.name, amount: it.amount, tags: itemTags }))
     : [{ name: rawItem || noteText, amount, tags: itemTags }];
 
   return {
