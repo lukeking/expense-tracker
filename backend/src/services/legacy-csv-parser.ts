@@ -189,7 +189,7 @@ export const BEIZHU_RULES: Record<string, BeizhuRule> = {
   '機油+齒輪油': { note: '機油+齒輪油' },
   '迪爵 機油': { note: '迪爵 機油' },
   // Rentals with mileage/duration notes
-  '租金 850 里程 668': { note: '里程 668', items: [{ name: '租金', amount: 850 }] },
+  '租金 850 里程 668': { items: [{ name: '租金', amount: 850 }, { name: '里程費', amount: 668 }] },
   '48hr 800 油錢 100': { note: '48hr', items: [{ name: '租金', amount: 800 }, { name: '油錢', amount: 100 }] },
   // Reimbursable work travel — suppress tag
   '公出 待請款': {},
