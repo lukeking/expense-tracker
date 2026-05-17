@@ -19,7 +19,7 @@
 
 **Purpose**: Schema change, type update, and file scaffolding. No user story work begins until T004 is done.
 
-- [x] T001 Write migration `backend/supabase/migrations/008_add_source_to_transactions.sql` — `ALTER TABLE transactions ADD COLUMN source TEXT` + sparse index on non-null source values
+- [x] T001 Write migration `backend/supabase/migrations/009_add_source_to_transactions.sql` — `ALTER TABLE transactions ADD COLUMN source TEXT` + sparse index on non-null source values
 - [x] T002 [P] Add `source?: string` to the `Transaction` interface in `backend/src/types.ts`
 - [x] T003 [P] Add `dry-run-*.txt` to `backend/.gitignore` (or root `.gitignore`) so preview files are never committed
 - [x] T004 [P] Create `backend/src/services/legacy-csv-parser.ts` with the `ParsedLegacyRow` interface (fields: `transaction_at`, `transaction_type`, `amount`, `note`, `items`, `tags`, `payment_method`, `source`, `is_matched`, `_dedup_key`, `_raw_line`) and module stub
@@ -106,7 +106,7 @@
 
 **Purpose**: End-to-end validation against real data before committing the import.
 
-- [ ] T026 [P] Apply migration `008_add_source_to_transactions.sql` to the production Supabase instance and confirm `source` column appears on `transactions`
+- [ ] T026 [P] Apply migration `009_add_source_to_transactions.sql` to the production Supabase instance and confirm `source` column appears on `transactions`
 - [ ] T027 Run full dry-run against `NaggingMoney_20260516082424_utf8.csv` per `quickstart.md` Step 2; review preview file and confirm: all 9 categories covered, zero unmapped, sample rows look correct, "Would insert ≈ 15,203"
 - [ ] T028 Run full import (non-dry-run) per `quickstart.md` Step 3; confirm terminal summary shows `Imported ≈ 15,197`, `Income (refund): 6`, `Deduplicated: 0`, `Parse failures: 0`
 - [ ] T029 Run `/summary all` in Discord and verify historical category totals appear; confirm no unexpected `其他` spike from unmapped categories

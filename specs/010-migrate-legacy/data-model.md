@@ -4,7 +4,7 @@
 
 ## Schema Change
 
-### New Migration: `008_add_source_to_transactions.sql`
+### New Migration: `009_add_source_to_transactions.sql`
 
 ```sql
 -- Add source column to track transaction origin

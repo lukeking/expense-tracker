@@ -59,7 +59,7 @@ backend/
 │   └── (no changes to existing files)
 ├── supabase/
 │   └── migrations/
-│       └── 008_add_source_to_transactions.sql  # NEW: adds source column
+│       └── 009_add_source_to_transactions.sql  # NEW: adds source column
 └── (no other changes)
 
 # Dry-run output (gitignored):

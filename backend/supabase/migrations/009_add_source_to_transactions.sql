@@ -1,4 +1,4 @@
--- 008_add_source_to_transactions.sql
+-- 009_add_source_to_transactions.sql
 -- Adds a source column to transactions to track record origin.
 -- Legacy migrated records are tagged with 'legacy_migration'.
 

@@ -4,14 +4,14 @@
 
 - `backend/.env` with `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` set
 - NaggingMoney CSV export in the repo root: `NaggingMoney_20260516082424_utf8.csv`
-- Migration `008_add_source_to_transactions.sql` applied to the database
+- Migration `009_add_source_to_transactions.sql` applied to the database
 
 ## Step 1: Apply the DB Migration
 
 Run migration `008` in the Supabase dashboard SQL editor or via CLI:
 
 ```sql
--- backend/supabase/migrations/008_add_source_to_transactions.sql
+-- backend/supabase/migrations/009_add_source_to_transactions.sql
 ALTER TABLE transactions ADD COLUMN source TEXT;
 CREATE INDEX idx_transactions_source ON transactions (source) WHERE source IS NOT NULL;
 ```

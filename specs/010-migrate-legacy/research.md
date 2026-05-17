@@ -30,7 +30,7 @@
 
 ## Decision 3: Source Column for Dedup
 
-**Decision**: Add `source TEXT` column to `transactions` via new migration `008_add_source_to_transactions.sql`. All legacy records are inserted with `source = 'legacy_migration'`. Dedup query filters on this value.
+**Decision**: Add `source TEXT` column to `transactions` via new migration `009_add_source_to_transactions.sql`. All legacy records are inserted with `source = 'legacy_migration'`. Dedup query filters on this value.
 
 **Rationale**: No existing mechanism to identify the origin of a transaction. Without a `source` column:
 - Cannot distinguish legacy records from manually entered ones in queries
