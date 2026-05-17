@@ -175,14 +175,22 @@ export const BEIZHU_RULES: Record<string, BeizhuRule> = {
   '大樹藥局 普拿疼': { tag: '大樹藥局', note: '普拿疼' },
   '普拿疼 大樹藥局': { tag: '大樹藥局', note: '普拿疼' },
   '圓石 伯爵紅茶35 冬瓜青40': { tag: '圓石', note: '伯爵紅茶35 冬瓜青40' },
-  // Laundry cost breakdowns — store as note, not tag
-  '洗 70 烘 50': { note: '洗 70 烘 50' },
-  '洗 100 烘 50': { note: '洗 100 烘 50' },
-  '洗70 烘50': { note: '洗70 烘50' },
-  '洗100 烘70': { note: '洗100 烘70' },
-  '床單 洗70 烘50': { note: '床單 洗70 烘50' },
-  // Maintenance details — store as note, not tag
+  // Laundry: suppress tag; amounts parsed into transaction_items by parseBeiZhuItems()
+  '洗 70 烘 50': {},
+  '洗 100 烘 50': {},
+  '洗70 烘50': {},
+  '洗100 烘70': {},
+  '床單 洗70 烘50': {},
+  // Maintenance details — note only, no tag
   '機油 前後輪更換': { note: '機油 前後輪更換' },
+  '機油 前煞車皮': { note: '機油 前煞車皮' },
+  '機油350 後輪1450': { note: '機油350 後輪1450' },
+  '機油+齒輪油': { note: '機油+齒輪油' },
+  '迪爵 機油': { note: '迪爵 機油' },
+  // Reimbursable work travel — suppress tag
+  '公出 待請款': {},
+  // Drug store + item
+  '大樹 艾歐復隆': { tag: '大樹', note: '艾歐復隆' },
 };
 
 // -- Subcategory normalisation --
@@ -202,6 +210,39 @@ const SUBCATEGORY_REMAP: Record<string, string> = {
 function normalizeSubcategory(raw: string): string {
   const stripped = raw.replace(/ NT$/, '').trim();
   return SUBCATEGORY_REMAP[stripped] ?? stripped;
+}
+
+// Parse beiZhu values that contain multiple named amounts into transaction_items.
+// Returns null when beiZhu doesn't match a known multi-item pattern.
+export function parseBeiZhuItems(
+  beiZhu: string,
+): Array<{ name: string; amount: number }> | null {
+  // Laundry: [床單 ]洗N 烘N
+  const laundry = beiZhu.match(/^(床單\s+)?洗\s*(\d+)\s+烘\s*(\d+)$/);
+  if (laundry) {
+    const pfx = laundry[1] ? '床單' : '';
+    return [
+      { name: pfx + '洗衣', amount: parseInt(laundry[2]) },
+      { name: pfx + '烘衣', amount: parseInt(laundry[3]) },
+    ];
+  }
+  // Rental with mileage: 租金 NNN 里程 NNN
+  const rental = beiZhu.match(/^租金\s+(\d+)\s+里程\s+(\d+)$/);
+  if (rental) {
+    return [
+      { name: '租金', amount: parseInt(rental[1]) },
+      { name: '里程費', amount: parseInt(rental[2]) },
+    ];
+  }
+  // Rental with fuel: NNhr NNN 油錢 NNN
+  const rentalFuel = beiZhu.match(/^(\d+)hr\s+(\d+)\s+油錢\s+(\d+)$/);
+  if (rentalFuel) {
+    return [
+      { name: `租車${rentalFuel[1]}hr`, amount: parseInt(rentalFuel[2]) },
+      { name: '油錢', amount: parseInt(rentalFuel[3]) },
+    ];
+  }
+  return null;
 }
 
 // Full-tag corrections: a built category:sub tag → replacement tags.
@@ -375,13 +416,19 @@ export function parseRow(cols: string[], lineNum: number, stats: ParseStats): Pa
 
   const dedupKey = buildDedupKey(amount, transactionAt, noteText);
   const categoryTag = tags.find((t) => t.includes(':')) ?? '';
+  const itemTags = categoryTag ? [categoryTag] : [];
+
+  const parsedItems = beiZhu ? parseBeiZhuItems(beiZhu) : null;
+  const items = parsedItems
+    ? parsedItems.map((it) => ({ name: it.name, amount: it.amount, tags: itemTags }))
+    : [{ name: rawItem || noteText, amount, tags: itemTags }];
 
   return {
     transaction_at: transactionAt,
     transaction_type: txType,
     amount,
     note: noteText,
-    items: [{ name: rawItem || noteText, amount, tags: categoryTag ? [categoryTag] : [] }],
+    items,
     tags,
     payment_method: paymentMethod,
     source: 'legacy_migration',
