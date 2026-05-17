@@ -175,6 +175,14 @@ const BEIZHU_RULES: Record<string, BeizhuRule> = {
   '大樹藥局 普拿疼': { tag: '大樹藥局', note: '普拿疼' },
   '普拿疼 大樹藥局': { tag: '大樹藥局', note: '普拿疼' },
   '圓石 伯爵紅茶35 冬瓜青40': { tag: '圓石', note: '伯爵紅茶35 冬瓜青40' },
+  // Laundry cost breakdowns — store as note, not tag
+  '洗 70 烘 50': { note: '洗 70 烘 50' },
+  '洗 100 烘 50': { note: '洗 100 烘 50' },
+  '洗70 烘50': { note: '洗70 烘50' },
+  '洗100 烘70': { note: '洗100 烘70' },
+  '床單 洗70 烘50': { note: '床單 洗70 烘50' },
+  // Maintenance details — store as note, not tag
+  '機油 前後輪更換': { note: '機油 前後輪更換' },
 };
 
 // -- Subcategory normalisation --
@@ -188,7 +196,6 @@ const SUBCATEGORY_REMAP: Record<string, string> = {
   '文具用品費': '文具',   // simplify
   '文具用品': '文具',    // simplify
   '加油': '加油費',      // consistent with 加油費 NT → 加油費
-  '燃料費': '加油費',    // motorcycle fuel = refuelling
   '計程車': '搭計程車',  // consistent with 搭公車/搭火車/搭捷運
 };
 
@@ -196,6 +203,12 @@ function normalizeSubcategory(raw: string): string {
   const stripped = raw.replace(/ NT$/, '').trim();
   return SUBCATEGORY_REMAP[stripped] ?? stripped;
 }
+
+// Full-tag corrections: a built category:sub tag → replacement tags.
+// Used when category was misclassified in the source app.
+const TAG_CORRECTIONS: Record<string, string[]> = {
+  '行:神盾': ['其他:App', '神盾'],
+};
 
 const PAYMENT_MAP: Record<string, PaymentMethod> = {
   '現金': 'cash',
@@ -346,6 +359,9 @@ export function parseRow(cols: string[], lineNum: number, stats: ParseStats): Pa
       }
     }
   }
+
+  // Fix misclassified category:sub tags
+  tags = tags.flatMap((t) => TAG_CORRECTIONS[t] ?? [t]);
 
   // Payment method from account field
   const account = (txType === 'expense' ? cols[2] : cols[3]) ?? '';
