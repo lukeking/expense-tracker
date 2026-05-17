@@ -226,22 +226,6 @@ export function parseBeiZhuItems(
       { name: pfx + '烘衣', amount: parseInt(laundry[3]) },
     ];
   }
-  // Rental with mileage: 租金 NNN 里程 NNN
-  const rental = beiZhu.match(/^租金\s+(\d+)\s+里程\s+(\d+)$/);
-  if (rental) {
-    return [
-      { name: '租金', amount: parseInt(rental[1]) },
-      { name: '里程費', amount: parseInt(rental[2]) },
-    ];
-  }
-  // Rental with fuel: NNhr NNN 油錢 NNN
-  const rentalFuel = beiZhu.match(/^(\d+)hr\s+(\d+)\s+油錢\s+(\d+)$/);
-  if (rentalFuel) {
-    return [
-      { name: `租車${rentalFuel[1]}hr`, amount: parseInt(rentalFuel[2]) },
-      { name: '油錢', amount: parseInt(rentalFuel[3]) },
-    ];
-  }
   return null;
 }
 
