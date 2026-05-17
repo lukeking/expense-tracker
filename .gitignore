@@ -27,6 +27,7 @@ android/local.properties
 # Test data
 test-invoices.csv
 *.test.csv
+NaggingMoney_*.csv
 
 # Migration script output files
 dry-run-*.txt
