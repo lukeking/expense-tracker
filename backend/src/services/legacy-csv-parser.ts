@@ -6,7 +6,7 @@ export interface ParsedLegacyRow {
   transaction_type: 'expense' | 'refund';
   amount: number;
   note: string;
-  items: { name: string; amount: number }[];
+  items: { name: string; amount: number; tags: string[] }[];
   tags: string[];
   payment_method: PaymentMethod;
   source: 'legacy_migration';
@@ -257,13 +257,14 @@ export function parseRow(cols: string[], lineNum: number, stats: ParseStats): Pa
   }
 
   const dedupKey = buildDedupKey(amount, transactionAt, noteText);
+  const categoryTag = tags.find((t) => t.includes(':')) ?? '';
 
   return {
     transaction_at: transactionAt,
     transaction_type: txType,
     amount,
     note: noteText,
-    items: [{ name: rawItem || noteText, amount }],
+    items: [{ name: rawItem || noteText, amount, tags: categoryTag ? [categoryTag] : [] }],
     tags,
     payment_method: paymentMethod,
     source: 'legacy_migration',

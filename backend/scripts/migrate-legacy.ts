@@ -111,26 +111,59 @@ async function insertBatch(
 
   if (toInsert.length === 0) return;
 
-  // Strip internal-only fields before insert
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const dbRows = toInsert.map(({ _dedup_key, _raw_line, ...rest }) => rest);
+  // Strip internal-only and items fields before transaction insert
+  const dbRows = toInsert.map(({ _dedup_key: _d, _raw_line: _r, items: _i, ...rest }) => rest);
 
-  const { error } = await supabase.from('transactions').insert(dbRows as never[]);
+  const { data: insertedTxs, error } = await supabase
+    .from('transactions')
+    .insert(dbRows as never[])
+    .select('id');
 
   if (error) {
     // Batch-level failure — fall back to row-by-row to maximise commits (T013)
     for (let i = 0; i < toInsert.length; i++) {
-      const { _dedup_key, _raw_line, ...rowData } = toInsert[i];
-      const { error: rowErr } = await supabase.from('transactions').insert(rowData as unknown as never[]);
+      const { _dedup_key, _raw_line, items, ...rowData } = toInsert[i];
+      const { data: txData, error: rowErr } = await supabase
+        .from('transactions')
+        .insert(rowData as unknown as never[])
+        .select('id')
+        .single();
       if (rowErr) {
         counters.failed++;
         console.warn(`[migrate-legacy] Row ${_raw_line} failed: ${rowErr.message}`);
       } else {
+        const itemRows = items.map((item, idx) => ({
+          transaction_id: (txData as { id: string }).id,
+          name: item.name,
+          amount: item.amount,
+          tags: item.tags,
+          sort_order: idx,
+        }));
+        if (itemRows.length > 0) {
+          await supabase.from('transaction_items').insert(itemRows);
+        }
         dedupSet.add(_dedup_key);
         counters.imported++;
       }
     }
     return;
+  }
+
+  // Bulk-insert items for the successfully inserted transactions
+  const itemRows = (insertedTxs ?? []).flatMap((tx: { id: string }, i: number) =>
+    toInsert[i].items.map((item, idx) => ({
+      transaction_id: tx.id,
+      name: item.name,
+      amount: item.amount,
+      tags: item.tags,
+      sort_order: idx,
+    }))
+  );
+  if (itemRows.length > 0) {
+    const { error: itemErr } = await supabase.from('transaction_items').insert(itemRows);
+    if (itemErr) {
+      console.warn(`[migrate-legacy] transaction_items insert failed for batch: ${itemErr.message}`);
+    }
   }
 
   for (const row of toInsert) {
