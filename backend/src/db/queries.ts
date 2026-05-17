@@ -1,11 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Transaction, Receipt, BudgetSettings, TransactionItem, PaymentMethod, MobileWallet, TransactionType, Invoice, ImportRun, ParsedInvoice, InvoiceMatchStatus } from '../types';
+import type { Transaction, Receipt, BudgetSettings, TransactionItem, PaymentMethod, MobileWallet, TransactionType, Invoice, ImportRun, ParsedInvoice, InvoiceMatchStatus, TransactionItemRow } from '../types';
 
 export async function insertTransaction(
   supabase: SupabaseClient,
   data: {
     amount: number;
-    items: TransactionItem[] | null;
+    items?: TransactionItem[] | null;
     tags: string[];
     payment_method: PaymentMethod;
     wallet?: MobileWallet | null;
@@ -17,13 +17,36 @@ export async function insertTransaction(
     transaction_at: string;
   }
 ): Promise<Transaction> {
+  const { items: _items, ...insertData } = data;
   const { data: row, error } = await supabase
     .from('transactions')
-    .insert(data)
+    .insert(insertData)
     .select()
     .single();
   if (error) throw new Error(`insertTransaction: ${error.message}`);
   return row as Transaction;
+}
+
+export async function insertTransactionItems(
+  supabase: SupabaseClient,
+  transactionId: string,
+  items: { name: string; amount?: number | null; tags?: string[]; sort_order?: number }[]
+): Promise<void> {
+  if (items.length === 0) return;
+  const rows = items.map((item, i) => {
+    if (item.amount != null && item.amount <= 0) {
+      throw new Error(`insertTransactionItems: item amount must be > 0, got ${item.amount}`);
+    }
+    return {
+      transaction_id: transactionId,
+      name: item.name,
+      amount: item.amount ?? null,
+      tags: item.tags ?? [],
+      sort_order: item.sort_order ?? i,
+    };
+  });
+  const { error } = await supabase.from('transaction_items').insert(rows);
+  if (error) throw new Error(`insertTransactionItems: ${error.message}`);
 }
 
 export async function updateDiscordMessageId(
@@ -169,13 +192,13 @@ export async function findParentCandidates(
   supabase: SupabaseClient,
   searchTerm: string,
   windowDays: number
-): Promise<Pick<Transaction, 'id' | 'amount' | 'items' | 'note' | 'transaction_at'>[]> {
+): Promise<(Pick<Transaction, 'id' | 'amount' | 'note' | 'transaction_at'> & { transaction_items: { name: string }[] })[]> {
   const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString();
-  // PostgREST cannot cast JSONB to text in filters, so fetch all expense rows in the
+  // PostgREST cannot filter on related table columns, so fetch all expense rows in the
   // window and filter in JS. At ~100 tx/month this is at most ~300 rows over 90 days.
   const { data, error } = await supabase
     .from('transactions')
-    .select('id, amount, items, note, transaction_at')
+    .select('id, amount, note, tags, transaction_at, transaction_items(name)')
     .eq('transaction_type', 'expense')
     .gte('transaction_at', since)
     .order('transaction_at', { ascending: false });
@@ -183,10 +206,13 @@ export async function findParentCandidates(
   const lower = searchTerm.toLowerCase();
   const matches = (data ?? []).filter(
     (row) =>
-      JSON.stringify(row.items ?? []).toLowerCase().includes(lower) ||
-      (row.note ?? '').toLowerCase().includes(lower)
+      (row.transaction_items as { name: string }[])?.some((i) =>
+        i.name.toLowerCase().includes(lower)
+      ) ||
+      (row.note ?? '').toLowerCase().includes(lower) ||
+      (row.tags as string[])?.some((t) => t.toLowerCase().includes(lower))
   );
-  return matches.slice(0, 5) as Pick<Transaction, 'id' | 'amount' | 'items' | 'note' | 'transaction_at'>[];
+  return matches.slice(0, 5) as (Pick<Transaction, 'id' | 'amount' | 'note' | 'transaction_at'> & { transaction_items: { name: string }[] })[];
 }
 
 export async function updateParentTransactionId(
@@ -430,20 +456,75 @@ export async function findTransactionsWithoutInvoiceInRange(
   return (data ?? []) as Transaction[];
 }
 
+export type TransactionForPeriod = Pick<Transaction, 'id' | 'amount' | 'tags' | 'transaction_at'> & {
+  transaction_items: Pick<TransactionItemRow, 'amount' | 'tags'>[];
+};
+
 export async function getTransactionsForPeriod(
   supabase: SupabaseClient,
   start: Date,
   end: Date
-): Promise<Pick<Transaction, 'id' | 'amount' | 'tags' | 'transaction_at'>[]> {
+): Promise<TransactionForPeriod[]> {
   const { data, error } = await supabase
     .from('transactions')
-    .select('id, amount, tags, transaction_at')
+    .select('id, amount, tags, transaction_at, transaction_items(amount, tags)')
     .eq('transaction_type', 'expense')
     .gte('transaction_at', start.toISOString())
     .lt('transaction_at', end.toISOString())
     .order('transaction_at', { ascending: true });
   if (error) throw new Error(`getTransactionsForPeriod: ${error.message}`);
-  return (data ?? []) as Pick<Transaction, 'id' | 'amount' | 'tags' | 'transaction_at'>[];
+  return (data ?? []) as TransactionForPeriod[];
+}
+
+export async function getTransactionWithItems(
+  supabase: SupabaseClient,
+  txId: string
+): Promise<{ amount: number; note: string | null; transaction_items: Pick<TransactionItemRow, 'id' | 'name' | 'amount'>[] } | null> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('amount, note, transaction_items(id, name, amount)')
+    .eq('id', txId)
+    .single();
+  if (error) throw new Error(`getTransactionWithItems: ${error.message}`);
+  return data as { amount: number; note: string | null; transaction_items: Pick<TransactionItemRow, 'id' | 'name' | 'amount'>[] } | null;
+}
+
+export async function updateTransactionItemAmount(
+  supabase: SupabaseClient,
+  itemId: string,
+  newAmount: number
+): Promise<void> {
+  const { error } = await supabase
+    .from('transaction_items')
+    .update({ amount: newAmount })
+    .eq('id', itemId);
+  if (error) throw new Error(`updateTransactionItemAmount: ${error.message}`);
+}
+
+export async function getTransactionItems(
+  supabase: SupabaseClient,
+  transactionId: string
+): Promise<TransactionItemRow[]> {
+  const { data, error } = await supabase
+    .from('transaction_items')
+    .select('*')
+    .eq('transaction_id', transactionId)
+    .order('sort_order', { ascending: true });
+  if (error) throw new Error(`getTransactionItems: ${error.message}`);
+  return (data ?? []) as TransactionItemRow[];
+}
+
+export async function replaceTransactionItems(
+  supabase: SupabaseClient,
+  transactionId: string,
+  items: { name: string; amount?: number | null; tags?: string[]; sort_order?: number }[]
+): Promise<void> {
+  const { error: deleteError } = await supabase
+    .from('transaction_items')
+    .delete()
+    .eq('transaction_id', transactionId);
+  if (deleteError) throw new Error(`replaceTransactionItems delete: ${deleteError.message}`);
+  await insertTransactionItems(supabase, transactionId, items);
 }
 
 export async function mergeTransactionFields(

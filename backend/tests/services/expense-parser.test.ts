@@ -1,198 +1,210 @@
 import { describe, it, expect } from 'vitest';
-import { parseDescription } from '../../src/services/expense-parser';
+import { parseTags, parseItems } from '../../src/services/expense-parser';
 
-describe('parseDescription — contract examples', () => {
-  it('credit card + category tag + note + two items, sums match → no warnings', () => {
-    const result = parseDescription('信用卡, #食:午餐, 麥當勞, 大麥克套餐 250, 蘋果派 50', 300);
-    expect(result.paymentMethod).toBe('credit_card');
-    expect(result.categoryTag).toBe('食:午餐');
-    expect(result.note).toBe('麥當勞');
+// ─── parseTags ────────────────────────────────────────────────────────────────
+
+describe('parseTags', () => {
+  it('null/undefined/empty → all empty, no error', () => {
+    expect(parseTags(null)).toEqual({ plainTags: [], sharedCategory: null, error: null });
+    expect(parseTags(undefined)).toEqual({ plainTags: [], sharedCategory: null, error: null });
+    expect(parseTags('')).toEqual({ plainTags: [], sharedCategory: null, error: null });
+    expect(parseTags('  ')).toEqual({ plainTags: [], sharedCategory: null, error: null });
+  });
+
+  it('single plain tag → plainTags', () => {
+    expect(parseTags('#麥當勞')).toEqual({ plainTags: ['麥當勞'], sharedCategory: null, error: null });
+  });
+
+  it('multiple plain tags → all in plainTags', () => {
+    expect(parseTags('#麥當勞,#7-11')).toEqual({ plainTags: ['麥當勞', '7-11'], sharedCategory: null, error: null });
+  });
+
+  it('single shared category → sharedCategory set', () => {
+    expect(parseTags('#食:午餐')).toEqual({ plainTags: [], sharedCategory: '食:午餐', error: null });
+  });
+
+  it('plain tag + shared category → both set', () => {
+    expect(parseTags('#麥當勞,#食:午餐')).toEqual({ plainTags: ['麥當勞'], sharedCategory: '食:午餐', error: null });
+  });
+
+  it('two shared categories → error', () => {
+    const result = parseTags('#食:午餐,#住:租金');
+    expect(result.error).toBeTruthy();
+    expect(result.error).toContain('#住:租金');
+  });
+
+  it('non-# token → error', () => {
+    const result = parseTags('麥當勞');
+    expect(result.error).toBeTruthy();
+    expect(result.error).toContain('麥當勞');
+  });
+
+  it('spaces around commas are trimmed', () => {
+    expect(parseTags(' #麥當勞 , #食:午餐 ')).toEqual({ plainTags: ['麥當勞'], sharedCategory: '食:午餐', error: null });
+  });
+});
+
+// ─── parseItems ───────────────────────────────────────────────────────────────
+
+describe('parseItems — empty / no description', () => {
+  it('null description, no sharedCategory → empty items', () => {
+    expect(parseItems(null, 120, null)).toEqual({ items: [], warnings: [], error: null });
+  });
+
+  it('null description, with sharedCategory → implicit item from subcategory', () => {
+    expect(parseItems(null, 120, '食:午餐')).toEqual({
+      items: [{ name: '午餐', amount: 120, tags: ['食:午餐'] }],
+      warnings: [],
+      error: null,
+    });
+  });
+
+  it('empty string description, with sharedCategory → implicit item', () => {
+    expect(parseItems('  ', 35, '行:捷運')).toEqual({
+      items: [{ name: '捷運', amount: 35, tags: ['行:捷運'] }],
+      warnings: [],
+      error: null,
+    });
+  });
+});
+
+describe('parseItems — sole item amount inference', () => {
+  it('#x:y bare (sole) → item name=subcategory, amount=total', () => {
+    expect(parseItems('#食:午餐', 120, null)).toEqual({
+      items: [{ name: '午餐', amount: 120, tags: ['食:午餐'] }],
+      warnings: [],
+      error: null,
+    });
+  });
+
+  it('#x:y name (sole, no amount) → amount inferred from total', () => {
+    expect(parseItems('#食:午餐 便當', 120, null)).toEqual({
+      items: [{ name: '便當', amount: 120, tags: ['食:午餐'] }],
+      warnings: [],
+      error: null,
+    });
+  });
+
+  it('untagged name amount (sole) → amount explicit, tags from sharedCategory', () => {
+    expect(parseItems('便當 120', 120, '食:午餐')).toEqual({
+      items: [{ name: '便當', amount: 120, tags: ['食:午餐'] }],
+      warnings: [],
+      error: null,
+    });
+  });
+
+  it('untagged bare name (sole, no amount) → amount inferred, tags from sharedCategory', () => {
+    expect(parseItems('便當', 120, '食:午餐')).toEqual({
+      items: [{ name: '便當', amount: 120, tags: ['食:午餐'] }],
+      warnings: [],
+      error: null,
+    });
+  });
+});
+
+describe('parseItems — explicit item token (#x:y name amount)', () => {
+  it('single explicit item', () => {
+    expect(parseItems('#食:早餐 便當 60', 60, null)).toEqual({
+      items: [{ name: '便當', amount: 60, tags: ['食:早餐'] }],
+      warnings: [],
+      error: null,
+    });
+  });
+
+  it('multiple fully specified items', () => {
+    expect(parseItems('#食:早餐 便當 60,#醫:藥 感冒藥 120', 180, null)).toEqual({
+      items: [
+        { name: '便當', amount: 60, tags: ['食:早餐'] },
+        { name: '感冒藥', amount: 120, tags: ['醫:藥'] },
+      ],
+      warnings: [],
+      error: null,
+    });
+  });
+});
+
+describe('parseItems — null-amount items (multi-item)', () => {
+  it('two #x:y name items (no amounts) → both null', () => {
+    const result = parseItems('#食:零食 薯片,#住:日用品 洗髮精', 200, null);
     expect(result.items).toEqual([
-      { name: '大麥克套餐', amount: 250 },
-      { name: '蘋果派', amount: 50 },
+      { name: '薯片', amount: undefined, tags: ['食:零食'] },
+      { name: '洗髮精', amount: undefined, tags: ['住:日用品'] },
     ]);
-    expect(result.warnings).toHaveLength(0);
+    expect(result.error).toBeNull();
   });
 
-  it('easy card + category tag + note, no explicit items → auto-creates item from subcategory, no warnings', () => {
-    const result = parseDescription('悠遊卡, 亞東醫院→忠孝復興, #行:捷運', 35);
-    expect(result.paymentMethod).toBe('easy_card');
-    expect(result.categoryTag).toBe('行:捷運');
-    expect(result.note).toBe('亞東醫院→忠孝復興');
-    expect(result.items).toEqual([{ name: '捷運', amount: 35 }]);
-    expect(result.warnings).toHaveLength(0);
-  });
-
-  it('cash + plain tag (no colon) → categoryTag=null, plainTags set', () => {
-    const result = parseDescription('現金, #三商巧福', 80);
-    expect(result.paymentMethod).toBe('cash');
-    expect(result.categoryTag).toBeNull();
-    expect(result.plainTags).toEqual(['三商巧福']);
-    expect(result.note).toBe('');
-    expect(result.items).toHaveLength(0);
-    expect(result.warnings).toHaveLength(0);
-  });
-
-  it('sum mismatch → mismatch warning', () => {
-    const result = parseDescription('現金, #食:午餐, 大麥克套餐 250, 蘋果派 50', 350);
-    expect(result.paymentMethod).toBe('cash');
-    expect(result.categoryTag).toBe('食:午餐');
+  it('mixed: one with amount, one without → no-amount stays null', () => {
+    const result = parseItems('#食:早餐 便當 60,#醫:藥 感冒藥', 180, null);
     expect(result.items).toEqual([
-      { name: '大麥克套餐', amount: 250 },
-      { name: '蘋果派', amount: 50 },
+      { name: '便當', amount: 60, tags: ['食:早餐'] },
+      { name: '感冒藥', amount: undefined, tags: ['醫:藥'] },
     ]);
-    expect(result.warnings).toHaveLength(1);
-    expect(result.warnings[0]).toContain('NT$300 ≠ 總金額 NT$350');
-    expect(result.warnings[0]).toContain('NT$50 未歸類');
+    expect(result.error).toBeNull();
   });
 });
 
-describe('parseDescription — FR-005 duplicate category warning', () => {
-  it('second #cat:sub token emits duplicate warning and is ignored', () => {
-    const result = parseDescription('#食:午餐, #行:捷運, 麥當勞 100', 100);
-    expect(result.categoryTag).toBe('食:午餐');
-    expect(result.warnings).toHaveLength(1);
-    expect(result.warnings[0]).toContain('僅使用第一個分類標籤 #食:午餐');
-    expect(result.warnings[0]).toContain('其餘忽略');
+describe('parseItems — untagged items with sharedCategory', () => {
+  it('multiple untagged items inherit sharedCategory', () => {
+    expect(parseItems('大麥克 200,可樂 50', 250, '食:午餐')).toEqual({
+      items: [
+        { name: '大麥克', amount: 200, tags: ['食:午餐'] },
+        { name: '可樂', amount: 50, tags: ['食:午餐'] },
+      ],
+      warnings: [],
+      error: null,
+    });
   });
 
-  it('duplicate warning shows the first categoryTag in the message', () => {
-    const result = parseDescription('#住:租金, #食:外食', 1000);
-    expect(result.categoryTag).toBe('住:租金');
-    expect(result.warnings[0]).toContain('#住:租金');
-  });
-});
-
-describe('parseDescription — FR-006 mismatch cases', () => {
-  it('items sum greater than totalAmount → mismatch warning', () => {
-    const result = parseDescription('咖啡 100, 蛋糕 80', 150);
-    expect(result.warnings).toHaveLength(1);
-    expect(result.warnings[0]).toContain('NT$180 ≠ 總金額 NT$150');
-    expect(result.warnings[0]).toContain('NT$30 未歸類');
+  it('untagged items without sharedCategory → empty tags', () => {
+    expect(parseItems('大麥克 200,可樂 50', 250, null)).toEqual({
+      items: [
+        { name: '大麥克', amount: 200, tags: [] },
+        { name: '可樂', amount: 50, tags: [] },
+      ],
+      warnings: [],
+      error: null,
+    });
   });
 
-  it('no items → no mismatch warning regardless of totalAmount', () => {
-    const result = parseDescription('現金, #食:外食', 999);
-    expect(result.warnings).toHaveLength(0);
-  });
-
-  it('items sum equals totalAmount exactly → no warning', () => {
-    const result = parseDescription('現金, 咖啡 80', 80);
-    expect(result.warnings).toHaveLength(0);
-  });
-});
-
-describe('parseDescription — payment keyword matching', () => {
-  it.each([
-    ['現金', 'cash'],
-    ['cash', 'cash'],
-    ['信用卡', 'credit_card'],
-    ['credit card', 'credit_card'],
-    ['credit_card', 'credit_card'],
-    ['悠遊卡', 'easy_card'],
-    ['easy card', 'easy_card'],
-    ['easy_card', 'easy_card'],
-    ['行動支付', 'prepaid_wallet'],
-    ['line pay', 'prepaid_wallet'],
-    ['google pay', 'prepaid_wallet'],
-    ['apple pay', 'prepaid_wallet'],
-    ['prepaid_wallet', 'prepaid_wallet'],
-    ['銀行轉帳', 'bank_account'],
-    ['bank transfer', 'bank_account'],
-    ['bank_account', 'bank_account'],
-  ])('%s → %s', (keyword, expected) => {
-    const result = parseDescription(keyword, 0);
-    expect(result.paymentMethod).toBe(expected);
-  });
-
-  it('payment keywords are case-insensitive', () => {
-    expect(parseDescription('CASH', 0).paymentMethod).toBe('cash');
-    expect(parseDescription('LINE PAY', 0).paymentMethod).toBe('prepaid_wallet');
-  });
-
-  it('no payment keyword → paymentMethod is null', () => {
-    const result = parseDescription('#食:午餐, 麥當勞 100', 100);
-    expect(result.paymentMethod).toBeNull();
-  });
-});
-
-describe('parseDescription — line item classification', () => {
-  it('single-word token is not a line item (no numeric suffix)', () => {
-    const result = parseDescription('麥當勞', 100);
-    expect(result.items).toHaveLength(0);
-    expect(result.note).toBe('麥當勞');
-  });
-
-  it('multi-word token with numeric last word → line item', () => {
-    const result = parseDescription('大麥克套餐 250', 250);
-    expect(result.items).toEqual([{ name: '大麥克套餐', amount: 250 }]);
-  });
-
-  it('multi-word note (no numeric last word) → note', () => {
-    const result = parseDescription('亞東醫院 忠孝復興', 100);
-    expect(result.items).toHaveLength(0);
-    expect(result.note).toBe('亞東醫院 忠孝復興');
-  });
-});
-
-describe('parseDescription — note accumulation', () => {
-  it('multiple non-classified tokens → joined with space', () => {
-    const result = parseDescription('早餐, 便利商店', 50);
-    expect(result.note).toBe('早餐 便利商店');
-  });
-
-  it('empty description → all fields empty/null', () => {
-    const result = parseDescription('', 100);
-    expect(result.paymentMethod).toBeNull();
-    expect(result.categoryTag).toBeNull();
-    expect(result.plainTags).toHaveLength(0);
-    expect(result.items).toHaveLength(0);
-    expect(result.note).toBe('');
-    expect(result.warnings).toHaveLength(0);
-  });
-});
-
-describe('parseDescription — auto-create item from subcategory (FR-001)', () => {
-  it('#category:subcategory only → auto-creates item with subcategory name and total amount', () => {
-    const result = parseDescription('#food:餐飲', 300);
-    expect(result.items).toEqual([{ name: '餐飲', amount: 300 }]);
-    expect(result.categoryTag).toBe('food:餐飲');
-    expect(result.warnings).toHaveLength(0);
-  });
-
-  it('#category:subcategory + free-text note, no explicit items → auto-creates item', () => {
-    const result = parseDescription('早餐, #food:餐飲', 150);
-    expect(result.items).toEqual([{ name: '餐飲', amount: 150 }]);
-    expect(result.note).toBe('早餐');
-    expect(result.warnings).toHaveLength(0);
-  });
-
-  it('#category:subcategory + explicit item tokens → explicit items win, no auto-create', () => {
-    const result = parseDescription('#food:餐飲, 牛肉麵 120, 飲料 60', 180);
+  it('mixed: own-tagged item ignores sharedCategory, untagged item inherits it', () => {
+    const result = parseItems('#飲:飲料 可樂 50,薯條 50', 100, '食:午餐');
     expect(result.items).toEqual([
-      { name: '牛肉麵', amount: 120 },
-      { name: '飲料', amount: 60 },
+      { name: '可樂', amount: 50, tags: ['飲:飲料'] },
+      { name: '薯條', amount: 50, tags: ['食:午餐'] },
     ]);
-    expect(result.warnings).toHaveLength(0);
+  });
+});
+
+describe('parseItems — hard reject cases', () => {
+  it('bare #x:y mixed with other item tokens → error', () => {
+    const result = parseItems('#食:午餐,#醫:藥 感冒藥 120', 180, null);
+    expect(result.error).toBeTruthy();
+    expect(result.error).toContain('純分類標籤');
   });
 
-  it('plain #tag only (no colon) → no auto-create', () => {
-    const result = parseDescription('#lunch', 100);
-    expect(result.items).toHaveLength(0);
-    expect(result.categoryTag).toBeNull();
-    expect(result.plainTags).toEqual(['lunch']);
+  it('bare #x:y mixed with untagged item → error', () => {
+    const result = parseItems('#食:午餐,便當 60', 120, null);
+    expect(result.error).toBeTruthy();
   });
 
-  it('empty subcategory #food: → no auto-create', () => {
-    const result = parseDescription('#food:', 200);
-    expect(result.items).toHaveLength(0);
+  it('#x (no colon) in description → error directing to tags field', () => {
+    const result = parseItems('#麥當勞', 100, null);
+    expect(result.error).toBeTruthy();
+    expect(result.error).toContain('tags 欄位');
   });
 
-  it('multiple category tags, no items → auto-create from first subcategory only', () => {
-    const result = parseDescription('#食:午餐, #行:捷運', 300);
-    expect(result.items).toEqual([{ name: '午餐', amount: 300 }]);
-    expect(result.categoryTag).toBe('食:午餐');
-    expect(result.warnings).toHaveLength(1);
-    expect(result.warnings[0]).toContain('僅使用第一個分類標籤');
+  it('items sum > totalAmount → error', () => {
+    const result = parseItems('#食:午餐 便當 100,#飲:飲料 可樂 80', 150, null);
+    expect(result.error).toBeTruthy();
+    expect(result.error).toContain('NT$180');
+    expect(result.error).toContain('NT$150');
+  });
+
+  it('items sum equals total → no error', () => {
+    expect(parseItems('#食:午餐 便當 60,#醫:藥 藥 60', 120, null).error).toBeNull();
+  });
+
+  it('items sum less than total → no error (remainder falls to 其他)', () => {
+    expect(parseItems('#食:午餐 便當 60', 120, null).error).toBeNull();
   });
 });

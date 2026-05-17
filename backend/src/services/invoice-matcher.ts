@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { ParsedInvoice, ImportRun, Invoice, Env } from '../types';
+import type { ParsedInvoice, ImportRun, Invoice, InvoiceItem, Env } from '../types';
 import {
   findExistingInvoiceNumbers,
   findMatchingExpenseTransaction,
@@ -11,12 +11,23 @@ import {
   findAllAmbiguousInvoices,
   resolveHeldInvoice,
   insertTransaction,
+  insertTransactionItems,
+  getTransactionItems,
+  updateTransactionItemAmount,
+  replaceTransactionItems,
 } from '../db/queries';
 import { parseExpenseText } from './gemini';
 
 export interface AmbiguousItem {
   invoice: ParsedInvoice;
   candidates: import('../types').Transaction[];
+}
+
+export interface ItemMismatchWarning {
+  sellerName: string | null;
+  amount: number;
+  discardedNames: string[];
+  newItemCount: number;
 }
 
 export interface ReconciliationResult {
@@ -41,12 +52,35 @@ export interface PipelineCounters {
   ambiguousItems: AmbiguousItem[];
   forexResolvedCount: number;
   parseFailedCount: number;
+  itemMismatchWarnings: ItemMismatchWarning[];
 }
 
 function chunk<T>(arr: T[], size: number): T[][] {
   const chunks: T[][] = [];
   for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
   return chunks;
+}
+
+async function populateItemsFromInvoice(
+  supabase: SupabaseClient,
+  transactionId: string,
+  invoiceLineItems: InvoiceItem[]
+): Promise<{ discardedNames: string[] }> {
+  if (invoiceLineItems.length === 0) return { discardedNames: [] };
+  const existingItems = await getTransactionItems(supabase, transactionId);
+  if (existingItems.length === invoiceLineItems.length) {
+    for (let i = 0; i < existingItems.length; i++) {
+      if (existingItems[i].amount == null) {
+        await updateTransactionItemAmount(supabase, existingItems[i].id, invoiceLineItems[i].amount);
+      }
+    }
+    return { discardedNames: [] };
+  }
+  const discardedNames = existingItems.map((item) => item.name);
+  await replaceTransactionItems(supabase, transactionId, invoiceLineItems.map((li, idx) => ({
+    name: li.name, amount: li.amount, tags: [], sort_order: idx,
+  })));
+  return { discardedNames };
 }
 
 export async function runImportPipeline(
@@ -68,6 +102,7 @@ export async function runImportPipeline(
     ambiguousItems: [],
     forexResolvedCount: 0,
     parseFailedCount: initialSkipped.parseFailedCount,
+    itemMismatchWarnings: [],
   };
 
   // Dedup check
@@ -97,6 +132,15 @@ export async function runImportPipeline(
           sellerTaxId: invoice.seller_tax_id || null,
           invoiceId: inv.id,
         });
+        const { discardedNames } = await populateItemsFromInvoice(supabase, tx.id, invoice.items);
+        if (discardedNames.length > 0) {
+          counters.itemMismatchWarnings.push({
+            sellerName: invoice.seller_name || null,
+            amount: invoice.net_amount,
+            discardedNames,
+            newItemCount: invoice.items.length,
+          });
+        }
         counters.matchedCount++;
       } else if (candidates.length > 1) {
         await insertInvoice(supabase, invoice, importRunId, 'ambiguous');
@@ -127,13 +171,14 @@ export async function runImportPipeline(
       amount: invoice.net_amount,
       transaction_type: 'expense',
       payment_method: 'cash',
-      items: invoice.items.length > 0
-        ? invoice.items.map((i) => ({ name: i.name, amount: i.amount }))
-        : parsed.items.map((i) => ({ name: i.name, amount: i.amount ?? 0 })),
       tags: parsed.tags,
       note: invoice.seller_name || null,
       transaction_at: invoice.invoice_date.toISOString(),
     });
+    const lineItems = invoice.items.length > 0
+      ? invoice.items.map((i, idx) => ({ name: i.name, amount: i.amount, tags: [] as string[], sort_order: idx }))
+      : parsed.items.map((i, idx) => ({ name: i.name, amount: i.amount ?? null, tags: i.tags ?? [], sort_order: idx }));
+    await insertTransactionItems(supabase, tx.id, lineItems);
     const inv = await insertInvoice(supabase, invoice, importRunId, 'auto_created', tx.id);
     await enrichTransaction(supabase, tx.id, {
       invoiceNumber: invoice.invoice_number,
@@ -177,6 +222,7 @@ export async function runReconciliationPass(supabase: SupabaseClient, env: Env):
         sellerTaxId: heldInvoice.seller_tax_id,
         invoiceId: heldInvoice.id,
       });
+      await populateItemsFromInvoice(supabase, exactTx.id, heldInvoice.items ?? []);
       result.forexLinked++;
       continue;
     }
@@ -200,11 +246,16 @@ export async function runReconciliationPass(supabase: SupabaseClient, env: Env):
       amount: heldInvoice.net_amount,
       transaction_type: 'expense',
       payment_method: 'cash',
-      items: parsed.items.map((i) => ({ name: i.name, amount: i.amount ?? 0 })),
       tags: parsed.tags,
       note: heldInvoice.seller_name || null,
       transaction_at: invoiceDate.toISOString(),
     });
+    await insertTransactionItems(supabase, newTx.id, parsed.items.map((i, idx) => ({
+      name: i.name,
+      amount: i.amount ?? null,
+      tags: i.tags ?? [],
+      sort_order: idx,
+    })));
     await resolveHeldInvoice(supabase, heldInvoice.id, newTx.id, 'auto_created');
     await enrichTransaction(supabase, newTx.id, {
       invoiceNumber: heldInvoice.invoice_number,
@@ -230,6 +281,7 @@ export async function runReconciliationPass(supabase: SupabaseClient, env: Env):
         sellerTaxId: inv.seller_tax_id,
         invoiceId: inv.id,
       });
+      await populateItemsFromInvoice(supabase, tx.id, inv.items ?? []);
       result.ambiguousAutoLinked++;
     } else if (candidates.length === 0) {
       const parsed = await parseExpenseText(env, inv.net_amount, inv.seller_name ?? '');
@@ -237,11 +289,16 @@ export async function runReconciliationPass(supabase: SupabaseClient, env: Env):
         amount: inv.net_amount,
         transaction_type: 'expense',
         payment_method: 'cash',
-        items: parsed.items.map((i) => ({ name: i.name, amount: i.amount ?? 0 })),
         tags: parsed.tags,
         note: inv.seller_name || null,
         transaction_at: invoiceDate.toISOString(),
       });
+      await insertTransactionItems(supabase, newTx.id, parsed.items.map((i, idx) => ({
+        name: i.name,
+        amount: i.amount ?? null,
+        tags: i.tags ?? [],
+        sort_order: idx,
+      })));
       await resolveHeldInvoice(supabase, inv.id, newTx.id, 'auto_created');
       await enrichTransaction(supabase, newTx.id, {
         invoiceNumber: inv.invoice_number,

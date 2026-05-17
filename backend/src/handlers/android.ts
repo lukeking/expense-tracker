@@ -1,7 +1,7 @@
 import type { Context } from 'hono';
 import type { Env, PaymentMethod, MobileWallet, TransactionType, InputResponse, CandidateTransaction } from '../types';
 import { getSupabaseClient } from '../db/client';
-import { insertTransaction, findExistingTransaction, mergeTransactionFields, updateDiscordMessageId } from '../db/queries';
+import { insertTransaction, insertTransactionItems, findExistingTransaction, mergeTransactionFields, updateDiscordMessageId } from '../db/queries';
 import { getBudgetProgress } from '../services/budget';
 import { sendTransactionNotification } from '../services/discord-notify';
 import { parseRawExpenseText } from '../services/gemini';
@@ -167,7 +167,6 @@ export async function androidInputHandler(c: Context<{ Bindings: Env }>) {
 
   const transaction = await insertTransaction(supabase, {
     amount: parsed.amount,
-    items: parsed.items.map((i) => ({ name: i.name, amount: i.amount ?? 0 })),
     tags: parsed.tags,
     payment_method: parsed.payment_method,
     wallet,
@@ -177,11 +176,17 @@ export async function androidInputHandler(c: Context<{ Bindings: Env }>) {
     transaction_at: new Date().toISOString(),
   });
 
+  await insertTransactionItems(supabase, transaction.id, parsed.items.map((i, idx) => ({
+    name: i.name,
+    amount: i.amount ?? null,
+    tags: i.tags ?? [],
+    sort_order: idx,
+  })));
+
   const budgetProgress = await getBudgetProgress(supabase);
-  const itemsLabel =
-    transaction.items && transaction.items.length > 0
-      ? transaction.items.map((i) => i.name).join('、')
-      : parseText;
+  const itemsLabel = parsed.items.length > 0
+    ? parsed.items.map((i) => i.name).join('、')
+    : parseText;
 
   const response: InputResponse = {
     success: true,

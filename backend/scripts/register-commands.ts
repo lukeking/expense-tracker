@@ -28,10 +28,22 @@ const commands = [
         min_value: 1,
       },
       {
-        name: 'description',
-        description: '消費說明，例如：燙青菜 牛肉麵',
+        name: 'tags',
+        description: '商店或分類標籤，例：#麥當勞 或 #食:午餐 或 #麥當勞,#食:午餐',
         type: 3, // STRING
-        required: true,
+        required: false,
+      },
+      {
+        name: 'description',
+        description: '項目明細，例：大麥克 200,可樂 50 或 #食:午餐 便當 120',
+        type: 3, // STRING
+        required: false,
+      },
+      {
+        name: 'note',
+        description: '備註（自由文字）',
+        type: 3, // STRING
+        required: false,
       },
       {
         name: 'payment_method',

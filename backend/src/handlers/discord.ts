@@ -3,6 +3,7 @@ import type { Env, HonoVariables, PaymentMethod, SummaryPeriod, Invoice, Transac
 import { getSupabaseClient } from '../db/client';
 import {
   insertTransaction,
+  insertTransactionItems,
   updateBudgetSettings,
   updateDiscordMessageId,
   matchTransaction,
@@ -10,6 +11,10 @@ import {
   findParentCandidates,
   updateParentTransactionId,
   amendTransactionAmount,
+  getTransactionWithItems,
+  updateTransactionItemAmount,
+  getTransactionItems,
+  replaceTransactionItems,
   createImportRun,
   updateImportRun,
   findTransactionsWithoutInvoiceInRange,
@@ -19,9 +24,9 @@ import {
   findMatchingExpenseTransaction,
   findAllAmbiguousInvoices,
 } from '../db/queries';
-import { parseDescription } from '../services/expense-parser';
+import { parseTags, parseItems } from '../services/expense-parser';
 import { parseExpenseText } from '../services/gemini';
-import { periodToDateRange, aggregateByCategory, aggregateBySubcategory, formatCategoryTable } from '../services/summary';
+import { periodToDateRange, aggregateByCategory, aggregateBySubcategory, buildCategoryEmbedFields, buildSubcategoryEmbedFields } from '../services/summary';
 import { fetchPieChartUrl, fetchBarChartUrl } from '../services/chart';
 import { getBudgetProgress } from '../services/budget';
 import { patchInteractionMessage, patchTransactionMatchedMessage, sendChannelMessage, sendFollowupMessage } from '../services/discord-notify';
@@ -139,11 +144,18 @@ async function handleExpenseCommand(
 ) {
   const options = interaction.data?.options ?? [];
   const amount = options.find((o) => o.name === 'amount')?.value as number;
-  const description = options.find((o) => o.name === 'description')?.value as string;
+  const tagsInput = options.find((o) => o.name === 'tags')?.value as string | undefined;
+  const descriptionInput = options.find((o) => o.name === 'description')?.value as string | undefined;
+  const note = (options.find((o) => o.name === 'note')?.value as string | undefined) || null;
   const paymentMethod = ((options.find((o) => o.name === 'payment_method')?.value as string) ?? 'cash') as PaymentMethod;
 
   if (!amount || amount <= 0) {
     return c.json({ type: 4, data: { content: '❌ 金額必須大於 0' } });
+  }
+
+  const parsedTags = parseTags(tagsInput);
+  if (parsedTags.error) {
+    return c.json({ type: 4, data: { content: `❌ ${parsedTags.error}` } });
   }
 
   const supabase = getSupabaseClient(c.env);
@@ -152,29 +164,41 @@ async function handleExpenseCommand(
   c.executionCtx.waitUntil(
     (async () => {
       try {
-        const parsed = parseDescription(description ?? '', amount);
-        const tags = [
-          ...(parsed.categoryTag ? [parsed.categoryTag] : []),
-          ...parsed.plainTags,
-        ];
+        const parsedItems = parseItems(descriptionInput, amount, parsedTags.sharedCategory);
+
+        if (parsedItems.error) {
+          await patchInteractionMessage(c.env, token, `❌ ${parsedItems.error}`);
+          return;
+        }
 
         const transaction = await insertTransaction(supabase, {
           amount,
           payment_method: paymentMethod,
-          items: parsed.items.map((i) => ({ name: i.name, amount: i.amount ?? 0 })),
-          tags,
+          tags: parsedTags.plainTags,
+          note,
           transaction_at: new Date().toISOString(),
           transaction_type: 'expense',
         });
 
+        await insertTransactionItems(supabase, transaction.id, parsedItems.items.map((item) => ({
+          name: item.name,
+          amount: item.amount ?? null,
+          tags: item.tags,
+        })));
+
         const updatedProgress = await getBudgetProgress(supabase);
         const pmLabel = PM_LABELS[paymentMethod] ?? '現金';
-        const catStr = parsed.categoryTag ? ` · #${parsed.categoryTag}` : '';
-        const firstLine = `✅ NT$${amount}${parsed.note ? ' · ' + parsed.note : ''} [${pmLabel}${catStr}]`;
-        const itemLines = (transaction.items ?? []).map((i) => `  · ${i.name} NT$${i.amount}`).join('\n');
+        const noteStr = note ? ` · ${note}` : '';
+        const allTagLabels = [
+          ...parsedTags.plainTags.map((t) => `#${t}`),
+          ...(parsedTags.sharedCategory ? [`#${parsedTags.sharedCategory}`] : []),
+        ];
+        const tagsDisplay = allTagLabels.length > 0 ? ` · ${allTagLabels.join(' ')}` : '';
+        const firstLine = `✅ NT$${amount}${noteStr}${tagsDisplay} [${pmLabel}]`;
+        const itemLines = parsedItems.items.map((i) => `  · ${i.name}${i.amount != null ? ' NT$' + i.amount : ''}`).join('\n');
         const budgetLine = `📊 本月支出：$${updatedProgress.current_spend.toLocaleString()} / $${updatedProgress.monthly_budget.toLocaleString()} (${updatedProgress.percentage}%)`;
 
-        const content = [firstLine, itemLines, budgetLine, ...parsed.warnings]
+        const content = [firstLine, itemLines, budgetLine, ...parsedItems.warnings]
           .filter(Boolean)
           .join('\n');
 
@@ -236,9 +260,15 @@ async function handleSummaryCommand(
         const totals = aggregateByCategory(transactions);
         const [chartUrl] = await Promise.all([fetchPieChartUrl(totals)]);
         const periodLabel = PERIOD_LABELS[period] ?? period;
-        const tableContent = `📊 ${periodLabel} 支出分類\n\n${formatCategoryTable(totals)}`;
+        const grandTotal = totals.reduce((s, t) => s + t.total, 0);
+        const embed = {
+          title: `📊 ${periodLabel} 支出分類`,
+          fields: buildCategoryEmbedFields(totals),
+          footer: { text: `💰 合計：NT$${grandTotal.toLocaleString()}` },
+          color: 0x5865f2,
+          ...(chartUrl ? { image: { url: chartUrl } } : {}),
+        };
 
-        const embeds = chartUrl ? [{ image: { url: chartUrl } }] : undefined;
         const buttons = totals.map((t) => ({
           type: 2,
           style: 1,
@@ -247,7 +277,7 @@ async function handleSummaryCommand(
         }));
         const components = buttons.length > 0 ? [{ type: 1, components: buttons }] : [];
 
-        await patchInteractionMessage(c.env, token, tableContent, components, embeds);
+        await patchInteractionMessage(c.env, token, '', components, [embed]);
       } catch (err) {
         console.error('handleSummaryCommand async error:', err);
         await patchInteractionMessage(c.env, token, '❌ 無法取得摘要，請稍後再試。');
@@ -297,12 +327,13 @@ async function handleFeeOrRefundCommand(
           amount,
           transaction_type: txType,
           payment_method: paymentMethod,
-          items: [{ name: description, amount }],
           tags: [],
           note: description,
           parent_transaction_id: null,
           transaction_at: new Date().toISOString(),
         });
+
+        await insertTransactionItems(supabase, transaction.id, [{ name: description, amount, tags: [] }]);
 
         if (parent) {
           const candidates = await findParentCandidates(supabase, parent, 90);
@@ -455,12 +486,12 @@ async function handleComponentInteraction(
       const [budgetProgress, txResult, parentResult] = await Promise.all([
         getBudgetProgress(supabase),
         supabase.from('transactions').select('amount, note').eq('id', txId).single(),
-        supabase.from('transactions').select('amount, items, note, transaction_at').eq('id', parentId).single(),
+        supabase.from('transactions').select('amount, note, transaction_at, transaction_items(name)').eq('id', parentId).single(),
       ]);
       const isRefund = customId.startsWith('refund_link:');
       const tx = txResult.data;
       const parent = parentResult.data;
-      const parentName = parent?.items?.[0]?.name ?? parent?.note ?? '?';
+      const parentName = (parent?.transaction_items as { name: string }[] | null)?.[0]?.name ?? parent?.note ?? '?';
       const parentLabel = parent
         ? `NT$${parent.amount.toLocaleString()} · ${parentName} (${parent.transaction_at.slice(5, 10).replace('-', '/')})`
         : '已連結';
@@ -653,11 +684,16 @@ async function handleDrilldownInteraction(
         const allTransactions = await getTransactionsForPeriod(supabase, start, end);
 
         const categoryTransactions = allTransactions.filter((tx) => {
-          const hasCategoryTag = tx.tags.some((t) => t.includes(':'));
+          const items = tx.transaction_items ?? [];
           if (category === '其他') {
-            return !hasCategoryTag;
+            const categorisedSum = items
+              .filter((i) => i.amount != null && i.tags.some((t) => t.includes(':')))
+              .reduce((s, i) => s + (i.amount ?? 0), 0);
+            return tx.amount - categorisedSum > 0;
           }
-          return tx.tags.some((t) => t.includes(':') && t.split(':')[0] === category);
+          return items.some(
+            (i) => i.amount != null && i.tags.some((t) => t.startsWith(category + ':'))
+          );
         });
 
         if (categoryTransactions.length === 0) {
@@ -670,15 +706,14 @@ async function handleDrilldownInteraction(
         const periodLabel = PERIOD_LABELS[period] ?? period;
         const grandTotal = subtotals.reduce((s, t) => s + t.total, 0);
 
-        const tableHeader = '| 子分類 | 金額 |\n|--------|------|';
-        const tableRows = subtotals.map((t) => `| ${t.subcategory} | NT$${t.total.toLocaleString()} |`);
-        const tableContent =
-          `📊 ${category} — ${periodLabel} 子分類\n\n` +
-          `${tableHeader}\n${tableRows.join('\n')}\n\n` +
-          `💰 小計：NT$${grandTotal.toLocaleString()}`;
-
-        const embeds = chartUrl ? [{ image: { url: chartUrl } }] : undefined;
-        await patchInteractionMessage(c.env, token, tableContent, [], embeds);
+        const embed = {
+          title: `📊 ${category} — ${periodLabel} 子分類`,
+          fields: buildSubcategoryEmbedFields(subtotals),
+          footer: { text: `💰 小計：NT$${grandTotal.toLocaleString()}` },
+          color: 0x5865f2,
+          ...(chartUrl ? { image: { url: chartUrl } } : {}),
+        };
+        await patchInteractionMessage(c.env, token, '', [], [embed]);
       } catch (err) {
         console.error('handleDrilldownInteraction async error:', err);
         await patchInteractionMessage(c.env, token, '❌ 無法取得子分類，請稍後再試。');
@@ -776,18 +811,23 @@ async function handleAmendSelect(
 
   const supabase = getSupabaseClient(c.env);
   try {
-    const { data: txRow } = await supabase
-      .from('transactions')
-      .select('amount, items, note')
-      .eq('id', txId)
-      .single();
-    const oldAmount = txRow?.amount ?? '?';
-    const desc = (txRow?.items?.[0]?.name ?? txRow?.note ?? '?') as string;
+    const txData = await getTransactionWithItems(supabase, txId);
+    const oldAmount = txData?.amount ?? 0;
+    const desc = (txData?.transaction_items?.[0]?.name ?? txData?.note ?? '?') as string;
 
     await amendTransactionAmount(supabase, txId, newAmount);
+
+    let warning = '';
+    const items = txData?.transaction_items ?? [];
+    if (items.length === 1 && items[0].amount === oldAmount) {
+      await updateTransactionItemAmount(supabase, items[0].id, newAmount);
+    } else if (items.length > 1 && items.some((i) => i.amount != null)) {
+      warning = '\n⚠️ 項目金額需手動更新';
+    }
+
     const budgetProgress = await getBudgetProgress(supabase);
     const content =
-      `✅ 已修正：${desc} NT$${oldAmount} → NT$${newAmount}\n` +
+      `✅ 已修正：${desc} NT$${oldAmount} → NT$${newAmount}${warning}\n` +
       `📊 本月支出：$${budgetProgress.current_spend.toLocaleString()} / $${budgetProgress.monthly_budget.toLocaleString()} (${budgetProgress.percentage}%)`;
     return c.json({ type: 7, data: { content, components: [] } });
   } catch (err) {
@@ -998,7 +1038,8 @@ async function handleImportCommand(
           },
           attachment.filename ?? 'unknown',
           unmatchedTxs,
-          counters.ambiguousItems
+          counters.ambiguousItems,
+          counters.itemMismatchWarnings
         );
         await patchInteractionMessage(env, token, summary);
       } catch (err) {
@@ -1025,7 +1066,8 @@ function formatImportSummary(
   },
   fileName: string,
   unmatchedTxs: import('../types').Transaction[],
-  ambiguousItems: import('../services/invoice-matcher').AmbiguousItem[] = []
+  ambiguousItems: import('../services/invoice-matcher').AmbiguousItem[] = [],
+  itemMismatchWarnings: import('../services/invoice-matcher').ItemMismatchWarning[] = []
 ): string {
   const lines: string[] = [
     `📥 發票匯入完成 · ${fileName}`,
@@ -1046,9 +1088,17 @@ function formatImportSummary(
       const date = invoice.invoice_date.toISOString().slice(5, 10).replace('-', '/');
       const candidateDesc = candidates
         .slice(0, 3)
-        .map((tx) => tx.note ?? tx.items?.[0]?.name ?? `NT$${tx.amount}`)
+        .map((tx) => tx.note ?? `NT$${tx.amount}`)
         .join(' / ');
       lines.push(`  · ${invoice.seller_name || '未知商家'} NT$${invoice.net_amount} (${date}) — 候選：${candidateDesc}`);
+    }
+  }
+
+  if (itemMismatchWarnings.length > 0) {
+    lines.push('', `⚠️ 項目數不符（已替換）：${itemMismatchWarnings.length} 筆`);
+    for (const w of itemMismatchWarnings) {
+      const discarded = w.discardedNames.join('、');
+      lines.push(`  · ${w.sellerName || '未知商家'} NT$${w.amount}：丟棄 ${discarded} → 替換為 ${w.newItemCount} 項`);
     }
   }
 
@@ -1120,7 +1170,7 @@ function formatAmbiguousPrompt(
     const dd = String(utc8.getUTCDate()).padStart(2, '0');
     const hh = String(utc8.getUTCHours()).padStart(2, '0');
     const min = String(utc8.getUTCMinutes()).padStart(2, '0');
-    const desc = tx.items?.[0]?.name ?? tx.note ?? `NT$${tx.amount}`;
+    const desc = tx.note ?? `NT$${tx.amount}`;
     return {
       type: 2,
       style: 1,
@@ -1211,11 +1261,16 @@ async function handleReconcileLink(
           amount: invoice.net_amount,
           transaction_type: 'expense',
           payment_method: 'cash',
-          items: parsed.items.map((i) => ({ name: i.name, amount: i.amount ?? 0 })),
           tags: parsed.tags,
           note: invoice.seller_name || null,
           transaction_at: invoiceDate.toISOString(),
         });
+        await insertTransactionItems(supabase, newTx.id, parsed.items.map((i, idx) => ({
+          name: i.name,
+          amount: i.amount ?? null,
+          tags: [],
+          sort_order: idx,
+        })));
         await resolveHeldInvoice(supabase, invoiceId, newTx.id, 'auto_created');
         await enrichTransaction(supabase, newTx.id, {
           invoiceNumber: invoice.invoice_number,
@@ -1257,7 +1312,33 @@ async function handleReconcileLink(
       invoiceId: invoice.id,
     });
 
-    const desc = tx.items?.[0]?.name ?? tx.note ?? `NT$${tx.amount}`;
+    // T019: populate transaction_items from invoice line items
+    const invoiceLineItems = invoice.items ?? [];
+    if (invoiceLineItems.length > 0) {
+      const existingItems = await getTransactionItems(supabase, transactionId);
+      if (existingItems.length === invoiceLineItems.length) {
+        for (let i = 0; i < existingItems.length; i++) {
+          if (existingItems[i].amount == null) {
+            await updateTransactionItemAmount(supabase, existingItems[i].id, invoiceLineItems[i].amount);
+          }
+        }
+      } else if (existingItems.length !== invoiceLineItems.length) {
+        const discardedNames = existingItems.map((i) => `  · ${i.name}`).join('\n');
+        const warningMsg =
+          `⚠️ 發票項目與記錄不符，以下項目將被取代：\n${discardedNames}`;
+        c.executionCtx.waitUntil(
+          sendFollowupMessage(env, interaction.token, warningMsg, [])
+        );
+        await replaceTransactionItems(supabase, transactionId, invoiceLineItems.map((li, idx) => ({
+          name: li.name,
+          amount: li.amount,
+          tags: [],
+          sort_order: idx,
+        })));
+      }
+    }
+
+    const desc = tx.note ?? `NT$${tx.amount}`;
     const nextAmbiguous = await findAllAmbiguousInvoices(supabase);
     if (nextAmbiguous.length > 0) {
       const nextInv = nextAmbiguous[0];

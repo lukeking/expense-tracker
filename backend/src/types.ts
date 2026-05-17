@@ -14,11 +14,24 @@ export interface TransactionItem {
   amount: number;
 }
 
+export interface TransactionItemRow {
+  id: string;
+  transaction_id: string;
+  name: string;
+  amount: number | null;
+  tags: string[];
+  sort_order: number;
+  created_at: string;
+}
+
+export interface TransactionWithItems extends Transaction {
+  transaction_items: TransactionItemRow[];
+}
+
 export interface Transaction {
   id: string;
   transaction_type: TransactionType;
   amount: number;
-  items: TransactionItem[] | null;
   tags: string[];
   payment_method: PaymentMethod;
   wallet: MobileWallet | null;
@@ -190,7 +203,7 @@ export interface CandidateTransaction {
 export interface GeminiParseResult {
   amount: number;
   payment_method: PaymentMethod;
-  items: { name: string; amount?: number }[];
+  items: { name: string; amount?: number; tags?: string[] }[];
   tags: string[];
 }
 
