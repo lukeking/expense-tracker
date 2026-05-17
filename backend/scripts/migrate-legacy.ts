@@ -13,7 +13,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
-import { readCSVFile, readRawRows, type ParsedLegacyRow, type ParseStats, type RawLegacyRow } from '../src/services/legacy-csv-parser';
+import { readCSVFile, readRawRows, BEIZHU_RULES, type ParsedLegacyRow, type ParseStats, type RawLegacyRow } from '../src/services/legacy-csv-parser';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DB = ReturnType<typeof createClient<any>>;
@@ -468,20 +468,40 @@ function writeBeizhuAnalysis(rawRows: RawLegacyRow[], csvPath: string, timestamp
         }
         break;
 
-      case 'E_mixed':
-        lines.push('GROUP E — AMBIGUOUS ⚠ NEEDS YOUR REVIEW');
-        lines.push('Cannot determine intent. Please review each value and indicate the rule.');
+      case 'E_mixed': {
+        const eHandled = group.filter((e) => BEIZHU_RULES[e.value] !== undefined);
+        const ePending = group.filter((e) => BEIZHU_RULES[e.value] === undefined);
+        lines.push(`GROUP E — AMBIGUOUS ⚠  (${eHandled.length} handled, ${ePending.length} pending review)`);
+        lines.push('Cannot determine intent. Please review each pending value and indicate the rule.');
         lines.push('');
         lines.push('Feedback format (one line per row):');
         lines.push('  VALUE → tag=X  OR  VALUE → note=X  OR  VALUE → tag=X note=Y  OR  VALUE → keep-as-is');
         lines.push('');
-        lines.push('  Value                          | Ct  | Sample contexts');
-        lines.push('  -------------------------------|-----|-------------------------------------------');
-        for (const e of group) {
-          const ctxStr = e.contexts.map((c) => `${c.category||'–'}:${c.item||'–'}`).join(' | ');
-          lines.push(`  ${e.value.padEnd(31)}| ${String(e.count).padStart(3)} | ${ctxStr}`);
+        if (eHandled.length > 0) {
+          lines.push('  --- HANDLED (have a rule) ---');
+          lines.push('  Value                          | Ct  | Rule');
+          lines.push('  -------------------------------|-----|-------------------------------------------');
+          for (const e of eHandled) {
+            const rule = BEIZHU_RULES[e.value]!;
+            const ruleStr = rule.tag && rule.note ? `tag=${rule.tag} note=${rule.note}`
+              : rule.tag ? `tag=${rule.tag}`
+              : rule.note ? `note=${rule.note}`
+              : 'silenced';
+            lines.push(`  ${e.value.padEnd(31)}| ${String(e.count).padStart(3)} | ${ruleStr}`);
+          }
+          lines.push('');
+        }
+        if (ePending.length > 0) {
+          lines.push('  --- PENDING (pushed as plain tag by default) ---');
+          lines.push('  Value                          | Ct  | Sample contexts');
+          lines.push('  -------------------------------|-----|-------------------------------------------');
+          for (const e of ePending) {
+            const ctxStr = e.contexts.map((c) => `${c.category||'–'}:${c.item||'–'}`).join(' | ');
+            lines.push(`  ${e.value.padEnd(31)}| ${String(e.count).padStart(3)} | ${ctxStr}`);
+          }
         }
         break;
+      }
 
       case 'F_narrative':
         lines.push('GROUP F — Narrative Note (HIGH confidence)');

@@ -112,12 +112,12 @@ function resolveStoreRow(
 // If no rule: push beiZhu verbatim as a plain tag (default).
 // Empty rule {} suppresses tag creation without overriding the note.
 
-interface BeizhuRule {
+export interface BeizhuRule {
   tag?: string;
   note?: string;
 }
 
-const BEIZHU_RULES: Record<string, BeizhuRule> = {
+export const BEIZHU_RULES: Record<string, BeizhuRule> = {
   // GROUP D — institution + symptom/dept
   '昌禾骨科 右肩': { tag: '昌禾骨科', note: '右肩' },
   '昌禾骨科 右肩 震波 自費': { tag: '昌禾骨科', note: '右肩 震波 自費' },
