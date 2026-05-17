@@ -1,5 +1,26 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { periodToDateRange, aggregateByCategory, aggregateBySubcategory, formatCategoryTable } from '../../src/services/summary';
+import { periodToDateRange, aggregateByCategory, aggregateBySubcategory, buildCategoryEmbedFields } from '../../src/services/summary';
+
+// Helper: build a TxForSummary with one item per tag (carrying that item's full amount)
+function tx(amount: number, itemTags: string[][]): { amount: number; tags: string[]; transaction_items: { amount: number; tags: string[] }[] } {
+  if (itemTags.length === 0) {
+    return { amount, tags: [], transaction_items: [] };
+  }
+  const perItem = Math.floor(amount / itemTags.length);
+  return {
+    amount,
+    tags: [],
+    transaction_items: itemTags.map((tags, i) => ({
+      amount: i === itemTags.length - 1 ? amount - perItem * i : perItem,
+      tags,
+    })),
+  };
+}
+
+// Simple single-item helper
+function txSingle(amount: number, tag: string): { amount: number; tags: string[]; transaction_items: { amount: number; tags: string[] }[] } {
+  return { amount, tags: [], transaction_items: [{ amount, tags: tag ? [tag] : [] }] };
+}
 
 // ─── periodToDateRange ────────────────────────────────────────────────────────
 
@@ -61,9 +82,9 @@ describe('aggregateByCategory', () => {
 
   it('groups by category tag (text before first colon)', () => {
     const txs = [
-      { amount: 300, tags: ['食:午餐'] },
-      { amount: 100, tags: ['食:晚餐'] },
-      { amount: 200, tags: ['行:捷運'] },
+      txSingle(300, '食:午餐'),
+      txSingle(100, '食:晚餐'),
+      txSingle(200, '行:捷運'),
     ];
     const result = aggregateByCategory(txs);
     expect(result).toHaveLength(2);
@@ -71,26 +92,33 @@ describe('aggregateByCategory', () => {
     expect(result.find((t) => t.category === '行')?.total).toBe(200);
   });
 
-  it('no tags → grouped under 其他', () => {
-    const txs = [{ amount: 100, tags: [] }];
+  it('no items → full amount under 其他', () => {
+    const txs = [{ amount: 100, tags: [], transaction_items: [] }];
     const result = aggregateByCategory(txs);
     expect(result).toHaveLength(1);
     expect(result[0].category).toBe('其他');
     expect(result[0].total).toBe(100);
   });
 
-  it('plain tag (no colon) → grouped under 其他', () => {
-    const txs = [{ amount: 80, tags: ['三商巧福'] }];
+  it('item with plain tag (no colon) → amount goes to 其他', () => {
+    const txs = [{ amount: 80, tags: [], transaction_items: [{ amount: 80, tags: ['三商巧福'] }] }];
     const result = aggregateByCategory(txs);
     expect(result[0].category).toBe('其他');
     expect(result[0].total).toBe(80);
   });
 
+  it('item with null amount → full transaction amount falls to 其他', () => {
+    const txs = [{ amount: 120, tags: [], transaction_items: [{ amount: null as unknown as number, tags: ['食:午餐'] }] }];
+    const result = aggregateByCategory(txs);
+    expect(result[0].category).toBe('其他');
+    expect(result[0].total).toBe(120);
+  });
+
   it('sorted descending by total', () => {
     const txs = [
-      { amount: 100, tags: ['A:x'] },
-      { amount: 300, tags: ['B:x'] },
-      { amount: 200, tags: ['C:x'] },
+      txSingle(100, 'A:x'),
+      txSingle(300, 'B:x'),
+      txSingle(200, 'C:x'),
     ];
     const result = aggregateByCategory(txs);
     expect(result[0].total).toBe(300);
@@ -100,16 +128,15 @@ describe('aggregateByCategory', () => {
 
   it('>5 named categories → caps at 5, merges overflow into 其他', () => {
     const txs = [
-      { amount: 600, tags: ['A:x'] },
-      { amount: 500, tags: ['B:x'] },
-      { amount: 400, tags: ['C:x'] },
-      { amount: 300, tags: ['D:x'] },
-      { amount: 200, tags: ['E:x'] },
-      { amount: 100, tags: ['F:x'] },
+      txSingle(600, 'A:x'),
+      txSingle(500, 'B:x'),
+      txSingle(400, 'C:x'),
+      txSingle(300, 'D:x'),
+      txSingle(200, 'E:x'),
+      txSingle(100, 'F:x'),
     ];
     const result = aggregateByCategory(txs);
     expect(result).toHaveLength(5);
-    // Top 4 named: A, B, C, D; E+F merged into 其他
     const qita = result.find((t) => t.category === '其他');
     expect(qita?.total).toBe(300); // E(200) + F(100)
     expect(result.find((t) => t.category === 'A')?.total).toBe(600);
@@ -120,12 +147,12 @@ describe('aggregateByCategory', () => {
 
   it('natural 其他 + >4 named → 其他 includes natural total + overflow', () => {
     const txs = [
-      { amount: 600, tags: ['A:x'] },
-      { amount: 500, tags: ['B:x'] },
-      { amount: 400, tags: ['C:x'] },
-      { amount: 300, tags: ['D:x'] },
-      { amount: 200, tags: ['E:x'] },
-      { amount: 100, tags: [] }, // natural 其他
+      txSingle(600, 'A:x'),
+      txSingle(500, 'B:x'),
+      txSingle(400, 'C:x'),
+      txSingle(300, 'D:x'),
+      txSingle(200, 'E:x'),
+      { amount: 100, tags: [], transaction_items: [] }, // natural 其他
     ];
     const result = aggregateByCategory(txs);
     expect(result).toHaveLength(5);
@@ -136,11 +163,11 @@ describe('aggregateByCategory', () => {
 
   it('exactly 5 categories → returns all 5', () => {
     const txs = [
-      { amount: 500, tags: ['A:x'] },
-      { amount: 400, tags: ['B:x'] },
-      { amount: 300, tags: ['C:x'] },
-      { amount: 200, tags: ['D:x'] },
-      { amount: 100, tags: ['E:x'] },
+      txSingle(500, 'A:x'),
+      txSingle(400, 'B:x'),
+      txSingle(300, 'C:x'),
+      txSingle(200, 'D:x'),
+      txSingle(100, 'E:x'),
     ];
     const result = aggregateByCategory(txs);
     expect(result).toHaveLength(5);
@@ -153,9 +180,9 @@ describe('aggregateByCategory', () => {
 describe('aggregateBySubcategory', () => {
   it('groups by subcategory (after first colon)', () => {
     const txs = [
-      { amount: 200, tags: ['食:午餐'] },
-      { amount: 150, tags: ['食:晚餐'] },
-      { amount: 100, tags: ['食:午餐'] },
+      txSingle(200, '食:午餐'),
+      txSingle(150, '食:晚餐'),
+      txSingle(100, '食:午餐'),
     ];
     const result = aggregateBySubcategory(txs, '食');
     expect(result.find((t) => t.subcategory === '午餐')?.total).toBe(300);
@@ -163,22 +190,22 @@ describe('aggregateBySubcategory', () => {
   });
 
   it('plain tag (no colon) → subcategory is 其他', () => {
-    const txs = [{ amount: 80, tags: ['三商巧福'] }];
+    const txs = [{ amount: 80, tags: [], transaction_items: [{ amount: 80, tags: ['三商巧福'] }] }];
     const result = aggregateBySubcategory(txs, '其他');
     expect(result[0].subcategory).toBe('其他');
     expect(result[0].total).toBe(80);
   });
 
   it('multi-colon tag → subcategory is everything after first colon', () => {
-    const txs = [{ amount: 300, tags: ['食:港式:飲茶'] }];
+    const txs = [txSingle(300, '食:港式:飲茶')];
     const result = aggregateBySubcategory(txs, '食');
     expect(result[0].subcategory).toBe('港式:飲茶');
   });
 
   it('sorted descending by total', () => {
     const txs = [
-      { amount: 100, tags: ['食:晚餐'] },
-      { amount: 300, tags: ['食:午餐'] },
+      txSingle(100, '食:晚餐'),
+      txSingle(300, '食:午餐'),
     ];
     const result = aggregateBySubcategory(txs, '食');
     expect(result[0].subcategory).toBe('午餐');
@@ -186,29 +213,28 @@ describe('aggregateBySubcategory', () => {
   });
 });
 
-// ─── formatCategoryTable ──────────────────────────────────────────────────────
+// ─── buildCategoryEmbedFields ─────────────────────────────────────────────────
 
-describe('formatCategoryTable', () => {
-  it('produces markdown table with percentage and grand total', () => {
+describe('buildCategoryEmbedFields', () => {
+  it('returns inline fields with amount and percentage', () => {
     const totals = [
       { category: '食', total: 300 },
       { category: '行', total: 200 },
       { category: '其他', total: 500 },
     ];
-    const output = formatCategoryTable(totals);
-    expect(output).toContain('| 分類 | 金額 | 占比 |');
-    expect(output).toContain('NT$300');
-    expect(output).toContain('NT$500');
-    expect(output).toContain('💰 合計：NT$1,000');
+    const fields = buildCategoryEmbedFields(totals);
+    expect(fields).toHaveLength(3);
+    expect(fields[0]).toEqual({ name: '食', value: 'NT$300 (30%)', inline: true });
+    expect(fields[2]).toEqual({ name: '其他', value: 'NT$500 (50%)', inline: true });
   });
 
-  it('percentages round to integer and sum approximately 100', () => {
+  it('percentages round to integer', () => {
     const totals = [
       { category: '食', total: 400 },
       { category: '行', total: 600 },
     ];
-    const output = formatCategoryTable(totals);
-    expect(output).toContain('40%');
-    expect(output).toContain('60%');
+    const fields = buildCategoryEmbedFields(totals);
+    expect(fields[0].value).toContain('40%');
+    expect(fields[1].value).toContain('60%');
   });
 });

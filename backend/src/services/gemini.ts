@@ -19,9 +19,10 @@ Return ONLY valid JSON following this schema:
         "type": "object",
         "properties": {
           "name": { "type": "string" },
-          "amount": { "type": ["number", "null"] }
+          "amount": { "type": ["number", "null"] },
+          "tags": { "type": "array", "items": { "type": "string" } }
         },
-        "required": ["name"],
+        "required": ["name", "tags"],
         "additionalProperties": false
       }
     },
@@ -41,7 +42,9 @@ Rules:
 - payment_method: always return "cash" (payment method is provided as a separate Discord option)
 - items is a list of what was purchased, if amount comes along with item, bind them together into one element in items
 - If there is only one item in list, the 'items.amount' should to the same with total amount
-- Extract all words with a leading '#' as tags by removing the '#' prefix. no missing nor duplicate tags allowed.
+- A '#category:subcategory' token immediately before or attached to an item applies to that item's 'tags', not the overall transaction tags
+- Each item's 'tags' array should contain the '#category:subcategory' tag that belongs to it (without the '#'); default to empty array if none
+- Extract all words with a leading '#' that are NOT category tags (i.e. do not contain ':') as top-level 'tags' by removing the '#' prefix. No missing nor duplicate tags allowed.
 - If tags cannot be determined, tags = []
 - If no items are listed, items = []
 `;
@@ -58,7 +61,9 @@ Rules:
 - items is a list of what was purchased, if amount comes along with item, bind them together into one element in items
 - If there is only one item in list, the 'items.amount' should to the same with total amount
 - A token is a line item ONLY if its last whitespace-separated word is a number. Freeform text tokens without a trailing numeric word MUST NOT be extracted as line items.
-- Extract all words with a leading '#' as tags by removing the '#' prefix. Preserve any ':' characters within the tag (e.g. '#食:午餐' -> '食:午餐'). No missing nor duplicate tags allowed.
+- A '#category:subcategory' token immediately before a line item applies to that item's 'tags', not the overall transaction tags
+- Each item's 'tags' array should contain the '#category:subcategory' tag (without '#') that applies to it; default to empty array if none
+- Extract all words with a leading '#' that are NOT category tags (i.e. do not contain ':') as top-level 'tags' by removing the '#' prefix. Preserve any ':' characters within category tags. No missing nor duplicate tags allowed.
 - If tags cannot be determined, tags = []
 - If no items are listed, items = []
 `;

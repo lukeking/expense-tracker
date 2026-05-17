@@ -1,28 +1,13 @@
-import type { PaymentMethod } from '../types';
-
-export interface ParsedDescription {
-  paymentMethod: PaymentMethod | null;
-  categoryTag: string | null;
+export interface ParsedTags {
   plainTags: string[];
-  items: { name: string; amount: number }[];
-  note: string;
-  warnings: string[];
+  sharedCategory: string | null;
+  error: string | null;
 }
 
-const PAYMENT_KEYWORDS: { keywords: string[]; method: PaymentMethod }[] = [
-  { keywords: ['現金', 'cash'], method: 'cash' },
-  { keywords: ['信用卡', 'credit card', 'credit_card'], method: 'credit_card' },
-  { keywords: ['悠遊卡', 'easy card', 'easy_card'], method: 'easy_card' },
-  { keywords: ['行動支付', 'line pay', 'google pay', 'apple pay', 'prepaid_wallet'], method: 'prepaid_wallet' },
-  { keywords: ['銀行轉帳', 'bank transfer', 'bank_account'], method: 'bank_account' },
-];
-
-function matchPayment(token: string): PaymentMethod | null {
-  const lower = token.toLowerCase();
-  for (const { keywords, method } of PAYMENT_KEYWORDS) {
-    if (keywords.some((k) => k.toLowerCase() === lower)) return method;
-  }
-  return null;
+export interface ParsedItems {
+  items: { name: string; amount: number | undefined; tags: string[] }[];
+  warnings: string[];
+  error: string | null;
 }
 
 function parseLineItem(token: string): { name: string; amount: number } | null {
@@ -36,72 +21,120 @@ function parseLineItem(token: string): { name: string; amount: number } | null {
   return null;
 }
 
-export function parseDescription(description: string, totalAmount: number): ParsedDescription {
-  const tokens = description.split(',').map((t) => t.trim()).filter(Boolean);
+function parseTaggedItemRest(rest: string): { name: string; amount: number | undefined } {
+  const trimmed = rest.trim();
+  if (!trimmed) return { name: trimmed, amount: undefined };
+  const words = trimmed.split(/\s+/);
+  const lastWord = words[words.length - 1];
+  const num = Number(lastWord);
+  if (words.length >= 2 && !isNaN(num) && isFinite(num) && lastWord.trim() !== '') {
+    return { name: words.slice(0, -1).join(' '), amount: num };
+  }
+  return { name: trimmed, amount: undefined };
+}
 
-  let paymentMethod: PaymentMethod | null = null;
-  let categoryTag: string | null = null;
-  const extraCategoryTags: string[] = [];
+export function parseTags(tagsStr: string | null | undefined): ParsedTags {
+  if (!tagsStr?.trim()) return { plainTags: [], sharedCategory: null, error: null };
+
+  const tokens = tagsStr.split(',').map((t) => t.trim()).filter(Boolean);
   const plainTags: string[] = [];
-  const items: { name: string; amount: number }[] = [];
-  const noteParts: string[] = [];
-  const warnings: string[] = [];
+  let sharedCategory: string | null = null;
+
+  for (const token of tokens) {
+    if (!token.startsWith('#')) {
+      return { plainTags, sharedCategory, error: `tags 欄位只接受 #標籤 格式，無效：${token}` };
+    }
+    const tagBody = token.slice(1);
+    if (!tagBody) continue;
+    if (tagBody.includes(':')) {
+      if (sharedCategory !== null) {
+        return { plainTags, sharedCategory, error: `tags 欄位只能有一個分類標籤，多餘：#${tagBody}` };
+      }
+      sharedCategory = tagBody;
+    } else {
+      plainTags.push(tagBody);
+    }
+  }
+
+  return { plainTags, sharedCategory, error: null };
+}
+
+export function parseItems(
+  descriptionStr: string | null | undefined,
+  totalAmount: number,
+  sharedCategory: string | null
+): ParsedItems {
+  if (!descriptionStr?.trim()) {
+    if (sharedCategory !== null) {
+      const subcategory = sharedCategory.split(':')[1] ?? '';
+      if (subcategory.trim().length > 0) {
+        return {
+          items: [{ name: subcategory, amount: totalAmount, tags: [sharedCategory] }],
+          warnings: [],
+          error: null,
+        };
+      }
+    }
+    return { items: [], warnings: [], error: null };
+  }
+
+  const tokens = descriptionStr.split(',').map((t) => t.trim()).filter(Boolean);
+  const items: { name: string; amount: number | undefined; tags: string[] }[] = [];
+  let hasBareTag = false;
 
   for (const token of tokens) {
     if (token.startsWith('#')) {
-      const tagBody = token.slice(1);
-      if (tagBody.includes(':')) {
-        if (categoryTag === null) {
-          categoryTag = tagBody;
-        } else {
-          extraCategoryTags.push(tagBody);
-        }
-      } else {
-        plainTags.push(tagBody);
+      const spaceIdx = token.indexOf(' ');
+      const tagBody = spaceIdx === -1 ? token.slice(1) : token.slice(1, spaceIdx);
+      const rest = spaceIdx === -1 ? '' : token.slice(spaceIdx + 1).trim();
+
+      if (!tagBody.includes(':')) {
+        return {
+          items,
+          warnings: [],
+          error: `description 欄位不接受 #${tagBody}，請將商店標籤移至 tags 欄位`,
+        };
       }
-      continue;
-    }
 
-    const pm = matchPayment(token);
-    if (pm !== null) {
-      paymentMethod = pm;
-      continue;
-    }
-
-    const lineItem = parseLineItem(token);
-    if (lineItem !== null) {
-      items.push(lineItem);
-      continue;
-    }
-
-    noteParts.push(token);
-  }
-
-  if (extraCategoryTags.length > 0) {
-    warnings.push(`⚠️ 僅使用第一個分類標籤 #${categoryTag}，其餘忽略`);
-  }
-
-  if (items.length === 0 && categoryTag !== null) {
-    const subcategory = categoryTag.split(':')[1] ?? '';
-    if (subcategory.trim().length > 0) {
-      items.push({ name: subcategory, amount: totalAmount });
+      if (rest.length === 0) {
+        hasBareTag = true;
+        const subcategory = tagBody.split(':')[1] ?? '';
+        items.push({ name: subcategory || tagBody, amount: undefined, tags: [tagBody] });
+      } else {
+        const parsed = parseTaggedItemRest(rest);
+        items.push({ name: parsed.name, amount: parsed.amount, tags: [tagBody] });
+      }
+    } else {
+      const lineItem = parseLineItem(token);
+      const itemTags = sharedCategory ? [sharedCategory] : [];
+      if (lineItem !== null) {
+        items.push({ name: lineItem.name, amount: lineItem.amount, tags: itemTags });
+      } else {
+        items.push({ name: token, amount: undefined, tags: itemTags });
+      }
     }
   }
 
-  if (items.length > 0) {
-    const itemTotal = items.reduce((sum, i) => sum + i.amount, 0);
-    if (itemTotal !== totalAmount) {
-      const diff = Math.abs(totalAmount - itemTotal);
-      warnings.push(`⚠️ 項目合計 NT$${itemTotal} ≠ 總金額 NT$${totalAmount}，差額 NT$${diff} 未歸類`);
-    }
+  if (hasBareTag && items.length > 1) {
+    return {
+      items: [],
+      warnings: [],
+      error: '純分類標籤 (#x:y) 不能與其他項目混用，請指定項目名稱',
+    };
   }
 
-  return {
-    paymentMethod,
-    categoryTag,
-    plainTags,
-    items,
-    note: noteParts.join(' '),
-    warnings,
-  };
+  if (items.length === 1 && items[0].amount === undefined) {
+    items[0] = { ...items[0], amount: totalAmount };
+  }
+
+  const knownTotal = items.reduce((sum, i) => sum + (i.amount ?? 0), 0);
+  if (knownTotal > totalAmount) {
+    return {
+      items,
+      warnings: [],
+      error: `項目合計 NT$${knownTotal} 超過總金額 NT$${totalAmount}，請檢查金額`,
+    };
+  }
+
+  return { items, warnings: [], error: null };
 }
