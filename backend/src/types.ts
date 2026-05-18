@@ -45,6 +45,7 @@ export interface Transaction {
   seller_name: string | null;
   seller_tax_id: string | null;
   matched_invoice_id: string | null;
+  source: string | null;
   transaction_at: string;
   created_at: string;
 }
