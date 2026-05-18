@@ -18,7 +18,8 @@ import {
   createImportRun,
   updateImportRun,
   findTransactionsWithoutInvoiceInRange,
-  getTransactionsForPeriod,
+  getCategoryTotals,
+  getSubcategoryTotals,
   resolveHeldInvoice,
   enrichTransaction,
   findMatchingExpenseTransaction,
@@ -26,7 +27,7 @@ import {
 } from '../db/queries';
 import { parseTags, parseItems } from '../services/expense-parser';
 import { parseExpenseText } from '../services/gemini';
-import { periodToDateRange, aggregateByCategory, aggregateBySubcategory, buildCategoryEmbedFields, buildSubcategoryEmbedFields } from '../services/summary';
+import { periodToDateRange, mergeOverflowCategories, buildCategoryEmbedFields, buildSubcategoryEmbedFields } from '../services/summary';
 import { fetchPieChartUrl, fetchBarChartUrl } from '../services/chart';
 import { getBudgetProgress } from '../services/budget';
 import { patchInteractionMessage, patchTransactionMatchedMessage, sendChannelMessage, sendFollowupMessage } from '../services/discord-notify';
@@ -250,14 +251,14 @@ async function handleSummaryCommand(
     (async () => {
       try {
         const { start, end } = periodToDateRange(period);
-        const transactions = await getTransactionsForPeriod(supabase, start, end);
+        const rawTotals = await getCategoryTotals(supabase, start, end);
 
-        if (transactions.length === 0) {
+        if (rawTotals.length === 0) {
           await patchInteractionMessage(c.env, token, '此期間無支出記錄');
           return;
         }
 
-        const totals = aggregateByCategory(transactions);
+        const totals = mergeOverflowCategories(rawTotals);
         const [chartUrl] = await Promise.all([fetchPieChartUrl(totals)]);
         const periodLabel = PERIOD_LABELS[period] ?? period;
         const grandTotal = totals.reduce((s, t) => s + t.total, 0);
@@ -681,27 +682,12 @@ async function handleDrilldownInteraction(
     (async () => {
       try {
         const { start, end } = periodToDateRange(period);
-        const allTransactions = await getTransactionsForPeriod(supabase, start, end);
+        const subtotals = await getSubcategoryTotals(supabase, start, end, category);
 
-        const categoryTransactions = allTransactions.filter((tx) => {
-          const items = tx.transaction_items ?? [];
-          if (category === '其他') {
-            const categorisedSum = items
-              .filter((i) => i.amount != null && i.tags.some((t) => t.includes(':')))
-              .reduce((s, i) => s + (i.amount ?? 0), 0);
-            return tx.amount - categorisedSum > 0;
-          }
-          return items.some(
-            (i) => i.amount != null && i.tags.some((t) => t.startsWith(category + ':'))
-          );
-        });
-
-        if (categoryTransactions.length === 0) {
+        if (subtotals.length === 0) {
           await patchInteractionMessage(c.env, token, '此分類在此期間無支出記錄');
           return;
         }
-
-        const subtotals = aggregateBySubcategory(categoryTransactions, category);
         const chartUrl = await fetchBarChartUrl(subtotals, category);
         const periodLabel = PERIOD_LABELS[period] ?? period;
         const grandTotal = subtotals.reduce((s, t) => s + t.total, 0);

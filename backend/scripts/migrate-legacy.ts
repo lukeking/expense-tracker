@@ -13,7 +13,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
-import { readCSVFile, readRawRows, BEIZHU_RULES, type ParsedLegacyRow, type ParseStats, type RawLegacyRow } from '../src/services/legacy-csv-parser';
+import { readCSVFile, readRawRows, type ParsedLegacyRow, type ParseStats, type RawLegacyRow } from '../src/services/legacy-csv-parser';
+import { BEIZHU_RULES } from '../src/services/legacy-csv-config';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DB = ReturnType<typeof createClient<any>>;

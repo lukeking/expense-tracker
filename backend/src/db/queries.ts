@@ -460,20 +460,58 @@ export type TransactionForPeriod = Pick<Transaction, 'id' | 'amount' | 'tags' | 
   transaction_items: Pick<TransactionItemRow, 'amount' | 'tags'>[];
 };
 
+const PAGE_SIZE = 1000;
+
 export async function getTransactionsForPeriod(
   supabase: SupabaseClient,
   start: Date,
   end: Date
 ): Promise<TransactionForPeriod[]> {
-  const { data, error } = await supabase
-    .from('transactions')
-    .select('id, amount, tags, transaction_at, transaction_items(amount, tags)')
-    .eq('transaction_type', 'expense')
-    .gte('transaction_at', start.toISOString())
-    .lt('transaction_at', end.toISOString())
-    .order('transaction_at', { ascending: true });
-  if (error) throw new Error(`getTransactionsForPeriod: ${error.message}`);
-  return (data ?? []) as TransactionForPeriod[];
+  const all: TransactionForPeriod[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('id, amount, tags, transaction_at, transaction_items(amount, tags)')
+      .in('transaction_type', ['expense', 'fee'])
+      .gte('transaction_at', start.toISOString())
+      .lt('transaction_at', end.toISOString())
+      .order('transaction_at', { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) throw new Error(`getTransactionsForPeriod: ${error.message}`);
+    all.push(...((data ?? []) as TransactionForPeriod[]));
+    if ((data ?? []).length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+  return all;
+}
+
+export async function getCategoryTotals(
+  supabase: SupabaseClient,
+  start: Date,
+  end: Date
+): Promise<{ category: string; total: number }[]> {
+  const { data, error } = await supabase.rpc('get_category_totals', {
+    p_start: start.toISOString(),
+    p_end: end.toISOString(),
+  });
+  if (error) throw new Error(`getCategoryTotals: ${error.message}`);
+  return (data ?? []) as { category: string; total: number }[];
+}
+
+export async function getSubcategoryTotals(
+  supabase: SupabaseClient,
+  start: Date,
+  end: Date,
+  category: string
+): Promise<{ subcategory: string; total: number }[]> {
+  const { data, error } = await supabase.rpc('get_subcategory_totals', {
+    p_start: start.toISOString(),
+    p_end: end.toISOString(),
+    p_category: category,
+  });
+  if (error) throw new Error(`getSubcategoryTotals: ${error.message}`);
+  return (data ?? []) as { subcategory: string; total: number }[];
 }
 
 export async function getTransactionWithItems(

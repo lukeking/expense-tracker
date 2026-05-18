@@ -81,6 +81,25 @@ export function aggregateByCategory(
   return result.sort((a, b) => b.total - a.total);
 }
 
+// Applies the same top-4 + overflow-into-其他 logic to raw DB totals.
+export function mergeOverflowCategories(
+  rawTotals: { category: string; total: number }[]
+): CategoryTotal[] {
+  const sorted = [...rawTotals].sort((a, b) => b.total - a.total);
+  if (sorted.length <= 5) return sorted;
+
+  const named = sorted.filter((e) => e.category !== '其他');
+  const natural = sorted.find((e) => e.category === '其他');
+  const top4Named = named.slice(0, 4);
+  const overflowNamed = named.slice(4);
+  const qiTaTotal =
+    (natural?.total ?? 0) + overflowNamed.reduce((s, e) => s + e.total, 0);
+
+  const result: CategoryTotal[] = [...top4Named];
+  if (qiTaTotal > 0) result.push({ category: '其他', total: qiTaTotal });
+  return result.sort((a, b) => b.total - a.total);
+}
+
 export function aggregateBySubcategory(
   transactions: TxForSummary[],
   category: string
@@ -118,12 +137,27 @@ export function buildCategoryEmbedFields(
   });
 }
 
+const MAX_SUBCATEGORY_FIELDS = 25;
+
 export function buildSubcategoryEmbedFields(
   subtotals: SubcategoryTotal[]
 ): { name: string; value: string; inline: boolean }[] {
-  return subtotals.map((t) => ({
-    name: t.subcategory,
-    value: `NT$${t.total.toLocaleString()}`,
-    inline: true,
-  }));
+  const sorted = [...subtotals].sort((a, b) => b.total - a.total);
+
+  if (sorted.length <= MAX_SUBCATEGORY_FIELDS) {
+    return sorted.map((t) => ({
+      name: t.subcategory,
+      value: `NT$${t.total.toLocaleString()}`,
+      inline: true,
+    }));
+  }
+
+  const top = sorted.slice(0, MAX_SUBCATEGORY_FIELDS - 1);
+  const rest = sorted.slice(MAX_SUBCATEGORY_FIELDS - 1);
+  const restTotal = rest.reduce((s, t) => s + t.total, 0);
+
+  return [
+    ...top.map((t) => ({ name: t.subcategory, value: `NT$${t.total.toLocaleString()}`, inline: true })),
+    { name: `其他 (${rest.length} 項)`, value: `NT$${restTotal.toLocaleString()}`, inline: true },
+  ];
 }

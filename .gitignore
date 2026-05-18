@@ -33,6 +33,9 @@ NaggingMoney_*.csv
 dry-run-*.txt
 beiZhu-analysis-*.txt
 
+# Private migration config (personal/medical data — never commit)
+backend/src/services/legacy-csv-config.ts
+
 # OS
 .DS_Store
 Thumbs.db

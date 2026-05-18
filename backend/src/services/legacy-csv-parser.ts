@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import type { PaymentMethod } from '../types';
+import { BEIZHU_RULES, SUBCATEGORY_REMAP, TAG_CORRECTIONS } from './legacy-csv-config';
 
 export interface ParsedLegacyRow {
   transaction_at: string;
@@ -59,8 +60,8 @@ const STORE_BEIZHU_CATEGORY: Record<string, string> = {
   瓶裝水: '食', 點心: '食', 水果: '食', 燕麥: '食', 泡麵: '食',
   蛋: '食', 食材: '食', 茶葉蛋: '食', 美式: '食', 鮮乳: '食',
   豆腐: '食', 養樂多: '食', 桶裝水: '食', 補給: '食', 冰塊: '食',
-  日用品: '住', 口罩: '住',
-  文具: '育', 影印: '育', 列印: '育',
+  日用品: '其他', 口罩: '醫',
+  文具: '其他', 影印: '其他', 列印: '其他',
   電池: '其他',
 };
 
@@ -118,98 +119,8 @@ export interface BeizhuRule {
   items?: Array<{ name: string; amount: number }>;
 }
 
-export const BEIZHU_RULES: Record<string, BeizhuRule> = {
-  // GROUP D — institution + symptom/dept
-  '昌禾骨科 右肩': { tag: '昌禾骨科', note: '右肩' },
-  '昌禾骨科 右肩 震波 自費': { tag: '昌禾骨科', note: '右肩 震波 自費' },
-  '昌禾骨科 左腕 三角軟骨': { tag: '昌禾骨科', note: '左腕 三角軟骨' },
-  '昌禾骨科 右肩 物理治療': { tag: '昌禾骨科', note: '右肩 物理治療' },
-  '昌禾骨科 右肩 徒手復健 自費': { tag: '昌禾骨科', note: '右肩 徒手復健 自費' },
-  '昌禾骨科 右肩 自費震波': { tag: '昌禾骨科', note: '右肩 自費震波' },
-  '亞東醫院 胸腔內科': { tag: '亞東醫院', note: '胸腔內科' },
-  '中興醫院 骨科 回診': { tag: '中興醫院', note: '骨科 回診' },
-  '中興醫院 X光光碟 診斷書': { tag: '中興醫院', note: 'X光光碟 診斷書' },
-  '正家診所 右後腳跟痛': { tag: '正家診所', note: '右後腳跟痛' },
-  '正家診所 右後腳跟': { tag: '正家診所', note: '右後腳跟' },
-  '正家診所 抽血檢查': { tag: '正家診所', note: '抽血檢查' },
-  '正家診所 回診看抽血報告': { tag: '正家診所', note: '回診看抽血報告' },
-  '正家診所 感冒復發 喉嚨痛': { tag: '正家診所', note: '感冒復發 喉嚨痛' },
-  // GROUP E — annotated ambiguous entries
-  '出差 待請款': {},
-  '機車小幫手 訂閱年費': { tag: '機車小幫手', note: '訂閱年費' },
-  '匯通牙醫 洗牙': { tag: '匯通牙醫', note: '洗牙' },
-  '板橋中興 骨科回診': { tag: '板橋中興', note: '骨科回診' },
-  '正家 左膝': { tag: '正家', note: '左膝' },
-  '正家 抽血': { tag: '正家', note: '抽血' },
-  '正家 看抽血報告': { tag: '正家', note: '看抽血報告' },
-  '正家 感冒回診': { tag: '正家', note: '感冒回診' },
-  '日Amazon/vape 電池x2': { tag: '日Amazon', note: 'vape 電池x2' },
-  'KFC/花雕紙包雞': { tag: 'KFC', note: '花雕紙包雞' },
-  '乾麵/餛飩湯': {},
-  'FF14 ?月??????': { tag: 'FF14', note: '暁のフィナーレ' },
-  'Gawr Gura　恐??????': { note: 'Gawr Gura 恐竜ぬいぐるみ' },
-  '痔瘡軟膏 大樹藥局': { tag: '大樹藥局', note: '痔瘡軟膏' },
-  'UNQILO 牛仔褲 外套': { tag: 'UNIQLO', note: '牛仔褲 外套' },
-  '迪卡儂 泳褲 泳帽 泳鏡 防水包': { tag: '迪卡儂', note: '泳褲 泳帽 泳鏡 防水包' },
-  '大樹 暈機 暈船': { tag: '大樹', note: '暈機 暈船' },
-  '迪卡儂 水母衣 海灘褲 按摩滾筒': { tag: '迪卡儂', note: '水母衣 海灘褲 按摩滾筒' },
-  '大樹 痔瘡軟膏': { tag: '大樹', note: '痔瘡軟膏' },
-  '亞東 胸腔內科': { tag: '亞東', note: '胸腔內科' },
-  'FF14 ?金?????CE版 ￥6000': { tag: 'FF14', note: '黄金のレガシーCE版 ￥6000' },
-  '王林小兒科 二確': { tag: '王林小兒科', note: '二確' },
-  '王林 二確回診': { tag: '王林', note: '二確回診' },
-  '板橋?台東 便當80': { note: '板橋↔台東 便當80' },
-  '正家 抽血報告 降血脂藥': { tag: '正家', note: '抽血報告 降血脂藥' },
-  '大樹 人工皮 聖碘': { tag: '大樹', note: '人工皮 聖碘' },
-  '正家 破傷風': { tag: '正家', note: '破傷風' },
-  '正家 左膝傷口': { tag: '正家', note: '左膝傷口' },
-  '正家 降血脂 慢箋': { tag: '正家', note: '降血脂 慢箋' },
-  '正家 血脂拿藥': { tag: '正家', note: '血脂拿藥' },
-  '正家 抽血報告 痛風藥': { tag: '正家', note: '抽血報告 痛風藥' },
-  '王林 感冒': { tag: '王林', note: '感冒' },
-  '王林 感冒回診': { tag: '王林', note: '感冒回診' },
-  '正家 領降血脂藥': { tag: '正家', note: '領降血脂藥' },
-  'Claude Pro': { tag: 'Claude', note: 'Pro subscription' },
-  'Google AI Pro': { tag: 'GoogleAI', note: 'Pro subscription' },
-  'Coupang wow': { tag: 'Coupang', note: 'wow subscription' },
-  'Google AI Studio': { tag: 'GoogleAI', note: 'Studio billing' },
-  '大樹藥局 普拿疼': { tag: '大樹藥局', note: '普拿疼' },
-  '普拿疼 大樹藥局': { tag: '大樹藥局', note: '普拿疼' },
-  '圓石 伯爵紅茶35 冬瓜青40': { tag: '圓石', note: '伯爵紅茶35 冬瓜青40' },
-  // Laundry: suppress tag; amounts parsed into transaction_items by parseBeiZhuItems()
-  '洗 70 烘 50': {},
-  '洗 100 烘 50': {},
-  '洗70 烘50': {},
-  '洗100 烘70': {},
-  '床單 洗70 烘50': {},
-  // Maintenance details — note only, no tag
-  '機油 前後輪更換': { note: '機油 前後輪更換' },
-  '機油 前煞車皮': { note: '機油 前煞車皮' },
-  '機油350 後輪1450': { note: '機油350 後輪1450' },
-  '機油+齒輪油': { note: '機油+齒輪油' },
-  '迪爵 機油': { note: '迪爵 機油' },
-  // Rentals with mileage/duration notes
-  '租金 850 里程 668': { items: [{ name: '租金', amount: 850 }, { name: '里程費', amount: 668 }] },
-  '48hr 800 油錢 100': { note: '48hr', items: [{ name: '租金', amount: 800 }, { name: '油錢', amount: 100 }] },
-  // Reimbursable work travel — suppress tag
-  '公出 待請款': {},
-  // Drug store + item
-  '大樹 艾歐復隆': { tag: '大樹', note: '艾歐復隆' },
-};
-
 // -- Subcategory normalisation --
 // Strip trailing " NT" (NaggingMoney naming artifact) then apply semantic remap.
-
-const SUBCATEGORY_REMAP: Record<string, string> = {
-  '剪髮': '理髮',       // both mean haircut
-  '衣服': '衣物',       // both mean clothes
-  '看電影': '電影',      // normalise
-  '房租費': '房租',      // simplify
-  '文具用品費': '文具',   // simplify
-  '文具用品': '文具',    // simplify
-  '加油': '加油費',      // consistent with 加油費 NT → 加油費
-  '計程車': '搭計程車',  // consistent with 搭公車/搭火車/搭捷運
-};
 
 function normalizeSubcategory(raw: string): string {
   const stripped = raw.replace(/ NT$/, '').trim();
@@ -230,14 +141,22 @@ export function parseBeiZhuItems(
       { name: pfx + '烘衣', amount: parseInt(laundry[3]) },
     ];
   }
+
+  // General: 2+ space-separated segments each of the form "text+digits" (no space between name and amount)
+  // e.g. "機油350 後輪1450" or "擴鼻器290 漢服244"
+  const segs = beiZhu.trim().split(/\s+/);
+  if (segs.length >= 2) {
+    const parsed = segs.map((seg) => {
+      const m = seg.match(/^([^\d]+)(\d+)$/);
+      return m ? { name: m[1], amount: parseInt(m[2], 10) } : null;
+    });
+    if (parsed.every(Boolean)) {
+      return parsed as Array<{ name: string; amount: number }>;
+    }
+  }
+
   return null;
 }
-
-// Full-tag corrections: a built category:sub tag → replacement tags.
-// Used when category was misclassified in the source app.
-const TAG_CORRECTIONS: Record<string, string[]> = {
-  '行:神盾': ['其他:App', '神盾'],
-};
 
 const PAYMENT_MAP: Record<string, PaymentMethod> = {
   '現金': 'cash',
@@ -381,8 +300,18 @@ export function parseRow(cols: string[], lineNum: number, stats: ParseStats): Pa
     if (beiZhu) {
       const rule = BEIZHU_RULES[beiZhu];
       if (rule) {
-        if (rule.tag) tags.push(rule.tag);
+        if (rule.tag) {
+          // tag with ':' overrides the category:sub tag (reclassify misfiled category)
+          if (rule.tag.includes(':')) tags[0] = rule.tag;
+          else tags.push(rule.tag);
+        }
         if (rule.note !== undefined) noteText = rule.note;
+      } else if (/^\d+$/.test(beiZhu)) {
+        // Pure-numeric beiZhu (e.g. parking dates like "0421", "20230103") — append to note, not tag
+        noteText = noteText ? `${noteText} ${beiZhu}` : beiZhu;
+      } else if (beiZhu.includes('→') || beiZhu.includes('↔')) {
+        // Transit route (e.g. "亞東醫院→善導寺", "板橋↔台東") — store as note, not tag
+        noteText = beiZhu;
       } else {
         tags.push(beiZhu);
       }
@@ -411,7 +340,7 @@ export function parseRow(cols: string[], lineNum: number, stats: ParseStats): Pa
   const itemList = beiZhuRuleItems ?? parsedItems;
   const items = itemList
     ? itemList.map((it) => ({ name: it.name, amount: it.amount, tags: itemTags }))
-    : [{ name: rawItem || noteText, amount, tags: itemTags }];
+    : [{ name: noteText, amount, tags: itemTags }];
 
   return {
     transaction_at: transactionAt,
