@@ -222,4 +222,5 @@ export interface Env {
   GEMINI_MODEL_NAME: string;
   ANDROID_API_KEY: string;
   DISCORD_CHANNEL_ID: string;
+  PWA_ORIGIN: string;
 }
