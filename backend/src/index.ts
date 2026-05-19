@@ -4,6 +4,7 @@ import { discordVerify } from './middleware/discord-verify';
 import { androidAuth } from './middleware/android-auth';
 import { discordHandler } from './handlers/discord';
 import { androidNotificationHandler, androidInputHandler, recentTransactionsHandler, healthHandler } from './handlers/android';
+import { pwaRouter } from './handlers/pwa';
 import { getSupabaseClient } from './db/client';
 import { sendChannelMessage } from './services/discord-notify';
 
@@ -14,6 +15,7 @@ app.post('/api/notification', androidAuth, androidNotificationHandler);
 app.post('/android/input', androidAuth, androidInputHandler);
 app.get('/android/transactions/recent', androidAuth, recentTransactionsHandler);
 app.get('/api/health', healthHandler);
+app.route('/pwa', pwaRouter);
 
 export function formatReminderMessage(latestRun: { uploaded_at: string; file_name: string | null } | null): string {
   const lines = [
