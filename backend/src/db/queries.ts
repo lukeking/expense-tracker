@@ -192,7 +192,7 @@ export async function findParentCandidates(
   supabase: SupabaseClient,
   searchTerm: string,
   windowDays: number
-): Promise<(Pick<Transaction, 'id' | 'amount' | 'note' | 'transaction_at'> & { transaction_items: { name: string }[] })[]> {
+): Promise<(Pick<Transaction, 'id' | 'amount' | 'note' | 'tags' | 'transaction_at'> & { transaction_items: { name: string }[] })[]> {
   const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString();
   // PostgREST cannot filter on related table columns, so fetch all expense rows in the
   // window and filter in JS. At ~100 tx/month this is at most ~300 rows over 90 days.
@@ -212,7 +212,7 @@ export async function findParentCandidates(
       (row.note ?? '').toLowerCase().includes(lower) ||
       (row.tags as string[])?.some((t) => t.toLowerCase().includes(lower))
   );
-  return matches.slice(0, 5) as (Pick<Transaction, 'id' | 'amount' | 'note' | 'transaction_at'> & { transaction_items: { name: string }[] })[];
+  return matches.slice(0, 5) as (Pick<Transaction, 'id' | 'amount' | 'note' | 'tags' | 'transaction_at'> & { transaction_items: { name: string }[] })[];
 }
 
 export async function updateParentTransactionId(
@@ -456,7 +456,8 @@ export async function findTransactionsWithoutInvoiceInRange(
   return (data ?? []) as Transaction[];
 }
 
-export type TransactionForPeriod = Pick<Transaction, 'id' | 'amount' | 'tags' | 'transaction_at'> & {
+export type TransactionForPeriod = Pick<Transaction, 'id' | 'amount' | 'tags' | 'transaction_at' | 'transaction_type'> & {
+  parent_transaction_id: string | null;
   transaction_items: Pick<TransactionItemRow, 'amount' | 'tags'>[];
 };
 
@@ -472,8 +473,8 @@ export async function getTransactionsForPeriod(
   while (true) {
     const { data, error } = await supabase
       .from('transactions')
-      .select('id, amount, tags, transaction_at, transaction_items(amount, tags)')
-      .in('transaction_type', ['expense', 'fee'])
+      .select('id, amount, transaction_type, tags, transaction_at, parent_transaction_id, transaction_items(amount, tags)')
+      .in('transaction_type', ['expense', 'fee', 'refund'])
       .gte('transaction_at', start.toISOString())
       .lt('transaction_at', end.toISOString())
       .order('transaction_at', { ascending: true })

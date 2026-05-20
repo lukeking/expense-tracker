@@ -65,19 +65,19 @@ export function ItemRow({ item, inheritedTag, extraTags = [], onChange, onRemove
   const allTagOptions = [...new Set([...dbOptions, ...extraTags.filter((t) => t.includes(':'))])];
 
   return (
-    <div className="flex items-center gap-2 py-2 border-b border-gray-100 last:border-0">
+    <div className="flex items-center gap-2 py-2 border-b border-gray-100 dark:border-gray-700 last:border-0">
       {/* Tag selector */}
       <button
         type="button"
         onClick={() => setTagSheetOpen(true)}
         className={`flex-shrink-0 text-xs px-2 py-1 rounded border truncate max-w-[80px] ${
           item.tagOverride
-            ? 'border-blue-400 text-blue-700 bg-blue-50'
-            : 'border-gray-200 text-gray-400'
+            ? 'border-blue-400 text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/30'
+            : 'border-gray-200 dark:border-gray-600 text-gray-400 dark:text-gray-500'
         }`}
         title={displayTag ?? '繼承分類'}
       >
-        {item.tagOverride ?? (inheritedTag ? <span className="text-gray-300">{inheritedTag}</span> : '—')}
+        {item.tagOverride ?? (inheritedTag ? <span className="text-gray-300 dark:text-gray-600">{inheritedTag}</span> : '—')}
       </button>
 
       {/* Name input */}
@@ -86,7 +86,7 @@ export function ItemRow({ item, inheritedTag, extraTags = [], onChange, onRemove
         value={item.name}
         onChange={(e) => onChange({ ...item, name: e.target.value })}
         placeholder="品項名稱"
-        className="flex-1 text-sm border-0 outline-none bg-transparent placeholder-gray-300"
+        className="flex-1 text-sm border-0 outline-none bg-transparent text-gray-900 dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-600"
       />
 
       {/* Amount stepper */}
@@ -94,7 +94,7 @@ export function ItemRow({ item, inheritedTag, extraTags = [], onChange, onRemove
         <button
           type="button"
           onClick={decrement}
-          className="w-7 h-7 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 text-lg leading-none"
+          className="w-7 h-7 rounded-full border border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300 text-lg leading-none"
         >
           −
         </button>
@@ -104,12 +104,12 @@ export function ItemRow({ item, inheritedTag, extraTags = [], onChange, onRemove
           value={item.amount ?? ''}
           onChange={handleAmountInput}
           placeholder="—"
-          className="w-14 text-center text-sm border-b border-gray-300 outline-none bg-transparent"
+          className="w-14 text-center text-sm border-b border-gray-300 dark:border-gray-600 outline-none bg-transparent text-gray-900 dark:text-gray-100"
         />
         <button
           type="button"
           onClick={increment}
-          className="w-7 h-7 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 text-lg leading-none"
+          className="w-7 h-7 rounded-full border border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300 text-lg leading-none"
         >
           ＋
         </button>
@@ -119,7 +119,7 @@ export function ItemRow({ item, inheritedTag, extraTags = [], onChange, onRemove
       <button
         type="button"
         onClick={onRemove}
-        className="flex-shrink-0 text-gray-400 text-lg leading-none ml-1"
+        className="flex-shrink-0 text-gray-400 dark:text-gray-500 text-lg leading-none ml-1"
         aria-label="移除"
       >
         ✕
@@ -131,7 +131,7 @@ export function ItemRow({ item, inheritedTag, extraTags = [], onChange, onRemove
           <button
             type="button"
             onClick={() => selectTag(null)}
-            className={`w-full text-left px-3 py-2 rounded text-sm ${!item.tagOverride ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50'}`}
+            className={`w-full text-left px-3 py-2 rounded text-sm ${!item.tagOverride ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
           >
             繼承主分類{inheritedTag ? `（${inheritedTag}）` : ''}
           </button>
@@ -140,7 +140,7 @@ export function ItemRow({ item, inheritedTag, extraTags = [], onChange, onRemove
               key={tag}
               type="button"
               onClick={() => selectTag(tag)}
-              className={`w-full text-left px-3 py-2 rounded text-sm ${item.tagOverride === tag ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50'}`}
+              className={`w-full text-left px-3 py-2 rounded text-sm ${item.tagOverride === tag ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
             >
               {tag}
             </button>

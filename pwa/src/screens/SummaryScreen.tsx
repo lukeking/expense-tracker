@@ -10,21 +10,29 @@ function formatMoney(val: number) {
   return `NT$${val.toLocaleString()}`;
 }
 
+function localDt(isoStr: string, opts: { date?: boolean; time?: boolean } = { date: true, time: true }): string {
+  const d = new Date(isoStr);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const date = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  if (opts.date && opts.time) return `${date} ${time}`;
+  if (opts.date) return date;
+  return time;
+}
+
 function groupTransactions(txs: TxRecord[], window: WindowOption): { label: string; items: TxRecord[] }[] {
   const groups = new Map<string, TxRecord[]>();
-  const UTC8 = 8 * 60 * 60 * 1000;
 
   for (const tx of txs) {
-    const utc8 = new Date(new Date(tx.transaction_at).getTime() + UTC8);
+    const dt = new Date(tx.transaction_at);
     let key: string;
     if (window === 'month' || window === 'last-month' || window === '3months') {
-      key = utc8.toISOString().slice(0, 10);
+      key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
     } else if (window === 'half-year' || window === 'year') {
-      const y = utc8.getUTCFullYear();
-      const weekNum = Math.ceil(utc8.getUTCDate() / 7);
-      key = `${y}/${utc8.getUTCMonth() + 1} 第${weekNum}週`;
+      const weekNum = Math.ceil(dt.getDate() / 7);
+      key = `${dt.getFullYear()}/${dt.getMonth() + 1} 第${weekNum}週`;
     } else {
-      key = `${utc8.getUTCFullYear()}/${String(utc8.getUTCMonth() + 1).padStart(2, '0')}`;
+      key = `${dt.getFullYear()}/${String(dt.getMonth() + 1).padStart(2, '0')}`;
     }
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(tx);
@@ -47,37 +55,43 @@ function txLabel(tx: TxRecord): string {
 
 function HistoryGroup({ label, items, parentMap }: { label: string; items: TxRecord[]; parentMap: Map<string, TxRecord> }) {
   const [open, setOpen] = useState(false);
-  const total = items.reduce((s, t) => s + t.amount, 0);
+  const total = items.reduce((s, t) => s + (t.transaction_type === 'refund' ? -t.amount : t.amount), 0);
 
   return (
-    <div className="border-b border-gray-100 last:border-0">
+    <div className="border-b border-gray-100 dark:border-gray-700 last:border-0">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         className="w-full flex justify-between items-center px-4 py-3 text-sm"
       >
-        <span className="font-medium text-gray-700">{label}</span>
-        <span className="text-gray-500">{formatMoney(total)} {open ? '▲' : '▼'}</span>
+        <span className="font-medium text-gray-700 dark:text-gray-200">{label}</span>
+        <span className="text-gray-500 dark:text-gray-400">{formatMoney(total)} {open ? '▲' : '▼'}</span>
       </button>
       {open && (
         <div className="pb-2">
           {items.map((tx) => (
             <div key={tx.id} className="px-4 py-1.5">
               <div className="flex justify-between text-sm">
-                <span className="text-gray-700">{txLabel(tx)}</span>
-                <span className="font-medium">{formatMoney(tx.amount)}</span>
+                <span className="text-gray-700 dark:text-gray-200">
+                  {txLabel(tx)}
+                  <span className="text-xs text-gray-400 dark:text-gray-500 ml-1.5">{localDt(tx.transaction_at, { time: true })}</span>
+                </span>
+                <span className={`font-medium ${tx.transaction_type === 'refund' ? 'text-green-600' : 'text-gray-800 dark:text-gray-100'}`}>
+                  {tx.transaction_type === 'refund' ? `-${formatMoney(tx.amount)}` : formatMoney(tx.amount)}
+                </span>
               </div>
               {tx.parent_transaction_id && (
-                <p className="text-xs text-gray-400 mt-0.5">
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                   ↳ {parentMap.has(tx.parent_transaction_id)
                     ? `${txLabel(parentMap.get(tx.parent_transaction_id)!)} ${formatMoney(parentMap.get(tx.parent_transaction_id)!.amount)}`
                     : '已連結原始交易'}
+                  {' · '}於 {localDt(tx.created_at)} 實際{tx.transaction_type === 'refund' ? '退款' : '計費'}
                 </p>
               )}
               {tx.items.length > 0 && (
                 <div className="mt-1 space-y-0.5 pl-2">
                   {tx.items.map((item) => (
-                    <div key={item.id} className="flex justify-between text-xs text-gray-400">
+                    <div key={item.id} className="flex justify-between text-xs text-gray-400 dark:text-gray-500">
                       <span>{item.name}</span>
                       {item.amount !== null && <span>NT${item.amount}</span>}
                     </div>
@@ -112,16 +126,16 @@ export function SummaryScreen() {
 
       {drilldown ? (
         /* ── Drilldown view ── */
-        <div className="flex-1">
-          <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-100">
+        <div>
+          <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-100 dark:border-gray-700">
             <button type="button" onClick={() => setDrilldown(null)} className="text-blue-600 text-sm">
               ← 返回
             </button>
-            <span className="font-semibold text-gray-800">{drilldown}</span>
-            {subData && <span className="ml-auto text-sm text-gray-500">{formatMoney(subData.total)}</span>}
+            <span className="font-semibold text-gray-800 dark:text-gray-100">{drilldown}</span>
+            {subData && <span className="ml-auto text-sm text-gray-500 dark:text-gray-400">{formatMoney(subData.total)}</span>}
           </div>
           {subLoading ? (
-            <div className="p-8 text-center text-gray-400">載入中…</div>
+            <div className="p-8 text-center text-gray-400 dark:text-gray-500">載入中…</div>
           ) : subData && subData.subcategories.length > 0 ? (
             <div className="px-4 py-3">
               <ResponsiveContainer width="100%" height={200}>
@@ -138,29 +152,29 @@ export function SummaryScreen() {
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="p-8 text-center text-gray-400">此期間無子分類資料</div>
+            <div className="p-8 text-center text-gray-400 dark:text-gray-500">此期間無子分類資料</div>
           )}
         </div>
       ) : (
         /* ── Main view ── */
-        <div className="flex-1">
+        <div>
           {summaryLoading ? (
-            <div className="p-8 text-center text-gray-400">載入中…</div>
+            <div className="p-8 text-center text-gray-400 dark:text-gray-500">載入中…</div>
           ) : !summaryData || summaryData.categories.length === 0 ? (
-            <div className="p-8 text-center text-gray-400">此期間無支出記錄</div>
+            <div className="p-8 text-center text-gray-400 dark:text-gray-500">此期間無支出記錄</div>
           ) : (
             <>
               <div className="text-center py-2">
-                <span className="text-xs text-gray-500">總計</span>
-                <p className="text-2xl font-bold text-gray-900">{formatMoney(summaryData.grand_total)}</p>
+                <span className="text-xs text-gray-500 dark:text-gray-400">總計</span>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatMoney(summaryData.grand_total)}</p>
               </div>
-              <ResponsiveContainer width="100%" height={220}>
-                <PieChart>
+              <ResponsiveContainer width="100%" height={240}>
+                <PieChart margin={{ top: 20, right: 20, bottom: 0, left: 20 }}>
                   <Pie
                     data={summaryData.categories.map((c) => ({ name: c.category, value: c.total }))}
                     cx="50%"
-                    cy="50%"
-                    outerRadius={90}
+                    cy="52%"
+                    outerRadius={85}
                     dataKey="value"
                     onClick={(entry) => setDrilldown(entry.name as string)}
                     cursor="pointer"
@@ -183,9 +197,9 @@ export function SummaryScreen() {
                     className="flex items-center gap-2 w-full py-1.5 text-sm"
                   >
                     <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: COLOURS[i % COLOURS.length] }} />
-                    <span className="flex-1 text-left text-gray-700">{c.category}</span>
-                    <span className="text-gray-500">{c.percentage}%</span>
-                    <span className="font-medium text-gray-800">{formatMoney(c.total)}</span>
+                    <span className="flex-1 text-left text-gray-700 dark:text-gray-200">{c.category}</span>
+                    <span className="text-gray-500 dark:text-gray-400">{c.percentage}%</span>
+                    <span className="font-medium text-gray-800 dark:text-gray-100">{formatMoney(c.total)}</span>
                   </button>
                 ))}
               </div>
@@ -195,12 +209,12 @@ export function SummaryScreen() {
       )}
 
       {/* Transaction history */}
-      <div className="border-t border-gray-100">
+      <div className="border-t border-gray-100 dark:border-gray-700">
         <div className="px-4 py-2">
-          <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">交易記錄</span>
+          <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">交易記錄</span>
         </div>
         {groups.length === 0 ? (
-          <p className="text-center text-gray-400 text-sm py-4">此期間無交易</p>
+          <p className="text-center text-gray-400 dark:text-gray-500 text-sm py-4">此期間無交易</p>
         ) : (
           groups.map((g) => <HistoryGroup key={g.label} label={g.label} items={g.items} parentMap={parentMap} />)
         )}

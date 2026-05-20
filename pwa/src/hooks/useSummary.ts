@@ -3,31 +3,30 @@ import { apiFetch } from '../api/client';
 
 export type WindowOption = 'month' | 'last-month' | '3months' | 'half-year' | 'year' | 'all';
 
-const UTC8 = 8 * 60 * 60 * 1000;
-
 export function windowToDates(window: WindowOption): { from: string; to: string } {
   const now = new Date();
-  const utc8Now = new Date(now.getTime() + UTC8);
-  const y = utc8Now.getUTCFullYear();
-  const m = utc8Now.getUTCMonth();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const d = now.getDate();
 
-  function utc8Date(year: number, month: number, day: number): string {
-    return new Date(Date.UTC(year, month, day) - UTC8).toISOString().slice(0, 10);
+  function localDate(year: number, month: number, day: number): string {
+    const dt = new Date(year, month, day);
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
   }
 
-  const today = utc8Now.toISOString().slice(0, 10);
+  const today = localDate(y, m, d);
 
   switch (window) {
     case 'month':
-      return { from: utc8Date(y, m, 1), to: today };
+      return { from: localDate(y, m, 1), to: today };
     case 'last-month':
-      return { from: utc8Date(y, m - 1, 1), to: utc8Date(y, m, 1) };
+      return { from: localDate(y, m - 1, 1), to: localDate(y, m, 1) };
     case '3months':
-      return { from: utc8Date(y, m - 3, utc8Now.getUTCDate()), to: today };
+      return { from: localDate(y, m - 3, d), to: today };
     case 'half-year':
-      return { from: utc8Date(y, m - 6, utc8Now.getUTCDate()), to: today };
+      return { from: localDate(y, m - 6, d), to: today };
     case 'year':
-      return { from: utc8Date(y - 1, m, utc8Now.getUTCDate()), to: today };
+      return { from: localDate(y - 1, m, d), to: today };
     case 'all':
       return { from: '2020-01-01', to: today };
   }
@@ -90,6 +89,7 @@ export interface TxRecord {
   tags: string[];
   note: string | null;
   transaction_at: string;
+  created_at: string;
   parent_transaction_id: string | null;
   items: TxItem[];
 }

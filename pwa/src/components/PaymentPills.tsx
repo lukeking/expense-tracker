@@ -26,7 +26,7 @@ export function PaymentPills({ value, onChange }: Props) {
           className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
             value === method
               ? 'bg-blue-600 text-white border-blue-600'
-              : 'bg-white text-gray-700 border-gray-300'
+              : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600'
           }`}
         >
           {LABELS[method]}

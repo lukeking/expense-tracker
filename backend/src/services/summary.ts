@@ -2,6 +2,7 @@ import type { SummaryPeriod, CategoryTotal, SubcategoryTotal, TransactionItemRow
 
 type TxForSummary = {
   amount: number;
+  transaction_type?: string;
   tags: string[];
   transaction_items: Pick<TransactionItemRow, 'amount' | 'tags'>[];
 };
@@ -41,6 +42,7 @@ export function aggregateByCategory(
 ): CategoryTotal[] {
   const map = new Map<string, number>();
   for (const tx of transactions) {
+    const sign = tx.transaction_type === 'refund' ? -1 : 1;
     const items = tx.transaction_items ?? [];
     let categorisedSum = 0;
     for (const item of items) {
@@ -48,37 +50,22 @@ export function aggregateByCategory(
       const categoryTag = item.tags.find((t) => t.includes(':')) ?? null;
       if (!categoryTag) continue;
       const category = categoryTag.split(':')[0];
-      map.set(category, (map.get(category) ?? 0) + item.amount);
+      map.set(category, (map.get(category) ?? 0) + sign * item.amount);
       categorisedSum += item.amount;
     }
     const remainder = tx.amount - categorisedSum;
     if (remainder > 0) {
-      map.set('其他', (map.get('其他') ?? 0) + remainder);
+      const fallbackTag = tx.tags.find((t) => t.includes(':'))
+        ?? items.flatMap((i) => i.tags).find((t) => t.includes(':'));
+      const bucket = fallbackTag ? fallbackTag.split(':')[0] : '其他';
+      map.set(bucket, (map.get(bucket) ?? 0) + sign * remainder);
     }
   }
 
-  const sorted = Array.from(map.entries())
+  return Array.from(map.entries())
+    .filter(([, total]) => total > 0)
     .map(([category, total]) => ({ category, total }))
     .sort((a, b) => b.total - a.total);
-
-  if (sorted.length <= 5) return sorted;
-
-  // More than 5 distinct categories: keep top 4 named (non-其他), merge rest into 其他
-  const named = sorted.filter((e) => e.category !== '其他');
-  const natural = sorted.find((e) => e.category === '其他');
-
-  const top4Named = named.slice(0, 4);
-  const overflowNamed = named.slice(4);
-
-  const qiTaTotal =
-    (natural?.total ?? 0) + overflowNamed.reduce((s, e) => s + e.total, 0);
-
-  const result: CategoryTotal[] = [...top4Named];
-  if (qiTaTotal > 0) {
-    result.push({ category: '其他', total: qiTaTotal });
-  }
-
-  return result.sort((a, b) => b.total - a.total);
 }
 
 // Applies the same top-4 + overflow-into-其他 logic to raw DB totals.
@@ -107,6 +94,7 @@ export function aggregateBySubcategory(
   const map = new Map<string, number>();
   const prefix = category + ':';
   for (const tx of transactions) {
+    const sign = tx.transaction_type === 'refund' ? -1 : 1;
     const items = tx.transaction_items ?? [];
     let matchedSum = 0;
     for (const item of items) {
@@ -114,12 +102,21 @@ export function aggregateBySubcategory(
       const categoryTag = item.tags.find((t) => t.startsWith(prefix)) ?? null;
       if (!categoryTag) continue;
       const subcategory = categoryTag.split(':').slice(1).join(':') || '其他';
-      map.set(subcategory, (map.get(subcategory) ?? 0) + item.amount);
+      map.set(subcategory, (map.get(subcategory) ?? 0) + sign * item.amount);
       matchedSum += item.amount;
     }
     const remainder = tx.amount - matchedSum;
     if (remainder > 0) {
-      map.set('其他', (map.get('其他') ?? 0) + remainder);
+      const fallbackTag = tx.tags.find((t) => t.startsWith(prefix))
+        ?? items.flatMap((i) => i.tags).find((t) => t.startsWith(prefix));
+      if (fallbackTag) {
+        const subcategory = fallbackTag.split(':').slice(1).join(':') || '其他';
+        map.set(subcategory, (map.get(subcategory) ?? 0) + sign * remainder);
+      } else {
+        const anyMatch = tx.tags.find((t) => t.split(':')[0] === category)
+          ?? items.flatMap((i) => i.tags).find((t) => t.split(':')[0] === category);
+        if (anyMatch) map.set('其他', (map.get('其他') ?? 0) + sign * remainder);
+      }
     }
   }
   return Array.from(map.entries())

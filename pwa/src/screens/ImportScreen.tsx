@@ -76,19 +76,19 @@ export function ImportScreen() {
   return (
     <div className="flex flex-col gap-6 p-4 h-full overflow-y-auto">
       <div>
-        <h2 className="text-lg font-semibold text-gray-900">匯入電子發票 CSV</h2>
-        <p className="text-sm text-gray-500 mt-1">請上傳財政部電子發票整合服務平台匯出的 CSV 檔</p>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">匯入電子發票 CSV</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">請上傳財政部電子發票整合服務平台匯出的 CSV 檔</p>
       </div>
 
       {!result ? (
         <>
-          <label className="flex flex-col items-center gap-3 border-2 border-dashed border-gray-300 rounded-xl p-8 cursor-pointer hover:border-blue-400 transition-colors">
+          <label className="flex flex-col items-center gap-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-8 cursor-pointer hover:border-blue-400 transition-colors">
             <span className="text-4xl">📂</span>
-            <span className="text-sm text-gray-600">
+            <span className="text-sm text-gray-600 dark:text-gray-300">
               {file ? file.name : '點擊選擇 CSV 檔案'}
             </span>
             {file && (
-              <span className="text-xs text-gray-400">
+              <span className="text-xs text-gray-400 dark:text-gray-500">
                 {(file.size / 1024).toFixed(1)} KB
               </span>
             )}
@@ -101,8 +101,8 @@ export function ImportScreen() {
           </label>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-              <p className="text-sm text-red-700">{error}</p>
+            <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg px-4 py-3">
+              <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
             </div>
           )}
 
@@ -117,16 +117,16 @@ export function ImportScreen() {
         </>
       ) : (
         <>
-          <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-            <p className="text-sm font-medium text-green-800 mb-1">匯入完成</p>
-            <p className="text-xs text-green-600 truncate">{result.filename}</p>
+          <div className="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-xl p-4">
+            <p className="text-sm font-medium text-green-800 dark:text-green-300 mb-1">匯入完成</p>
+            <p className="text-xs text-green-600 dark:text-green-400 truncate">{result.filename}</p>
           </div>
 
-          <div className="bg-white border border-gray-100 rounded-xl overflow-hidden">
+          <div className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl overflow-hidden">
             {RESULT_ROWS.map((row) => (
-              <div key={row.label} className="flex justify-between px-4 py-3 border-b border-gray-50 last:border-0">
-                <span className="text-sm text-gray-700">{row.label}</span>
-                <span className={`text-sm font-semibold ${row.value > 0 ? 'text-gray-900' : 'text-gray-300'}`}>
+              <div key={row.label} className="flex justify-between px-4 py-3 border-b border-gray-50 dark:border-gray-700 last:border-0">
+                <span className="text-sm text-gray-700 dark:text-gray-200">{row.label}</span>
+                <span className={`text-sm font-semibold ${row.value > 0 ? 'text-gray-900 dark:text-white' : 'text-gray-300 dark:text-gray-600'}`}>
                   {row.value}
                 </span>
               </div>
@@ -136,7 +136,7 @@ export function ImportScreen() {
           <button
             type="button"
             onClick={reset}
-            className="border border-gray-300 text-gray-700 rounded-xl py-3 font-medium"
+            className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-xl py-3 font-medium"
           >
             再次匯入
           </button>

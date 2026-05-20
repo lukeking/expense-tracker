@@ -45,13 +45,13 @@ export function TagInput({ value, onChange, placeholder = '新增標籤…' }: P
   return (
     <div className="relative">
       <div
-        className="flex flex-wrap gap-1.5 p-2 border border-gray-300 rounded-lg min-h-[42px] cursor-text"
+        className="flex flex-wrap gap-1.5 p-2 border border-gray-300 dark:border-gray-600 rounded-lg min-h-[42px] cursor-text dark:bg-gray-800"
         onClick={() => inputRef.current?.focus()}
       >
         {value.map((tag) => (
           <span
             key={tag}
-            className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-sm"
+            className="inline-flex items-center gap-1 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full text-sm"
           >
             #{tag}
             <button
@@ -72,7 +72,7 @@ export function TagInput({ value, onChange, placeholder = '新增標籤…' }: P
           onFocus={() => setShowDropdown(true)}
           onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
           placeholder={value.length === 0 ? placeholder : ''}
-          className="flex-1 min-w-24 outline-none text-sm bg-transparent"
+          className="flex-1 min-w-24 outline-none text-sm bg-transparent text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
         />
         {input.trim() && (
           <button
@@ -85,13 +85,13 @@ export function TagInput({ value, onChange, placeholder = '新增標籤…' }: P
         )}
       </div>
       {showDropdown && suggestions.length > 0 && (
-        <ul className="absolute z-10 top-full mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-md max-h-40 overflow-y-auto">
+        <ul className="absolute z-10 top-full mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-md max-h-40 overflow-y-auto">
           {suggestions.map((tag) => (
             <li key={tag}>
               <button
                 type="button"
                 onMouseDown={(e) => { e.preventDefault(); addTag(tag); }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                className="w-full text-left px-3 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
               >
                 #{tag}
               </button>
