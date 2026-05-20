@@ -25,7 +25,7 @@ export function TimeWindowPicker({ value, onChange }: Props) {
           className={`flex-shrink-0 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
             value === opt.value
               ? 'bg-blue-600 text-white border-blue-600'
-              : 'bg-white text-gray-600 border-gray-200'
+              : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600'
           }`}
         >
           {opt.label}

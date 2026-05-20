@@ -10,6 +10,7 @@ import {
   createImportRun,
   updateImportRun,
   getTransactionsForPeriod,
+  type TransactionForPeriod,
 } from '../db/queries';
 import { getBudgetProgress } from '../services/budget';
 import { runImportPipeline } from '../services/invoice-matcher';
@@ -19,6 +20,20 @@ import { aggregateByCategory, aggregateBySubcategory } from '../services/summary
 type PwaEnv = { Bindings: Env };
 
 const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'credit_card', 'easy_card', 'prepaid_wallet', 'bank_account'];
+
+function enrichRefundTags(txs: TransactionForPeriod[]): TransactionForPeriod[] {
+  const txById = new Map(txs.map((tx) => [tx.id, tx]));
+  return txs.map((tx) => {
+    if (tx.transaction_type !== 'refund' || !tx.parent_transaction_id) return tx;
+    const allTags = [...tx.tags, ...tx.transaction_items.flatMap((i) => i.tags)];
+    if (allTags.some((t) => t.includes(':'))) return tx;
+    const parent = txById.get(tx.parent_transaction_id);
+    if (!parent) return tx;
+    const parentTag = [...parent.tags, ...parent.transaction_items.flatMap((i) => i.tags)].find((t) => t.includes(':'));
+    if (!parentTag) return tx;
+    return { ...tx, tags: [...tx.tags, parentTag] };
+  });
+}
 
 export const pwaRouter = new Hono<PwaEnv>();
 
@@ -88,7 +103,8 @@ pwaRouter.post('/expense', async (c) => {
     return c.json({ error: 'INVALID_PAYLOAD', message: 'Invalid JSON' }, 400);
   }
 
-  const { amount, payment_method, category_tag, free_tags = [], note, items = [] } = body;
+  const { amount, payment_method, category_tag, free_tags: rawTags = [], note, items = [] } = body;
+  const free_tags = rawTags.map((t) => t.replace(/^[#\s]+|[#\s]+$/g, '')).filter(Boolean);
 
   if (!Number.isInteger(amount) || amount <= 0) {
     return c.json({ error: 'INVALID_AMOUNT', message: 'amount must be a positive integer' }, 400);
@@ -151,8 +167,8 @@ pwaRouter.get('/summary', async (c) => {
 
   const supabase = getSupabaseClient(c.env);
   const txs = await getTransactionsForPeriod(supabase, start, end);
-  const rawTotals = aggregateByCategory(txs);
-  const grandTotal = rawTotals.reduce((s, t) => s + t.total, 0);
+  const grandTotal = txs.reduce((s, tx) => s + (tx.transaction_type === 'refund' ? -tx.amount : tx.amount), 0);
+  const rawTotals = aggregateByCategory(enrichRefundTags(txs));
   const categories = rawTotals.map((t) => ({
     category: t.category,
     total: t.total,
@@ -175,8 +191,13 @@ pwaRouter.get('/summary/subcategories', async (c) => {
   const end = new Date(to + 'T23:59:59.999Z');
   const supabase = getSupabaseClient(c.env);
   const txs = await getTransactionsForPeriod(supabase, start, end);
-  const rawTotals = aggregateBySubcategory(txs, major);
-  const total = rawTotals.reduce((s, t) => s + t.total, 0);
+  const rawTotals = aggregateBySubcategory(enrichRefundTags(txs), major);
+  const total = txs
+    .filter((tx) => {
+      const allTags = [...tx.tags, ...tx.transaction_items.flatMap((i) => i.tags)];
+      return allTags.some((t) => t === major || t.startsWith(major + ':'));
+    })
+    .reduce((s, tx) => s + (tx.transaction_type === 'refund' ? -tx.amount : tx.amount), 0);
   const subcategories = rawTotals.map((t) => ({
     subcategory: t.subcategory,
     total: t.total,
@@ -200,7 +221,7 @@ pwaRouter.get('/transactions', async (c) => {
   const { data, error, count } = await supabase
     .from('transactions')
     .select(
-      'id, amount, transaction_type, payment_method, tags, note, transaction_at, parent_transaction_id, transaction_items(id, name, amount, tags)',
+      'id, amount, transaction_type, payment_method, tags, note, transaction_at, created_at, parent_transaction_id, transaction_items(id, name, amount, tags)',
       { count: 'exact' }
     )
     .gte('transaction_at', from)
@@ -212,16 +233,17 @@ pwaRouter.get('/transactions', async (c) => {
 
   type TxRow = {
     id: string; amount: number; transaction_type: string; payment_method: string;
-    tags: string[]; note: string | null; transaction_at: string; parent_transaction_id: string | null;
+    tags: string[]; note: string | null; transaction_at: string; created_at: string; parent_transaction_id: string | null;
     transaction_items: { id: string; name: string; amount: number | null; tags: string[] }[];
   };
   let transactions = (data ?? []) as TxRow[];
 
   if (category) {
+    const matchesCategory = (tags: string[]) =>
+      tags.some((t) => t === category || t.startsWith(category + ':'));
     transactions = transactions.filter((tx) =>
-      tx.transaction_items.some((item) =>
-        item.tags.some((t) => t === category || t.startsWith(category + ':'))
-      )
+      tx.transaction_items.some((item) => matchesCategory(item.tags)) ||
+      matchesCategory(tx.tags)
     );
   }
 
@@ -274,20 +296,35 @@ pwaRouter.post('/fee', async (c) => {
   }
 
   const supabase = getSupabaseClient(c.env);
+
+  let transaction_at = new Date().toISOString();
+  const note = description.trim() || null;
+
+  if (parent_transaction_id) {
+    const { data: parent } = await supabase
+      .from('transactions')
+      .select('transaction_at')
+      .eq('id', parent_transaction_id)
+      .single();
+    if (parent) {
+      transaction_at = parent.transaction_at;
+    }
+  }
+
   const tx = await insertTransaction(supabase, {
     amount,
     payment_method: 'credit_card',
     tags: [],
-    note: description,
+    note,
     transaction_type: 'fee',
-    transaction_at: new Date().toISOString(),
+    transaction_at,
   });
 
   if (parent_transaction_id) {
     await updateParentTransactionId(supabase, tx.id, parent_transaction_id);
   }
 
-  await insertTransactionItems(supabase, tx.id, [{ name: description, amount, tags: [] }]);
+  await insertTransactionItems(supabase, tx.id, [{ name: description || `於 ${transaction_at.slice(0, 10)} 計費`, amount, tags: [] }]);
 
   return c.json({ id: tx.id, amount: tx.amount, transaction_at: tx.transaction_at }, 201);
 });
@@ -315,20 +352,41 @@ pwaRouter.post('/refund', async (c) => {
   }
 
   const supabase = getSupabaseClient(c.env);
+
+  let transaction_at = new Date().toISOString();
+  const note = description.trim() || null;
+  let parentCategoryTag: string | null = null;
+
+  if (parent_transaction_id) {
+    const { data: parent } = await supabase
+      .from('transactions')
+      .select('transaction_at, tags, transaction_items(tags)')
+      .eq('id', parent_transaction_id)
+      .single();
+    if (parent) {
+      transaction_at = parent.transaction_at;
+      const allParentTags = [
+        ...(parent.tags as string[]),
+        ...((parent.transaction_items as { tags: string[] }[]).flatMap((i) => i.tags)),
+      ];
+      parentCategoryTag = allParentTags.find((t) => t.includes(':')) ?? null;
+    }
+  }
+
   const tx = await insertTransaction(supabase, {
     amount,
     payment_method: payment_method as PaymentMethod,
-    tags: [],
-    note: description,
+    tags: parentCategoryTag ? [parentCategoryTag] : [],
+    note,
     transaction_type: 'refund',
-    transaction_at: new Date().toISOString(),
+    transaction_at,
   });
 
   if (parent_transaction_id) {
     await updateParentTransactionId(supabase, tx.id, parent_transaction_id);
   }
 
-  await insertTransactionItems(supabase, tx.id, [{ name: description, amount, tags: [] }]);
+  await insertTransactionItems(supabase, tx.id, [{ name: description || `退款`, amount, tags: parentCategoryTag ? [parentCategoryTag] : [] }]);
 
   return c.json({ id: tx.id, amount: tx.amount, transaction_at: tx.transaction_at }, 201);
 });

@@ -83,42 +83,42 @@ function ExpenseForm() {
 
       {/* Amount */}
       <div>
-        <label className="text-xs text-gray-500 mb-1 block">金額 (NTD)</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">金額 (NTD)</label>
         <input
           type="number"
           min="1"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           placeholder="0"
-          className="text-3xl font-bold w-full border-b-2 border-gray-300 outline-none pb-1 focus:border-blue-500"
+          className="text-3xl font-bold w-full border-b-2 border-gray-300 dark:border-gray-600 outline-none pb-1 focus:border-blue-500 bg-transparent text-gray-900 dark:text-white"
           required
         />
       </div>
 
       {/* Payment method */}
       <div>
-        <label className="text-xs text-gray-500 mb-2 block">付款方式</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">付款方式</label>
         <PaymentPills value={paymentMethod} onChange={setPaymentMethod} />
       </div>
 
       {/* Category */}
       <div>
-        <label className="text-xs text-gray-500 mb-2 block">分類</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">分類</label>
         <CategoryPicker value={category} onChange={setCategory} />
       </div>
 
       {/* Free tags */}
       <div>
-        <label className="text-xs text-gray-500 mb-2 block">標籤</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">標籤</label>
         <TagInput value={freeTags} onChange={setFreeTags} />
       </div>
 
       {/* Items */}
       <div>
         <div className="flex items-center justify-between mb-1">
-          <label className="text-xs text-gray-500">品項明細</label>
+          <label className="text-xs text-gray-500 dark:text-gray-400">品項明細</label>
           {items.length > 0 && (
-            <span className={`text-xs font-medium ${sumExceedsTotal ? 'text-red-600' : itemSum === amountVal && allItemsHaveAmount ? 'text-green-600' : 'text-gray-500'}`}>
+            <span className={`text-xs font-medium ${sumExceedsTotal ? 'text-red-600' : itemSum === amountVal && allItemsHaveAmount ? 'text-green-600' : 'text-gray-500 dark:text-gray-400'}`}>
               {sumExceedsTotal ? `超出 NT$${itemSum - amountVal}` : `NT$${itemSum} / NT$${amountVal}`}
             </span>
           )}
@@ -144,13 +144,13 @@ function ExpenseForm() {
 
       {/* Note */}
       <div>
-        <label className="text-xs text-gray-500 mb-1 block">備註</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">備註</label>
         <input
           type="text"
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="可不填"
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none"
+          className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
         />
       </div>
 
@@ -211,23 +211,23 @@ function FeeForm() {
         </div>
       )}
       <div>
-        <label className="text-xs text-gray-500 mb-1 block">金額 (NTD)</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">金額 (NTD)</label>
         <input
           type="number" min="1" value={amount} onChange={(e) => setAmount(e.target.value)}
           placeholder="0" required
-          className="text-3xl font-bold w-full border-b-2 border-gray-300 outline-none pb-1 focus:border-blue-500"
+          className="text-3xl font-bold w-full border-b-2 border-gray-300 dark:border-gray-600 outline-none pb-1 focus:border-blue-500 bg-transparent text-gray-900 dark:text-white"
         />
       </div>
       <div>
-        <label className="text-xs text-gray-500 mb-1 block">說明</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">說明</label>
         <input
           type="text" value={description} onChange={(e) => setDescription(e.target.value)}
           placeholder="國外交易服務費"
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none"
+          className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
         />
       </div>
       <div>
-        <label className="text-xs text-gray-500 mb-2 block">連結原始交易（可選）</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">連結原始交易（可選）</label>
         <ParentSearch
           value={parent}
           onSelect={(result) => {
@@ -291,27 +291,27 @@ function RefundForm() {
         </div>
       )}
       <div>
-        <label className="text-xs text-gray-500 mb-1 block">金額 (NTD)</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">金額 (NTD)</label>
         <input
           type="number" min="1" value={amount} onChange={(e) => setAmount(e.target.value)}
           placeholder="0" required
-          className="text-3xl font-bold w-full border-b-2 border-gray-300 outline-none pb-1 focus:border-blue-500"
+          className="text-3xl font-bold w-full border-b-2 border-gray-300 dark:border-gray-600 outline-none pb-1 focus:border-blue-500 bg-transparent text-gray-900 dark:text-white"
         />
       </div>
       <div>
-        <label className="text-xs text-gray-500 mb-1 block">說明</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">說明</label>
         <input
           type="text" value={description} onChange={(e) => setDescription(e.target.value)}
           placeholder="如：訂單退款" required
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none"
+          className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
         />
       </div>
       <div>
-        <label className="text-xs text-gray-500 mb-2 block">退款至</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">退款至</label>
         <PaymentPills value={paymentMethod} onChange={setPaymentMethod} />
       </div>
       <div>
-        <label className="text-xs text-gray-500 mb-2 block">連結原始交易（可選）</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">連結原始交易（可選）</label>
         <ParentSearch value={parent} onSelect={setParent} />
       </div>
       {mutation.error && <p className="text-red-600 text-sm">{(mutation.error as Error).message}</p>}
@@ -333,14 +333,14 @@ export function EntryScreen() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex border-b border-gray-200 bg-white">
+      <div className="flex border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
         {TABS.map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => setTab(t)}
             className={`flex-1 py-3 text-sm font-medium transition-colors ${
-              tab === t ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'
+              tab === t ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 dark:text-gray-400'
             }`}
           >
             {TAB_LABELS[t]}

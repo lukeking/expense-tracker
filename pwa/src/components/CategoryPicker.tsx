@@ -58,7 +58,7 @@ export function CategoryPicker({ value, onChange }: Props) {
             className={`flex-shrink-0 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
               value?.major === major
                 ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-white text-gray-700 border-gray-300'
+                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600'
             }`}
           >
             {major}
@@ -76,8 +76,8 @@ export function CategoryPicker({ value, onChange }: Props) {
               onClick={() => selectSubcategory(sub)}
               className={`flex-shrink-0 px-3 py-1.5 rounded-full text-sm border transition-colors ${
                 value.subcategory === sub
-                  ? 'bg-blue-100 text-blue-700 border-blue-400'
-                  : 'bg-white text-gray-600 border-gray-200'
+                  ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border-blue-400'
+                  : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600'
               }`}
             >
               {sub}
@@ -87,7 +87,7 @@ export function CategoryPicker({ value, onChange }: Props) {
             <button
               type="button"
               onClick={() => { setSheetSearch(''); setSheetOpen(true); }}
-              className="flex-shrink-0 px-3 py-1.5 rounded-full text-sm border bg-white text-gray-500 border-gray-200"
+              className="flex-shrink-0 px-3 py-1.5 rounded-full text-sm border bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-600"
             >
               ···
             </button>
@@ -107,7 +107,7 @@ export function CategoryPicker({ value, onChange }: Props) {
             value={sheetSearch}
             onChange={(e) => setSheetSearch(e.target.value)}
             placeholder="搜尋子分類…"
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-3"
+            className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm mb-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
           />
           <div className="flex flex-wrap gap-2">
             {filteredSubs.map((sub) => (
@@ -117,8 +117,8 @@ export function CategoryPicker({ value, onChange }: Props) {
                 onClick={() => selectSubcategory(sub)}
                 className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
                   value?.subcategory === sub
-                    ? 'bg-blue-100 text-blue-700 border-blue-400'
-                    : 'bg-white text-gray-700 border-gray-300'
+                    ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border-blue-400'
+                    : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600'
                 }`}
               >
                 {sub}

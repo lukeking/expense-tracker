@@ -30,10 +30,10 @@ export function ApiKeyPrompt({ onSuccess }: Props) {
   }
 
   return (
-    <div className="flex items-center justify-center h-full bg-gray-50 px-6">
+    <div className="flex items-center justify-center h-full bg-gray-50 dark:bg-gray-900 px-6">
       <div className="w-full max-w-sm">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Expense Tracker</h1>
-        <p className="text-gray-500 text-sm mb-8">請輸入 API key 以繼續</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Expense Tracker</h1>
+        <p className="text-gray-500 dark:text-gray-400 text-sm mb-8">請輸入 API key 以繼續</p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <input
             type="password"
@@ -41,7 +41,7 @@ export function ApiKeyPrompt({ onSuccess }: Props) {
             onChange={(e) => setKey(e.target.value)}
             placeholder="API key"
             autoComplete="current-password"
-            className="w-full border border-gray-300 rounded-lg px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
           />
           {error && <p className="text-red-600 text-sm">{error}</p>}
           <button
