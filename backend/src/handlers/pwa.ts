@@ -206,6 +206,23 @@ pwaRouter.get('/summary/subcategories', async (c) => {
   return c.json({ major, total, subcategories });
 });
 
+// ─── GET /pwa/transaction-periods ────────────────────────────────────────────
+
+pwaRouter.get('/transaction-periods', async (c) => {
+  const from = c.req.query('from');
+  const to = c.req.query('to');
+  if (!from || !to) return c.json({ error: 'MISSING_PARAMS', message: 'from and to are required' }, 400);
+
+  const supabase = getSupabaseClient(c.env);
+  const { data, error } = await supabase.rpc('get_transaction_periods', {
+    p_start: from,
+    p_end: to + 'T23:59:59.999Z',
+  });
+
+  if (error) return c.json({ error: 'DB_ERROR', message: error.message }, 500);
+  return c.json(data ?? []);
+});
+
 // ─── GET /pwa/transactions ───────────────────────────────────────────────────
 
 pwaRouter.get('/transactions', async (c) => {
@@ -214,7 +231,7 @@ pwaRouter.get('/transactions', async (c) => {
   if (!from || !to) return c.json({ error: 'MISSING_PARAMS', message: 'from and to are required' }, 400);
 
   const page = Math.max(1, parseInt(c.req.query('page') ?? '1', 10) || 1);
-  const limit = Math.min(200, Math.max(1, parseInt(c.req.query('limit') ?? '50', 10) || 50));
+  const limit = Math.min(5000, Math.max(1, parseInt(c.req.query('limit') ?? '50', 10) || 50));
   const category = c.req.query('category');
 
   const supabase = getSupabaseClient(c.env);

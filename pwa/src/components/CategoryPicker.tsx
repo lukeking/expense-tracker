@@ -12,7 +12,7 @@ interface Props {
   onChange: (value: CategorySelection | null) => void;
 }
 
-const MAX_VISIBLE_SUBCATEGORIES = 8;
+const MAX_VISIBLE_SUBCATEGORIES = 5;
 
 export function CategoryPicker({ value, onChange }: Props) {
   const { data: categories } = useCategories();
@@ -68,7 +68,7 @@ export function CategoryPicker({ value, onChange }: Props) {
 
       {/* Subcategory chips */}
       {value?.major && subcategories.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+        <div className="flex flex-wrap gap-2">
           {visibleSubs.map((sub) => (
             <button
               key={sub}
