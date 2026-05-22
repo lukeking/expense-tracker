@@ -14,7 +14,7 @@ import * as path from 'path';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import { readCSVFile, readRawRows, type ParsedLegacyRow, type ParseStats, type RawLegacyRow } from '../src/services/legacy-csv-parser';
-import { BEIZHU_RULES } from '../src/services/legacy-csv-config';
+import { BEIZHU_RULES, FOOD_STORES } from '../src/services/legacy-csv-config';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DB = ReturnType<typeof createClient<any>>;
@@ -205,6 +205,37 @@ function makeTimestamp(): string {
   );
 }
 
+function mealFromHour(hour: number): string {
+  if (hour < 6)  return '宵夜';
+  if (hour < 10) return '早餐';
+  if (hour < 14) return '午餐';
+  if (hour < 17) return '下午茶';
+  if (hour < 21) return '晚餐';
+  return '宵夜';
+}
+
+const MEAL_KEYWORDS = ['早餐', '午餐', '下午茶', '晚餐', '宵夜'];
+
+function applyFoodStores(rows: ParsedLegacyRow[]): void {
+  for (const row of rows) {
+    const storeIdx = row.tags.findIndex((t) => {
+      const m = t.match(/^食:(.+)$/);
+      return m != null && FOOD_STORES.has(m[1]);
+    });
+    if (storeIdx === -1) continue;
+    const storeName = row.tags[storeIdx].slice(2); // strip "食:"
+    // find meal keyword before mutating tags
+    const mealKeyword = MEAL_KEYWORDS.find((k) => row.tags.includes(k));
+    const meal = mealKeyword ?? mealFromHour(new Date(row.transaction_at).getHours());
+    row.tags[storeIdx] = `食:${meal}`;
+    row.tags.push(storeName);
+    if (mealKeyword) {
+      const kwIdx = row.tags.indexOf(mealKeyword);
+      if (kwIdx !== -1) row.tags.splice(kwIdx, 1);
+    }
+  }
+}
+
 function writeDryRunFile(
   rows: ParsedLegacyRow[],
   stats: ParseStats,
@@ -244,6 +275,18 @@ function writeDryRunFile(
     lines.push(`  (unmapped): ${stats.unmappedCategories.join(', ')}`);
   } else {
     lines.push('  (unmapped): none');
+  }
+  const subCount = new Map<string, number>();
+  for (const row of rows) {
+    for (const tag of row.tags) {
+      if (/^[^:]+:[^:]+$/.test(tag)) {
+        subCount.set(tag, (subCount.get(tag) ?? 0) + 1);
+      }
+    }
+  }
+  lines.push('Subcategory breakdown (major:subcategory — count):');
+  for (const [tag, count] of [...subCount.entries()].sort((a, b) => b[1] - a[1])) {
+    lines.push(`  ${tag.padEnd(24)} ${count}`);
   }
   lines.push('');
   if (stats.unmappedAccounts.length > 0) {
@@ -528,6 +571,21 @@ function writeBeizhuAnalysis(rawRows: RawLegacyRow[], csvPath: string, timestamp
   return outFile;
 }
 
+// -- Category pair collector (T012/T013) --
+
+function collectCategoryPairs(rows: ParsedLegacyRow[]): { major: string; subcategory: string; sort_order: number }[] {
+  const seen = new Set<string>();
+  for (const row of rows) {
+    for (const tag of row.tags) {
+      if (/^[^:]+:[^:]+$/.test(tag)) seen.add(tag);
+    }
+  }
+  return [...seen].map((tag) => {
+    const colon = tag.indexOf(':');
+    return { major: tag.slice(0, colon), subcategory: tag.slice(colon + 1), sort_order: 9999 };
+  });
+}
+
 // -- Main --
 
 async function main() {
@@ -538,9 +596,13 @@ async function main() {
 
   // Parse CSV
   const { rows, stats } = readCSVFile(csvPath);
+  applyFoodStores(rows);
 
   if (dryRun) {
-    // In dry-run mode we don't touch the DB at all (T022)
+    // T013: report categories that would be upserted — no DB writes
+    const categoryPairs = collectCategoryPairs(rows);
+    console.log(`[migrate-legacy] Would upsert ${categoryPairs.length} category pairs (no DB write in dry-run)`);
+
     const timestamp = makeTimestamp();
     const outFile = writeDryRunFile(rows, stats, csvPath, 0, timestamp);
     console.log(`[migrate-legacy] Dry run complete — see ${outFile}`);
@@ -554,6 +616,16 @@ async function main() {
     auth: { persistSession: false },
   });
 
+  // T012: upsert all major:subcategory pairs before inserting transactions
+  const categoryPairs = collectCategoryPairs(rows);
+  if (categoryPairs.length > 0) {
+    const { error: catErr } = await supabase
+      .from('categories')
+      .upsert(categoryPairs, { onConflict: 'major,subcategory', ignoreDuplicates: true });
+    if (catErr) console.warn(`[migrate-legacy] categories upsert warning: ${catErr.message}`);
+    console.log(`[migrate-legacy] Category upsert: ${categoryPairs.length} pairs checked`);
+  }
+
   const dedupSet = await loadDedupSet(supabase);
   const existingCount = dedupSet.size;
   const counters: RunCounters = { imported: 0, deduplicated: 0, failed: 0 };
@@ -566,7 +638,6 @@ async function main() {
   }
   process.stdout.write('\n');
 
-  // Adjust imported count: counters.imported counts all successful inserts including income rows
   printSummary(stats, counters);
   void existingCount;
 }

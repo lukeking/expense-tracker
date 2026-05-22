@@ -28,7 +28,7 @@ export function windowToDates(window: WindowOption): { from: string; to: string 
     case 'year':
       return { from: localDate(y - 1, m, d), to: today };
     case 'all':
-      return { from: '2020-01-01', to: today };
+      return { from: '2000-01-01', to: today };
   }
 }
 
@@ -94,19 +94,57 @@ export interface TxRecord {
   items: TxItem[];
 }
 
+export interface PeriodData {
+  period: string;
+  from_date: string;
+  to_date: string;
+  tx_count: number;
+  total: number;
+}
+
+export function useTransactionPeriods(window: WindowOption) {
+  const { from, to } = windowToDates(window);
+  return useQuery({
+    queryKey: ['tx-periods', window],
+    queryFn: () => apiFetch<PeriodData[]>(`/pwa/transaction-periods?from=${from}&to=${to}`),
+    enabled: window === 'all',
+    staleTime: 300_000,
+  });
+}
+
+export function useMonthTransactions(from: string, to: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['tx-month', from, to],
+    queryFn: () => apiFetch<TransactionsData>(`/pwa/transactions?from=${from}&to=${to}&limit=300`),
+    enabled,
+    staleTime: 300_000,
+  });
+}
+
 export interface TransactionsData {
   total: number;
   page: number;
   transactions: TxRecord[];
 }
 
+const WINDOW_LIMIT: Record<WindowOption, number> = {
+  'month': 300,
+  'last-month': 300,
+  '3months': 600,
+  'half-year': 2000,
+  'year': 4000,
+  'all': 500,
+};
+
 export function useTransactions(window: WindowOption, category?: string | null, page = 1) {
   const { from, to } = windowToDates(window);
+  const limit = WINDOW_LIMIT[window];
   const categoryParam = category ? `&category=${encodeURIComponent(category)}` : '';
   return useQuery({
     queryKey: ['transactions', window, category ?? null, page],
     queryFn: () =>
-      apiFetch<TransactionsData>(`/pwa/transactions?from=${from}&to=${to}&page=${page}&limit=100${categoryParam}`),
+      apiFetch<TransactionsData>(`/pwa/transactions?from=${from}&to=${to}&page=${page}&limit=${limit}${categoryParam}`),
+    enabled: window !== 'all',
     staleTime: 30_000,
   });
 }

@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 import { TimeWindowPicker } from '../components/TimeWindowPicker';
-import { useSummaryData, useSubcategoryData, useTransactions } from '../hooks/useSummary';
-import type { WindowOption, TxRecord } from '../hooks/useSummary';
+import { useSummaryData, useSubcategoryData, useTransactions, useTransactionPeriods, useMonthTransactions } from '../hooks/useSummary';
+import type { WindowOption, TxRecord, PeriodData } from '../hooks/useSummary';
 
 const COLOURS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
 
@@ -26,9 +26,9 @@ function groupTransactions(txs: TxRecord[], window: WindowOption): { label: stri
   for (const tx of txs) {
     const dt = new Date(tx.transaction_at);
     let key: string;
-    if (window === 'month' || window === 'last-month' || window === '3months') {
+    if (window === 'month' || window === 'last-month') {
       key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-    } else if (window === 'half-year' || window === 'year') {
+    } else if (window === '3months') {
       const weekNum = Math.ceil(dt.getDate() / 7);
       key = `${dt.getFullYear()}/${dt.getMonth() + 1} 第${weekNum}週`;
     } else {
@@ -53,9 +53,76 @@ function txLabel(tx: TxRecord): string {
   return label;
 }
 
-function HistoryGroup({ label, items, parentMap }: { label: string; items: TxRecord[]; parentMap: Map<string, TxRecord> }) {
+function TxEntry({ tx, parentMap }: { tx: TxRecord; parentMap: Map<string, TxRecord> }) {
+  return (
+    <div className="px-4 py-1.5">
+      <div className="flex justify-between text-sm">
+        <span className="text-gray-700 dark:text-gray-200">
+          {txLabel(tx)}
+          <span className="text-xs text-gray-400 dark:text-gray-500 ml-1.5">{localDt(tx.transaction_at, { time: true })}</span>
+        </span>
+        <span className={`font-medium ${tx.transaction_type === 'refund' ? 'text-green-600' : 'text-gray-800 dark:text-gray-100'}`}>
+          {tx.transaction_type === 'refund' ? `-${formatMoney(tx.amount)}` : formatMoney(tx.amount)}
+        </span>
+      </div>
+      {tx.parent_transaction_id && (
+        <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+          ↳ {parentMap.has(tx.parent_transaction_id)
+            ? `${txLabel(parentMap.get(tx.parent_transaction_id)!)} ${formatMoney(parentMap.get(tx.parent_transaction_id)!.amount)}`
+            : '已連結原始交易'}
+          {' · '}於 {localDt(tx.created_at)} 實際{tx.transaction_type === 'refund' ? '退款' : '計費'}
+        </p>
+      )}
+      {tx.items.length > 0 && (
+        <div className="mt-1 space-y-0.5 pl-2">
+          {tx.items.map((item) => (
+            <div key={item.id} className="flex justify-between text-xs text-gray-400 dark:text-gray-500">
+              <span>{item.name}</span>
+              {item.amount !== null && <span>NT${item.amount}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DateSubGroup({ dateLabel, items, parentMap }: { dateLabel: string; items: TxRecord[]; parentMap: Map<string, TxRecord> }) {
   const [open, setOpen] = useState(false);
   const total = items.reduce((s, t) => s + (t.transaction_type === 'refund' ? -t.amount : t.amount), 0);
+  return (
+    <div className="border-t border-gray-50 dark:border-gray-800">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex justify-between items-center pl-8 pr-4 py-2 text-sm"
+      >
+        <span className="text-gray-500 dark:text-gray-400">{dateLabel}</span>
+        <span className="text-gray-400 dark:text-gray-500">{formatMoney(total)} {open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div className="ml-4 border-l-2 border-gray-200 dark:border-gray-700 mb-1">
+          {items.map((tx) => <TxEntry key={tx.id} tx={tx} parentMap={parentMap} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HistoryGroup({ label, items, parentMap, showDateSubs }: { label: string; items: TxRecord[]; parentMap: Map<string, TxRecord>; showDateSubs?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const total = items.reduce((s, t) => s + (t.transaction_type === 'refund' ? -t.amount : t.amount), 0);
+
+  const dateGroups = showDateSubs ? (() => {
+    const map = new Map<string, TxRecord[]>();
+    for (const tx of items) {
+      const dt = new Date(tx.transaction_at);
+      const key = `${String(dt.getMonth() + 1).padStart(2, '0')}/${String(dt.getDate()).padStart(2, '0')}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(tx);
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => b.localeCompare(a));
+  })() : null;
 
   return (
     <div className="border-b border-gray-100 dark:border-gray-700 last:border-0">
@@ -69,37 +136,47 @@ function HistoryGroup({ label, items, parentMap }: { label: string; items: TxRec
       </button>
       {open && (
         <div className="pb-2">
-          {items.map((tx) => (
-            <div key={tx.id} className="px-4 py-1.5">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-700 dark:text-gray-200">
-                  {txLabel(tx)}
-                  <span className="text-xs text-gray-400 dark:text-gray-500 ml-1.5">{localDt(tx.transaction_at, { time: true })}</span>
-                </span>
-                <span className={`font-medium ${tx.transaction_type === 'refund' ? 'text-green-600' : 'text-gray-800 dark:text-gray-100'}`}>
-                  {tx.transaction_type === 'refund' ? `-${formatMoney(tx.amount)}` : formatMoney(tx.amount)}
-                </span>
-              </div>
-              {tx.parent_transaction_id && (
-                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                  ↳ {parentMap.has(tx.parent_transaction_id)
-                    ? `${txLabel(parentMap.get(tx.parent_transaction_id)!)} ${formatMoney(parentMap.get(tx.parent_transaction_id)!.amount)}`
-                    : '已連結原始交易'}
-                  {' · '}於 {localDt(tx.created_at)} 實際{tx.transaction_type === 'refund' ? '退款' : '計費'}
-                </p>
-              )}
-              {tx.items.length > 0 && (
-                <div className="mt-1 space-y-0.5 pl-2">
-                  {tx.items.map((item) => (
-                    <div key={item.id} className="flex justify-between text-xs text-gray-400 dark:text-gray-500">
-                      <span>{item.name}</span>
-                      {item.amount !== null && <span>NT${item.amount}</span>}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
+          {dateGroups
+            ? dateGroups.map(([d, txs]) => <DateSubGroup key={d} dateLabel={d} items={txs} parentMap={parentMap} />)
+            : items.map((tx) => <TxEntry key={tx.id} tx={tx} parentMap={parentMap} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LazyHistoryGroup({ period }: { period: PeriodData }) {
+  const [open, setOpen] = useState(false);
+  const { data: txData, isLoading } = useMonthTransactions(period.from_date, period.to_date, open);
+
+  const txs = txData?.transactions ?? [];
+  const parentMap = new Map(txs.map((tx) => [tx.id, tx]));
+  const dateGroups = (() => {
+    const map = new Map<string, TxRecord[]>();
+    for (const tx of txs) {
+      const dt = new Date(tx.transaction_at);
+      const key = `${String(dt.getMonth() + 1).padStart(2, '0')}/${String(dt.getDate()).padStart(2, '0')}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(tx);
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => b.localeCompare(a));
+  })();
+
+  return (
+    <div className="border-b border-gray-100 dark:border-gray-700 last:border-0">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex justify-between items-center px-4 py-3 text-sm"
+      >
+        <span className="font-medium text-gray-700 dark:text-gray-200">{period.period}</span>
+        <span className="text-gray-500 dark:text-gray-400">{formatMoney(period.total)} {open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div className="pb-2">
+          {isLoading
+            ? <div className="px-4 py-2 text-sm text-gray-400 dark:text-gray-500">載入中…</div>
+            : dateGroups.map(([d, txs]) => <DateSubGroup key={d} dateLabel={d} items={txs} parentMap={parentMap} />)}
         </div>
       )}
     </div>
@@ -113,6 +190,7 @@ export function SummaryScreen() {
   const { data: summaryData, isLoading: summaryLoading } = useSummaryData(window);
   const { data: subData, isLoading: subLoading } = useSubcategoryData(drilldown, window);
   const { data: txData } = useTransactions(window, drilldown);
+  const { data: periods } = useTransactionPeriods(window);
 
   const txs = txData?.transactions ?? [];
   const groups = groupTransactions(txs, window);
@@ -138,7 +216,7 @@ export function SummaryScreen() {
             <div className="p-8 text-center text-gray-400 dark:text-gray-500">載入中…</div>
           ) : subData && subData.subcategories.length > 0 ? (
             <div className="px-4 py-3">
-              <ResponsiveContainer width="100%" height={200}>
+              <ResponsiveContainer width="100%" height={subData.subcategories.length * 44}>
                 <BarChart
                   data={subData.subcategories.map((s) => ({ name: s.subcategory, total: s.total }))}
                   layout="vertical"
@@ -147,7 +225,7 @@ export function SummaryScreen() {
                   <XAxis type="number" hide />
                   <YAxis type="category" dataKey="name" width={72} tick={{ fontSize: 12 }} />
                   <Tooltip formatter={(v) => formatMoney(Number(v))} />
-                  <Bar dataKey="total" fill="#3b82f6" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="total" fill="#3b82f6" radius={[0, 4, 4, 0]} minPointSize={6} barSize={24} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -213,10 +291,16 @@ export function SummaryScreen() {
         <div className="px-4 py-2">
           <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">交易記錄</span>
         </div>
-        {groups.length === 0 ? (
+        {window === 'all' ? (
+          periods === undefined
+            ? <div className="p-4 text-center text-gray-400 dark:text-gray-500 text-sm">載入中…</div>
+            : periods.length === 0
+              ? <p className="text-center text-gray-400 dark:text-gray-500 text-sm py-4">此期間無交易</p>
+              : periods.map((p) => <LazyHistoryGroup key={p.period} period={p} />)
+        ) : groups.length === 0 ? (
           <p className="text-center text-gray-400 dark:text-gray-500 text-sm py-4">此期間無交易</p>
         ) : (
-          groups.map((g) => <HistoryGroup key={g.label} label={g.label} items={g.items} parentMap={parentMap} />)
+          groups.map((g) => <HistoryGroup key={g.label} label={g.label} items={g.items} parentMap={parentMap} showDateSubs={window !== 'month' && window !== 'last-month'} />)
         )}
       </div>
     </div>
