@@ -66,7 +66,8 @@ The 015 audit script has invariants written against the old shape (`SUM(items.am
 - What happens when rounding leaves a 1-unit remainder in proportional distribution? The remainder is added to the item with the largest `amount` (ties: last by `sort_order`), so `SUM(effective_amount)` always equals the paid total exactly.
 - What happens when all items on a transaction have `amount = NULL`? No `effective_amount` distribution is possible; the audit new-invariant check skips the transaction (documented assumption).
 - What happens when an adjustment is added to a transaction that already has `effective_amount` values? The values are recomputed from scratch on every save — no incremental patching.
-- What happens to the 6 orphan fee/refund rows that have no parent transaction at all? They cannot be automatically converted; they are surfaced in the migration output for manual review and left untouched until resolved.
+- What happens when the combined effect of discounts and refunds would make `transaction.amount` negative? The entry and edit forms MUST reject the save and display a validation error. `transaction.amount >= 0` is a hard invariant; there is no warning-only mode.
+- What happens to the 6 orphan fee/refund rows that have no parent transaction at all? The migration prints their IDs and amounts, then continues. They are left untouched; the user resolves them manually after the migration completes (see *Post-Migration Manual Steps*).
 - How are stacked adjustments (multiple fee/discount/refund on one transaction) displayed? In insertion order.
 - What happens when an invoice-fill import creates items that conflict with manually entered items? The existing ambiguous-match flow is used unchanged.
 
@@ -90,16 +91,17 @@ The 015 audit script has invariants written against the old shape (`SUM(items.am
 
 **PWA Entry & Edit**
 
-- **FR-007**: The transaction entry form MUST allow the user to add one or more adjustments (kind, amount, optional note) before saving a transaction.
-- **FR-008**: The transaction edit form MUST display existing adjustments and allow the user to add, modify, or delete them, with `effective_amount` recomputed on save.
+- **FR-007**: The transaction entry form MUST allow the user to add one or more adjustments (kind, amount, optional note) before saving a transaction. Adjustments MUST appear in a collapsible section below the items list — separate from item rows — labelled to indicate order-level scope (e.g., "折抵 / 手續費 / 退款").
+- **FR-008**: The transaction edit form MUST display existing adjustments in the same collapsible section below items, and allow the user to add, modify, or delete them, with `effective_amount` recomputed on save.
+- **FR-018**: The entry and edit forms MUST validate that `transaction.amount >= 0` before saving. If the combined effect of adjustments would produce a negative paid total, the form MUST block submission and display a clear error message. There is no warn-only or override path.
 
 **Legacy Data Migration**
 
 - **FR-009**: A one-time migration MUST move `major:sub` formatted tags from `transactions.tags` to the corresponding `transaction_items.tags`. After migration, `transactions.tags` MUST NOT contain any tag that includes a `:` character (for migrated rows).
 - **FR-010**: A one-time migration MUST backfill a default `transaction_items` row for each of the 6 `transactions_without_items` rows, using the transaction's `amount` and `note`, before the category-tag migration runs.
-- **FR-011**: A one-time migration MUST convert the 6 standalone fee/refund transaction rows (those with a `parent_transaction_id`) to `transaction_adjustments` rows on the parent transaction, and delete the original fee/refund transaction rows.
-- **FR-012**: The migration MUST surface the 6 orphan fee/refund rows (no parent at all) in its output and leave them untouched for manual review; it MUST NOT auto-delete or auto-convert them.
-- **FR-013**: The 24 `orphan_category_tag_on_item` rows MUST be resolved so the tag on each item references a valid category name.
+- **FR-011**: A one-time migration MUST convert the 6 standalone fee/refund transaction rows (those with a `parent_transaction_id`) to `transaction_adjustments` rows on the parent transaction, and delete the original fee/refund transaction rows. The `source` field on each created adjustment row MUST be set to `"legacy_migration"` (matching the original transaction's source value).
+- **FR-012**: The migration MUST surface the 6 orphan fee/refund rows (no parent at all) by printing their IDs and amounts to stdout, then continue executing all remaining migration steps. It MUST NOT auto-delete or auto-convert them, and MUST NOT abort the migration on their account. After the migration, the user must manually resolve them (see *Post-Migration Manual Steps*).
+- **FR-013**: The 24 `orphan_category_tag_on_item` rows MUST be resolved via a hard-coded `OLD_TAG → NEW_TAG` mapping table embedded in the migration script. The mapping is authored during implementation after inspecting the 24 rows; it must be reviewed before execution. After migration, no item tag may reference a category name absent from the `categories` table.
 - **FR-014**: The 2 `items_sum_mismatch` rows MUST be corrected so `SUM(items.amount) = transaction.amount` for those transactions.
 
 **Audit Script**
@@ -143,3 +145,31 @@ The 015 audit script has invariants written against the old shape (`SUM(items.am
 - **`basis` / `basis_value` are display annotations**: They do not affect stored `amount` or any computation. They are optional fields used for human-readable context ("10% off").
 - **Category name collisions in `orphan_category_tag_on_item`**: The 24 affected items carry tags for category names that don't exist in `categories`. Assumption: each tag maps to an existing category by a known alias or near-match; edge cases will surface during the migration step.
 - **Out of scope**: per-item targeted adjustments (`target_item_id`), credit-card cashback (separate event), `v_transactions_full` VIEW (separate future spec), `'point_credit'` enum value (use `note` per principle 6).
+
+---
+
+## Clarifications
+
+### Session 2026-05-24
+
+- Q: 折抵超過商品總額時，付款金額可以為負數嗎？ → A: 不允許 — 強制 `transaction.amount >= 0`，UI 即時擋下並報錯（FR-018 新增）
+- Q: 6 個 orphan fee/refund（無 parent）migration 時怎麼處理？ → A: 印出清單後繼續執行，不中斷；這 6 筆留待人工，並在 spec 最後提示（FR-012 更新）
+- Q: 24 個 orphan_category_tag_on_item 的修正策略為何？ → A: Migration script 內含寫死的 OLD_TAG → NEW_TAG mapping table，由實作者在查看這 24 筆後填入，需 code review（FR-013 更新）
+- Q: PWA 上 adjustments 的 UI 放在哪裡？ → A: Items 列表下方獨立可摺疊區塊（FR-007、FR-008 更新）
+- Q: Migration 建立的 adjustment row 的 `source` 值填什麼？ → A: `"legacy_migration"`，沿用原 transaction 的 source 值（FR-011 更新）
+
+---
+
+## Post-Migration Manual Steps
+
+> **⚠️ 執行完 migration 後，請手動處理以下項目：**
+
+### 1. Orphan fee/refund transactions（孤立的費用／退款列）
+
+Migration 會在 stdout 印出這 6 筆 transaction 的 ID 與金額，但**不會自動轉換或刪除**。
+
+每筆的處理選項：
+- **找到對應的 parent transaction** → 在 PWA 編輯 parent transaction，手動新增對應的 `fee` 或 `refund` adjustment，再刪除這筆孤立的 transaction row。
+- **無法對應（真的是孤兒）** → 評估是否直接刪除，或保留為歷史紀錄（不轉換）。
+
+確認處理完畢後，重新跑 audit script，驗證 `fee_refund_without_parent` 降為 0。
