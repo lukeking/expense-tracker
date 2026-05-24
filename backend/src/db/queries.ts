@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Transaction, Receipt, BudgetSettings, TransactionItem, PaymentMethod, MobileWallet, TransactionType, Invoice, ImportRun, ParsedInvoice, InvoiceMatchStatus, TransactionItemRow } from '../types';
+import type { Transaction, Receipt, BudgetSettings, TransactionItem, PaymentMethod, MobileWallet, TransactionType, Invoice, ImportRun, ParsedInvoice, InvoiceMatchStatus, TransactionItemRow, TransactionAdjustment } from '../types';
 
 export async function insertTransaction(
   supabase: SupabaseClient,
@@ -458,7 +458,7 @@ export async function findTransactionsWithoutInvoiceInRange(
 
 export type TransactionForPeriod = Pick<Transaction, 'id' | 'amount' | 'tags' | 'transaction_at' | 'transaction_type'> & {
   parent_transaction_id: string | null;
-  transaction_items: Pick<TransactionItemRow, 'amount' | 'tags'>[];
+  transaction_items: { amount: number | null; effective_amount?: number | null; tags: string[] }[];
 };
 
 const PAGE_SIZE = 1000;
@@ -592,4 +592,85 @@ export async function mergeTransactionFields(
     .single();
   if (error) throw new Error(`mergeTransactionFields fetch: ${error.message}`);
   return data as Transaction;
+}
+
+export async function insertAdjustments(
+  supabase: SupabaseClient,
+  transactionId: string,
+  adjustments: { kind: 'fee' | 'refund' | 'discount'; amount: number; note?: string | null; transaction_at?: string; source?: string; basis?: string | null; basis_value?: number | null }[]
+): Promise<void> {
+  if (adjustments.length === 0) return;
+  const now = new Date().toISOString();
+  const rows = adjustments.map((a) => ({
+    transaction_id: transactionId,
+    kind: a.kind,
+    amount: a.amount,
+    note: a.note ?? null,
+    transaction_at: a.transaction_at ?? now,
+    source: a.source ?? 'manual',
+    basis: a.basis ?? null,
+    basis_value: a.basis_value ?? null,
+  }));
+  const { error } = await supabase.from('transaction_adjustments').insert(rows);
+  if (error) throw new Error(`insertAdjustments: ${error.message}`);
+}
+
+export async function computeAndWriteEffectiveAmounts(
+  supabase: SupabaseClient,
+  transactionId: string,
+  paidTotal: number
+): Promise<void> {
+  const { data, error } = await supabase
+    .from('transaction_items')
+    .select('id, amount, sort_order')
+    .eq('transaction_id', transactionId)
+    .order('sort_order', { ascending: true });
+  if (error) throw new Error(`computeAndWriteEffectiveAmounts fetch: ${error.message}`);
+
+  const items = (data ?? []) as { id: string; amount: number | null; sort_order: number }[];
+  const eligible = items.filter((i) => i.amount != null);
+  if (eligible.length === 0) return;
+
+  const itemsTotal = eligible.reduce((s, i) => s + i.amount!, 0);
+  if (itemsTotal === 0) return;
+
+  const shares = eligible.map((i) => ({ id: i.id, amount: i.amount!, ea: Math.floor(i.amount! * paidTotal / itemsTotal) }));
+  const remainder = paidTotal - shares.reduce((s, x) => s + x.ea, 0);
+
+  // Add remainder to item with largest amount; ties go to last by sort_order (already ordered ascending, so last is highest index)
+  const maxAmount = Math.max(...shares.map((s) => s.amount));
+  const largestIdx = shares.reduce((bestIdx, s, idx) => (s.amount >= maxAmount ? idx : bestIdx), 0);
+  shares[largestIdx].ea += remainder;
+
+  for (const s of shares) {
+    const { error: updateErr } = await supabase
+      .from('transaction_items')
+      .update({ effective_amount: s.ea })
+      .eq('id', s.id);
+    if (updateErr) throw new Error(`computeAndWriteEffectiveAmounts update: ${updateErr.message}`);
+  }
+}
+
+export async function getAdjustmentsForTransaction(
+  supabase: SupabaseClient,
+  transactionId: string
+): Promise<TransactionAdjustment[]> {
+  const { data, error } = await supabase
+    .from('transaction_adjustments')
+    .select('*')
+    .eq('transaction_id', transactionId)
+    .order('created_at', { ascending: true });
+  if (error) throw new Error(`getAdjustmentsForTransaction: ${error.message}`);
+  return (data ?? []) as TransactionAdjustment[];
+}
+
+export async function deleteAdjustmentsForTransaction(
+  supabase: SupabaseClient,
+  transactionId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('transaction_adjustments')
+    .delete()
+    .eq('transaction_id', transactionId);
+  if (error) throw new Error(`deleteAdjustmentsForTransaction: ${error.message}`);
 }

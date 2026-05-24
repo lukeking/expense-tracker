@@ -4,7 +4,7 @@ type TxForSummary = {
   amount: number;
   transaction_type?: string;
   tags: string[];
-  transaction_items: Pick<TransactionItemRow, 'amount' | 'tags'>[];
+  transaction_items: { amount: number | null; effective_amount?: number | null; tags: string[] }[];
 };
 
 export function periodToDateRange(period: SummaryPeriod): { start: Date; end: Date } {
@@ -46,12 +46,13 @@ export function aggregateByCategory(
     const items = tx.transaction_items ?? [];
     let categorisedSum = 0;
     for (const item of items) {
-      if (item.amount == null) continue;
+      const effectiveAmt = item.effective_amount ?? item.amount;
+      if (effectiveAmt == null) continue;
       const categoryTag = item.tags.find((t) => t.includes(':')) ?? null;
       if (!categoryTag) continue;
       const category = categoryTag.split(':')[0];
-      map.set(category, (map.get(category) ?? 0) + sign * item.amount);
-      categorisedSum += item.amount;
+      map.set(category, (map.get(category) ?? 0) + sign * effectiveAmt);
+      categorisedSum += effectiveAmt;
     }
     const remainder = tx.amount - categorisedSum;
     if (remainder > 0) {
@@ -98,12 +99,13 @@ export function aggregateBySubcategory(
     const items = tx.transaction_items ?? [];
     let matchedSum = 0;
     for (const item of items) {
-      if (item.amount == null) continue;
+      const effectiveAmt = item.effective_amount ?? item.amount;
+      if (effectiveAmt == null) continue;
       const categoryTag = item.tags.find((t) => t.startsWith(prefix)) ?? null;
       if (!categoryTag) continue;
       const subcategory = categoryTag.split(':').slice(1).join(':') || '其他';
-      map.set(subcategory, (map.get(subcategory) ?? 0) + sign * item.amount);
-      matchedSum += item.amount;
+      map.set(subcategory, (map.get(subcategory) ?? 0) + sign * effectiveAmt);
+      matchedSum += effectiveAmt;
     }
     const remainder = tx.amount - matchedSum;
     if (remainder > 0) {

@@ -19,9 +19,24 @@ export interface TransactionItemRow {
   transaction_id: string;
   name: string;
   amount: number | null;
+  effective_amount: number | null;
   tags: string[];
   sort_order: number;
   created_at: string;
+}
+
+export interface TransactionAdjustment {
+  id: string;
+  transaction_id: string;
+  kind: 'fee' | 'refund' | 'discount';
+  amount: number;
+  transaction_at: string;
+  basis: string | null;
+  basis_value: number | null;
+  note: string | null;
+  source: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface TransactionWithItems extends Transaction {

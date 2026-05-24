@@ -25,13 +25,13 @@
 
 **⚠️ CRITICAL**: All user story phases depend on Phase 2 completion.
 
-- [ ] T001 Write `backend/supabase/migrations/015_transaction_adjustments.sql` — CREATE TABLE `transaction_adjustments`, ALTER TABLE `transaction_items` ADD COLUMN `effective_amount`, and backfill `effective_amount = amount` for all existing items (copy DDL from `contracts/schema-ddl.sql` Phase-A section)
-- [ ] T002 Apply 015 migration to dev Supabase: `psql $DATABASE_URL -f backend/supabase/migrations/015_transaction_adjustments.sql` — verify table exists and `SELECT COUNT(*) FROM transaction_items WHERE effective_amount IS NULL AND amount IS NOT NULL` returns 0
-- [ ] T003 Add `TransactionAdjustment` interface to `backend/src/types.ts` (fields: id, transaction_id, kind, amount, transaction_at, basis, basis_value, note, source, created_at, updated_at — copy from data-model.md TypeScript section)
-- [ ] T004 Add `effective_amount: number | null` field to `TransactionItemRow` interface in `backend/src/types.ts`
-- [ ] T005 Add `insertAdjustments(supabase, transactionId, adjustments[])` to `backend/src/db/queries.ts` — bulk insert into `transaction_adjustments`
-- [ ] T006 Add `computeAndWriteEffectiveAmounts(supabase, transactionId, paidTotal)` to `backend/src/db/queries.ts` — reads items, applies floor+remainder distribution algorithm from plan.md §Phase B, bulk-updates `effective_amount` via upsert
-- [ ] T007 Add `getAdjustmentsForTransaction(supabase, transactionId)` to `backend/src/db/queries.ts` — fetch all adjustment rows for a transaction (needed for edit flow)
+- [x] T001 Write `backend/supabase/migrations/015_transaction_adjustments.sql` — CREATE TABLE `transaction_adjustments`, ALTER TABLE `transaction_items` ADD COLUMN `effective_amount`, and backfill `effective_amount = amount` for all existing items (copy DDL from `contracts/schema-ddl.sql` Phase-A section)
+- [x] T002 Apply 015 migration to dev Supabase: `psql $DATABASE_URL -f backend/supabase/migrations/015_transaction_adjustments.sql` — verify table exists and `SELECT COUNT(*) FROM transaction_items WHERE effective_amount IS NULL AND amount IS NOT NULL` returns 0
+- [x] T003 Add `TransactionAdjustment` interface to `backend/src/types.ts` (fields: id, transaction_id, kind, amount, transaction_at, basis, basis_value, note, source, created_at, updated_at — copy from data-model.md TypeScript section)
+- [x] T004 Add `effective_amount: number | null` field to `TransactionItemRow` interface in `backend/src/types.ts`
+- [x] T005 Add `insertAdjustments(supabase, transactionId, adjustments[])` to `backend/src/db/queries.ts` — bulk insert into `transaction_adjustments`
+- [x] T006 Add `computeAndWriteEffectiveAmounts(supabase, transactionId, paidTotal)` to `backend/src/db/queries.ts` — reads items, applies floor+remainder distribution algorithm from plan.md §Phase B, bulk-updates `effective_amount` via upsert
+- [x] T007 Add `getAdjustmentsForTransaction(supabase, transactionId)` to `backend/src/db/queries.ts` — fetch all adjustment rows for a transaction (needed for edit flow)
 
 **Checkpoint**: Schema applied, types defined, DB helpers available — user story work can begin.
 
@@ -45,13 +45,13 @@
 
 ### Implementation for User Story 1
 
-- [ ] T008 [P] [US1] Create `pwa/src/components/AdjustmentRow.tsx` — props: `{ adj: AdjustmentRowData; onChange: (a: AdjustmentRowData) => void; onRemove: () => void }`; renders kind select (折扣/手續費/退款), amount input, note input, remove button
-- [ ] T009 [P] [US1] Write `backend/supabase/migrations/016_summary_rpc_v2.sql` — `CREATE OR REPLACE FUNCTION` for both `get_category_totals` and `get_subcategory_totals` replacing `ti.amount` with `ti.effective_amount` (copy full SQL from `contracts/schema-ddl.sql` Phase-D section)
-- [ ] T010 [US1] Add adjustments collapsible section to `pwa/src/screens/EntryScreen.tsx` — state: `adjustments: AdjustmentRowData[]`; `<details>` element below items list labeled "折抵 / 手續費 / 退款"; "+" button to add `AdjustmentRow`; client-side validation blocking save if computed total ≤ 0 (FR-018); include `adjustments` array in POST body
-- [ ] T011 [US1] Update POST `/pwa/expense` handler in `backend/src/handlers/pwa.ts` — parse optional `adjustments` array from request body; after `insertTransactionItems`, call `insertAdjustments(supabase, txId, adjustments)` then `computeAndWriteEffectiveAmounts(supabase, txId, paidTotal)`
-- [ ] T012 [US1] Update edit flow in `backend/src/handlers/pwa.ts` — load existing adjustments via `getAdjustmentsForTransaction`; display in same collapsible section on edit form; on save: delete all existing adjustments for the transaction, re-insert, recompute `effective_amount`
-- [ ] T013 [US1] Apply 016 summary RPC migration to dev Supabase: `psql $DATABASE_URL -f backend/supabase/migrations/016_summary_rpc_v2.sql` — verify both functions exist and return results
-- [ ] T014 [US1] Update `aggregateByCategory` and `aggregateBySubcategory` in `backend/src/services/summary.ts` — change `item.amount` to `item.effective_amount ?? item.amount` in both app-side aggregation paths (Discord summary commands use this path, not the RPC)
+- [x] T008 [P] [US1] Create `pwa/src/components/AdjustmentRow.tsx` — props: `{ adj: AdjustmentRowData; onChange: (a: AdjustmentRowData) => void; onRemove: () => void }`; renders kind select (折扣/手續費/退款), amount input, note input, remove button
+- [x] T009 [P] [US1] Write `backend/supabase/migrations/016_summary_rpc_v2.sql` — `CREATE OR REPLACE FUNCTION` for both `get_category_totals` and `get_subcategory_totals` replacing `ti.amount` with `ti.effective_amount` (copy full SQL from `contracts/schema-ddl.sql` Phase-D section)
+- [x] T010 [US1] Add adjustments collapsible section to `pwa/src/screens/EntryScreen.tsx` — state: `adjustments: AdjustmentRowData[]`; `<details>` element below items list labeled "折抵 / 手續費 / 退款"; "+" button to add `AdjustmentRow`; client-side validation blocking save if computed total ≤ 0 (FR-018); include `adjustments` array in POST body
+- [x] T011 [US1] Update POST `/pwa/expense` handler in `backend/src/handlers/pwa.ts` — parse optional `adjustments` array from request body; after `insertTransactionItems`, call `insertAdjustments(supabase, txId, adjustments)` then `computeAndWriteEffectiveAmounts(supabase, txId, paidTotal)`
+- [x] T012 [US1] Update edit flow in `backend/src/handlers/pwa.ts` — load existing adjustments via `getAdjustmentsForTransaction`; display in same collapsible section on edit form; on save: delete all existing adjustments for the transaction, re-insert, recompute `effective_amount`
+- [x] T013 [US1] Apply 016 summary RPC migration to dev Supabase: `psql $DATABASE_URL -f backend/supabase/migrations/016_summary_rpc_v2.sql` — verify both functions exist and return results
+- [x] T014 [US1] Update `aggregateByCategory` and `aggregateBySubcategory` in `backend/src/services/summary.ts` — change `item.amount` to `item.effective_amount ?? item.amount` in both app-side aggregation paths (Discord summary commands use this path, not the RPC)
 
 **Checkpoint**: User Story 1 complete — new transactions with adjustments work end-to-end, summary reflects paid amounts.
 
@@ -65,11 +65,11 @@
 
 ### Implementation for User Story 2
 
-- [ ] T015 [US2] Inspect the 24 `orphan_category_tag_on_item` rows in dev Supabase (`SELECT id, tags FROM transaction_items WHERE array_to_string(tags, ',') LIKE '%:%'` filtered to items with tags not in `categories`) — determine and document the `OLD_TAG → NEW_TAG` mapping for all 24; this mapping will be hard-coded in migrate-016.ts (D-005)
-- [ ] T016 [US2] Inspect the 2 `items_sum_mismatch` transaction rows in dev Supabase — determine the correct item amounts and document the fix; these will be hard-coded case-by-case in migrate-016.ts (Phase C6)
-- [ ] T017 [US2] Write `backend/scripts/migrate-016.ts` implementing all steps in order (C1 backfill-items-for-transactions-without-items, C2 migrate-category-tags-from-transactions-to-items, C3 convert-fee-refund-transactions-to-adjustments, C4 print-orphan-fee-refund-rows, C5 fix-orphan-tags-using-mapping-table from T015, C6 fix-items-sum-mismatch using corrections from T016, C7 final-recompute-pass); supports `--dry-run` flag; idempotent (use `ON CONFLICT DO NOTHING` / existence checks); SC-009: only touches `source = 'legacy_migration'` rows for C2
-- [ ] T018 [US2] Run `tsx backend/scripts/migrate-016.ts --dry-run` against dev Supabase — review stdout output; confirm the 6 orphan fee/refund rows are printed and no data is modified
-- [ ] T019 [US2] Run `tsx backend/scripts/migrate-016.ts` (live) against dev Supabase — run `tsx backend/scripts/audit-legacy.ts` and verify SC-001 (`category_tag_on_transaction = 0`), SC-002 (fee_refund_without_parent for rows with parents = 0), SC-003 (`transactions_without_items = 0`), SC-004 (`orphan_category_tag_on_item = 0`), SC-005 (`items_sum_mismatch = 0`)
+- [x] T015 [US2] Inspect the 24 `orphan_category_tag_on_item` rows in dev Supabase (`SELECT id, tags FROM transaction_items WHERE array_to_string(tags, ',') LIKE '%:%'` filtered to items with tags not in `categories`) — determine and document the `OLD_TAG → NEW_TAG` mapping for all 24; this mapping will be hard-coded in migrate-016.ts (D-005)
+- [x] T016 [US2] Inspect the 2 `items_sum_mismatch` transaction rows in dev Supabase — determine the correct item amounts and document the fix; these will be hard-coded case-by-case in migrate-016.ts (Phase C6)
+- [x] T017 [US2] Write `backend/scripts/migrate-016.ts` implementing all steps in order (C1 backfill-items-for-transactions-without-items, C2 migrate-category-tags-from-transactions-to-items, C3 convert-fee-refund-transactions-to-adjustments, C4 print-orphan-fee-refund-rows, C5 fix-orphan-tags-using-mapping-table from T015, C6 fix-items-sum-mismatch using corrections from T016, C7 final-recompute-pass); supports `--dry-run` flag; idempotent (use `ON CONFLICT DO NOTHING` / existence checks); SC-009: only touches `source = 'legacy_migration'` rows for C2
+- [x] T018 [US2] Run `tsx backend/scripts/migrate-016.ts --dry-run` against dev Supabase — review stdout output; confirm the 6 orphan fee/refund rows are printed and no data is modified
+- [x] T019 [US2] Run `tsx backend/scripts/migrate-016.ts` (live) against dev Supabase — run `tsx backend/scripts/audit-legacy.ts` and verify SC-001 (`category_tag_on_transaction = 0`), SC-002 (fee_refund_without_parent for rows with parents = 0), SC-003 (`transactions_without_items = 0`), SC-004 (`orphan_category_tag_on_item = 0`), SC-005 (`items_sum_mismatch = 0`)
 
 **Checkpoint**: User Story 2 complete — all legacy anomalies resolved, historical category analytics accurate.
 
@@ -83,9 +83,9 @@
 
 ### Implementation for User Story 3
 
-- [ ] T020 [US3] Rewrite the `items_sum_mismatch` check in `backend/scripts/audit-legacy.ts` (FR-015): new invariant is `SUM(items.effective_amount) + SUM(adj.amount WHERE kind='fee') - SUM(adj.amount WHERE kind IN ('refund','discount')) ≠ transaction.amount`; for transactions with no items having `effective_amount`, fall back to old `SUM(items.amount)` check
-- [ ] T021 [US3] Add new audit invariant to `backend/scripts/audit-legacy.ts` (FR-016): detect transactions where adjustment rows and `effective_amount` values are internally inconsistent (`SUM(effective_amount) WHERE amount IS NOT NULL ≠ transaction.amount - SUM(fee adj) + SUM(refund/discount adj)`)
-- [ ] T022 [US3] Add heuristic pattern check to `backend/scripts/audit-legacy.ts` (FR-017): flag transactions where `transaction_type = 'refund'`, `parent_transaction_id IS NOT NULL`, and (`amount % parent.amount IN (5, 10, 15, 20 pct)` OR `amount % 100 = 0`) AND `ABS(transaction_at - parent.transaction_at) < 5 minutes`
+- [x] T020 [US3] Rewrite the `items_sum_mismatch` check in `backend/scripts/audit-legacy.ts` (FR-015): new invariant is `SUM(items.effective_amount) + SUM(adj.amount WHERE kind='fee') - SUM(adj.amount WHERE kind IN ('refund','discount')) ≠ transaction.amount`; for transactions with no items having `effective_amount`, fall back to old `SUM(items.amount)` check
+- [x] T021 [US3] Add new audit invariant to `backend/scripts/audit-legacy.ts` (FR-016): detect transactions where adjustment rows and `effective_amount` values are internally inconsistent (`SUM(effective_amount) WHERE amount IS NOT NULL ≠ transaction.amount - SUM(fee adj) + SUM(refund/discount adj)`)
+- [x] T022 [US3] Add heuristic pattern check to `backend/scripts/audit-legacy.ts` (FR-017): flag transactions where `transaction_type = 'refund'`, `parent_transaction_id IS NOT NULL`, and (`amount % parent.amount IN (5, 10, 15, 20 pct)` OR `amount % 100 = 0`) AND `ABS(transaction_at - parent.transaction_at) < 5 minutes`
 
 **Checkpoint**: User Story 3 complete — audit script correctly validates the 016 data model.
 
@@ -93,8 +93,8 @@
 
 ## Phase 6: Polish & Verification
 
-- [ ] T023 Run `pnpm test` in `backend/` and verify all existing tests pass with no regressions
-- [ ] T024 Run `tsx backend/scripts/audit-legacy.ts` and confirm SC-001 through SC-006 are all satisfied; note the 6 orphan fee/refund rows that require manual resolution (per spec Post-Migration Manual Steps)
+- [x] T023 Run `pnpm test` in `backend/` and verify all existing tests pass with no regressions
+- [x] T024 Run `tsx backend/scripts/audit-legacy.ts` and confirm SC-001 through SC-006 are all satisfied; note the 6 orphan fee/refund rows that require manual resolution (per spec Post-Migration Manual Steps)
 - [ ] T025 Manual PWA smoke test per `specs/016-transaction-adjustments/quickstart.md` Steps 4–6 — verify new transaction with discount, edit with fee, summary screen totals
 
 ---

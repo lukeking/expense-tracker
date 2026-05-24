@@ -144,30 +144,68 @@ const checkTransactionsWithoutItems: Check = async ({ supabase, sourceFilter }) 
 };
 
 const checkItemsSumMismatch: Check = async ({ supabase, sourceFilter }) => {
-  // Fetch all transactions with their items to compute sums client-side.
-  type TxRow = { id: string; amount: number; source: string; transaction_at: string; note: string | null; transaction_items: Array<{ amount: number | null }> };
+  // FR-015 (rewritten for 016): checks SUM(effective_amount) + SUM(fee adj) - SUM(refund/discount adj) = transaction.amount
+  // Falls back to SUM(items.amount) check for items without effective_amount.
+  type TxRow = {
+    id: string; amount: number; source: string; transaction_at: string; note: string | null;
+    transaction_items: Array<{ amount: number | null; effective_amount: number | null }>;
+  };
   const txs = (await fetchAll(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let q: any = supabase.from('transactions').select('id, amount, source, transaction_at, note, transaction_items(amount)');
+    let q: any = supabase.from('transactions').select('id, amount, source, transaction_at, note, transaction_items(amount, effective_amount)');
     if (sourceFilter) q = q.eq('source', sourceFilter);
     return q;
   })) as TxRow[];
 
+  // Fetch adjustments for all transactions
+  const allAdj = (await fetchAll(() =>
+    supabase.from('transaction_adjustments').select('transaction_id, kind, amount')
+  )) as Array<{ transaction_id: string; kind: string; amount: number }>;
+
+  const adjByTx = new Map<string, Array<{ kind: string; amount: number }>>();
+  for (const a of allAdj) {
+    const existing = adjByTx.get(a.transaction_id) ?? [];
+    existing.push({ kind: a.kind, amount: a.amount });
+    adjByTx.set(a.transaction_id, existing);
+  }
+
   const mismatches = txs.filter(t => {
     const items = t.transaction_items ?? [];
     if (items.length === 0) return false;
-    if (items.some(i => i.amount === null)) return false;
-    const sum = items.reduce((s, i) => s + (i.amount as number), 0);
-    return sum !== t.amount;
+
+    const adjs = adjByTx.get(t.id) ?? [];
+    const adjDelta = adjs.reduce((s, a) => a.kind === 'fee' ? s + a.amount : s - a.amount, 0);
+
+    // Use effective_amount if available for all non-null items; fall back to amount
+    const hasEffective = items.some(i => i.effective_amount !== null);
+    if (hasEffective) {
+      const effectiveItems = items.filter(i => i.effective_amount !== null);
+      if (effectiveItems.length === 0) return false;
+      const effectiveSum = effectiveItems.reduce((s, i) => s + (i.effective_amount as number), 0);
+      // With adjustments: SUM(effective_amount) should equal transaction.amount
+      return effectiveSum !== t.amount;
+    } else {
+      // Legacy path: all items must have non-null amount
+      if (items.some(i => i.amount === null)) return false;
+      const sum = items.reduce((s, i) => s + (i.amount as number), 0);
+      // Without effective_amount, compare items sum + adj delta to tx amount
+      return (sum + adjDelta) !== t.amount;
+    }
   });
 
   const samples = takeSample(mismatches, 5).map(t => {
-    const itemsSum = t.transaction_items.reduce((s, i) => s + (i.amount as number), 0);
+    const items = t.transaction_items ?? [];
+    const adjs = adjByTx.get(t.id) ?? [];
+    const adjDelta = adjs.reduce((s, a) => a.kind === 'fee' ? s + a.amount : s - a.amount, 0);
+    const hasEffective = items.some(i => i.effective_amount !== null);
+    const computedSum = hasEffective
+      ? items.filter(i => i.effective_amount !== null).reduce((s, i) => s + (i.effective_amount as number), 0)
+      : items.reduce((s, i) => s + (i.amount as number ?? 0), 0) + adjDelta;
     return {
       transaction_id: t.id,
       transaction_amount: t.amount,
-      items_sum: itemsSum,
-      delta: itemsSum - t.amount,
+      computed_sum: computedSum,
+      delta: computedSum - t.amount,
       source: t.source,
       transaction_at: t.transaction_at,
     };
@@ -175,9 +213,72 @@ const checkItemsSumMismatch: Check = async ({ supabase, sourceFilter }) => {
 
   return {
     name: 'invariant.items_sum_mismatch',
-    description: 'Transactions where every item has a non-null amount and SUM(item.amount) ≠ transaction.amount.',
+    description: 'Transactions where SUM(effective_amount) ≠ transaction.amount (or legacy fallback: SUM(item.amount)+adjustments ≠ transaction.amount).',
     kind: 'invariant',
     count: mismatches.length,
+    samples,
+    suggestedTool: 'case-by-case',
+  };
+};
+
+// FR-016: New invariant — detects transactions where effective_amount and adjustment rows are internally inconsistent.
+// Specifically: SUM(effective_amount of non-null items) should equal
+// transaction.amount - SUM(fee adj) + SUM(refund/discount adj)
+// i.e. SUM(effective_amount) = paid_total
+const checkEffectiveAmountConsistency: Check = async ({ supabase, sourceFilter }) => {
+  type TxRow = {
+    id: string; amount: number; source: string; transaction_at: string;
+    transaction_items: Array<{ effective_amount: number | null }>;
+  };
+  const txs = (await fetchAll(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let q: any = supabase.from('transactions').select('id, amount, source, transaction_at, transaction_items(effective_amount)');
+    if (sourceFilter) q = q.eq('source', sourceFilter);
+    return q;
+  })) as TxRow[];
+
+  // Only check transactions that have at least one item with effective_amount
+  const allAdj = (await fetchAll(() =>
+    supabase.from('transaction_adjustments').select('transaction_id, kind, amount')
+  )) as Array<{ transaction_id: string; kind: string; amount: number }>;
+
+  const adjByTx = new Map<string, Array<{ kind: string; amount: number }>>();
+  for (const a of allAdj) {
+    const existing = adjByTx.get(a.transaction_id) ?? [];
+    existing.push({ kind: a.kind, amount: a.amount });
+    adjByTx.set(a.transaction_id, existing);
+  }
+
+  const violations = txs.filter(t => {
+    const items = t.transaction_items ?? [];
+    const effectiveItems = items.filter(i => i.effective_amount !== null);
+    if (effectiveItems.length === 0) return false; // skip transactions with no effective_amount
+
+    // All non-null items must sum to paid_total (transaction.amount)
+    const effectiveSum = effectiveItems.reduce((s, i) => s + (i.effective_amount as number), 0);
+    return effectiveSum !== t.amount;
+  });
+
+  const samples = takeSample(violations, 5).map(t => {
+    const effectiveItems = (t.transaction_items ?? []).filter(i => i.effective_amount !== null);
+    const effectiveSum = effectiveItems.reduce((s, i) => s + (i.effective_amount as number), 0);
+    const adjs = adjByTx.get(t.id) ?? [];
+    return {
+      transaction_id: t.id,
+      transaction_amount: t.amount,
+      effective_sum: effectiveSum,
+      delta: effectiveSum - t.amount,
+      adjustment_count: adjs.length,
+      source: t.source,
+      transaction_at: t.transaction_at,
+    };
+  });
+
+  return {
+    name: 'invariant.effective_amount_consistency',
+    description: 'Transactions where SUM(effective_amount of non-null items) ≠ transaction.amount (effective_amount and paid total are out of sync).',
+    kind: 'invariant',
+    count: violations.length,
     samples,
     suggestedTool: 'case-by-case',
   };
@@ -313,6 +414,76 @@ const checkOrphanCategoryTagOnItem: Check = async ({ supabase, sourceFilter }) =
     description: 'transaction_items whose <major>:<subcategory> tags are not present in the categories table.',
     kind: 'invariant',
     count: orphanItems.length,
+    samples,
+    suggestedTool: 'case-by-case',
+  };
+};
+
+// FR-017: Heuristic check for pre-016 fake-refund-as-discount rows.
+// Matches: transaction_type = 'refund', parent_transaction_id IS NOT NULL,
+// and (refund amount is 5/10/15/20% of parent OR is a round NT$ multiple of 100),
+// and created within ~5 minutes of parent.
+const checkPreSixteenFakeRefundAsDiscount: Check = async ({ supabase, sourceFilter }) => {
+  type TxRow = {
+    id: string; amount: number; transaction_type: string;
+    parent_transaction_id: string | null; transaction_at: string;
+    note: string | null; source: string | null;
+  };
+
+  const allTxs = (await fetchAll(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let q: any = supabase.from('transactions').select('id, amount, transaction_type, parent_transaction_id, transaction_at, note, source');
+    if (sourceFilter) q = q.eq('source', sourceFilter);
+    return q;
+  })) as TxRow[];
+
+  const txById = new Map(allTxs.map(t => [t.id, t]));
+
+  const DISCOUNT_PCTS = [0.05, 0.10, 0.15, 0.20];
+  const FIVE_MINUTES_MS = 5 * 60 * 1000;
+
+  const suspects = allTxs.filter(tx => {
+    if (tx.transaction_type !== 'refund') return false;
+    if (!tx.parent_transaction_id) return false;
+
+    const parent = txById.get(tx.parent_transaction_id);
+    if (!parent) return false;
+
+    const timeDiffMs = Math.abs(
+      new Date(tx.transaction_at).getTime() - new Date(parent.transaction_at).getTime()
+    );
+    if (timeDiffMs > FIVE_MINUTES_MS) return false;
+
+    const isRoundHundred = tx.amount % 100 === 0;
+    const isDiscountPct = parent.amount > 0 && DISCOUNT_PCTS.some(pct => {
+      const expected = Math.round(parent.amount * pct);
+      return Math.abs(tx.amount - expected) <= 1; // allow 1-unit rounding tolerance
+    });
+
+    return isRoundHundred || isDiscountPct;
+  });
+
+  const samples = takeSample(suspects, 5).map(tx => {
+    const parent = txById.get(tx.parent_transaction_id!);
+    return {
+      transaction_id: tx.id,
+      amount: tx.amount,
+      parent_transaction_id: tx.parent_transaction_id,
+      parent_amount: parent?.amount ?? null,
+      pct_of_parent: parent && parent.amount > 0 ? Math.round((tx.amount / parent.amount) * 1000) / 10 : null,
+      time_diff_seconds: parent
+        ? Math.round(Math.abs(new Date(tx.transaction_at).getTime() - new Date(parent.transaction_at).getTime()) / 1000)
+        : null,
+      note: tx.note,
+      source: tx.source,
+    };
+  });
+
+  return {
+    name: 'invariant.pre_016_fake_refund_as_discount',
+    description: 'Refund transactions with a parent, created within 5 minutes of the parent, whose amount is 5/10/15/20% of the parent or a round NT$100 multiple — likely a pre-016 discount recorded as a refund.',
+    kind: 'invariant',
+    count: suspects.length,
     samples,
     suggestedTool: 'case-by-case',
   };
@@ -532,10 +703,12 @@ const samplerLongestItemNames: Check = async ({ supabase, sourceFilter }) => {
 const CHECKS: Check[] = [
   checkTransactionsWithoutItems,
   checkItemsSumMismatch,
+  checkEffectiveAmountConsistency,
   checkFeeRefundWithoutParent,
   checkOrphanParentReference,
   checkCategoryTagOnTransaction,
   checkOrphanCategoryTagOnItem,
+  checkPreSixteenFakeRefundAsDiscount,
   samplerTransactionsByShape,
   samplerTransactionsBySource,
   samplerLongestNotes,
