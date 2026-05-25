@@ -112,12 +112,12 @@ cd pwa && pnpm dev
 
 ---
 
-## Step 6 — Test validation (negative amount rejection)
+## Step 6 — Test reconciliation warning
 
 In the PWA entry form:
 1. Enter amount NT$100 and one item NT$100.
 2. Add a discount of NT$150 (exceeds item total).
-3. **Expected**: the form should display an error and block submission before the amount would go negative.
+3. **Expected**: the reconciliation row turns orange and shows `⚠ 差 NT$50`, indicating the item sum minus adjustments doesn't match the entered amount. Submission is **not blocked** — the reconciliation is a soft warning. The user is expected to correct the amount or the adjustment manually.
 
 ---
 

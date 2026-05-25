@@ -95,7 +95,7 @@
 
 - [x] T023 Run `pnpm test` in `backend/` and verify all existing tests pass with no regressions
 - [x] T024 Run `tsx backend/scripts/audit-legacy.ts` and confirm SC-001 through SC-006 are all satisfied; note the 6 orphan fee/refund rows that require manual resolution (per spec Post-Migration Manual Steps)
-- [ ] T025 Manual PWA smoke test per `specs/016-transaction-adjustments/quickstart.md` Steps 4–6 — verify new transaction with discount, edit with fee, summary screen totals
+- [x] T025 Manual PWA smoke test per `specs/016-transaction-adjustments/quickstart.md` Steps 4–6 — verify new transaction with discount, edit with fee, summary screen totals
 
 ---
 
