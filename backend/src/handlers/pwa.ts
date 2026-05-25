@@ -10,6 +10,10 @@ import {
   createImportRun,
   updateImportRun,
   getTransactionsForPeriod,
+  insertAdjustments,
+  computeAndWriteEffectiveAmounts,
+  getAdjustmentsForTransaction,
+  deleteAdjustmentsForTransaction,
   type TransactionForPeriod,
 } from '../db/queries';
 import { getBudgetProgress } from '../services/budget';
@@ -44,7 +48,7 @@ pwaRouter.use('/*', async (c, next) => {
       status: 204,
       headers: {
         'Access-Control-Allow-Origin': c.env.PWA_ORIGIN,
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
         'Access-Control-Allow-Headers': 'Authorization, Content-Type',
         'Access-Control-Max-Age': '86400',
       },
@@ -88,6 +92,7 @@ pwaRouter.get('/tags', async (c) => {
 // ─── POST /pwa/expense ───────────────────────────────────────────────────────
 
 pwaRouter.post('/expense', async (c) => {
+  type AdjInput = { kind: 'fee' | 'refund' | 'discount'; amount: number; note?: string | null; basis?: 'percentage' | null; basis_value?: number | null };
   type Body = {
     amount: number;
     payment_method: string;
@@ -95,6 +100,7 @@ pwaRouter.post('/expense', async (c) => {
     free_tags?: string[];
     note?: string | null;
     items?: { name: string; amount?: number | null; tag?: string | null }[];
+    adjustments?: AdjInput[];
   };
   let body: Body;
   try {
@@ -103,7 +109,7 @@ pwaRouter.post('/expense', async (c) => {
     return c.json({ error: 'INVALID_PAYLOAD', message: 'Invalid JSON' }, 400);
   }
 
-  const { amount, payment_method, category_tag, free_tags: rawTags = [], note, items = [] } = body;
+  const { amount, payment_method, category_tag, free_tags: rawTags = [], note, items = [], adjustments = [] } = body;
   const free_tags = rawTags.map((t) => t.replace(/^[#\s]+|[#\s]+$/g, '')).filter(Boolean);
 
   if (!Number.isInteger(amount) || amount <= 0) {
@@ -117,23 +123,30 @@ pwaRouter.post('/expense', async (c) => {
       return c.json({ error: 'INVALID_ITEM_AMOUNT', message: 'item amounts must be positive integers when set' }, 400);
     }
   }
-
-  const nonNullAmounts = items.filter((i) => i.amount != null).map((i) => i.amount as number);
-  if (nonNullAmounts.length === items.length && items.length > 0) {
-    const sum = nonNullAmounts.reduce((acc, a) => acc + a, 0);
-    if (sum > amount) {
-      return c.json({ error: 'ITEMS_EXCEED_TOTAL', message: `Item amounts sum to ${sum}, total is ${amount}` }, 400);
+  for (const adj of adjustments) {
+    if (!['fee', 'refund', 'discount'].includes(adj.kind)) {
+      return c.json({ error: 'INVALID_ADJUSTMENT_KIND', message: 'adjustment kind must be fee, refund, or discount' }, 400);
+    }
+    if (!Number.isInteger(adj.amount) || adj.amount <= 0) {
+      return c.json({ error: 'INVALID_ADJUSTMENT_AMOUNT', message: 'adjustment amount must be a positive integer' }, 400);
+    }
+    if (adj.basis != null && adj.basis !== 'percentage') {
+      return c.json({ error: 'INVALID_ADJUSTMENT_BASIS', message: "basis must be 'percentage' or null" }, 400);
+    }
+    if (adj.basis_value != null && (!Number.isInteger(adj.basis_value) || adj.basis_value <= 0 || adj.basis_value > 100)) {
+      return c.json({ error: 'INVALID_ADJUSTMENT_BASIS_VALUE', message: 'basis_value must be 1..100' }, 400);
     }
   }
 
   const supabase = getSupabaseClient(c.env);
+  const txAt = new Date().toISOString();
   const tx = await insertTransaction(supabase, {
     amount,
     payment_method: payment_method as PaymentMethod,
     tags: free_tags,
     note: note ?? null,
     transaction_type: 'expense',
-    transaction_at: new Date().toISOString(),
+    transaction_at: txAt,
   });
 
   if (items.length > 0) {
@@ -147,6 +160,15 @@ pwaRouter.post('/expense', async (c) => {
         sort_order: i,
       }))
     );
+  }
+
+  if (adjustments.length > 0) {
+    await insertAdjustments(supabase, tx.id, adjustments.map((a) => ({ ...a, transaction_at: txAt })));
+  }
+
+  // Recompute effective_amount whenever items exist
+  if (items.length > 0) {
+    await computeAndWriteEffectiveAmounts(supabase, tx.id, amount);
   }
 
   return c.json({ id: tx.id, amount: tx.amount, transaction_at: tx.transaction_at }, 201);
@@ -477,6 +499,64 @@ pwaRouter.post('/import', async (c) => {
     skipped_voided_count: counters.skippedVoidedCount,
     parse_failed_count: counters.parseFailedCount,
   });
+});
+
+// ─── GET /pwa/transactions/:id/adjustments ───────────────────────────────────
+
+pwaRouter.get('/transactions/:id/adjustments', async (c) => {
+  const txId = c.req.param('id');
+  const supabase = getSupabaseClient(c.env);
+  const adjustments = await getAdjustmentsForTransaction(supabase, txId);
+  return c.json({ adjustments });
+});
+
+// ─── PUT /pwa/transactions/:id/adjustments ───────────────────────────────────
+// Replaces all adjustments for a transaction, then recomputes effective_amount.
+
+pwaRouter.put('/transactions/:id/adjustments', async (c) => {
+  const txId = c.req.param('id');
+  type AdjInput = { kind: 'fee' | 'refund' | 'discount'; amount: number; note?: string | null; basis?: 'percentage' | null; basis_value?: number | null };
+  type Body = { adjustments: AdjInput[] };
+  let body: Body;
+  try {
+    body = await c.req.json<Body>();
+  } catch {
+    return c.json({ error: 'INVALID_PAYLOAD', message: 'Invalid JSON' }, 400);
+  }
+
+  const { adjustments } = body;
+  for (const adj of adjustments) {
+    if (!['fee', 'refund', 'discount'].includes(adj.kind)) {
+      return c.json({ error: 'INVALID_ADJUSTMENT_KIND', message: 'adjustment kind must be fee, refund, or discount' }, 400);
+    }
+    if (!Number.isInteger(adj.amount) || adj.amount <= 0) {
+      return c.json({ error: 'INVALID_ADJUSTMENT_AMOUNT', message: 'adjustment amount must be a positive integer' }, 400);
+    }
+    if (adj.basis != null && adj.basis !== 'percentage') {
+      return c.json({ error: 'INVALID_ADJUSTMENT_BASIS', message: "basis must be 'percentage' or null" }, 400);
+    }
+    if (adj.basis_value != null && (!Number.isInteger(adj.basis_value) || adj.basis_value <= 0 || adj.basis_value > 100)) {
+      return c.json({ error: 'INVALID_ADJUSTMENT_BASIS_VALUE', message: 'basis_value must be 1..100' }, 400);
+    }
+  }
+
+  const supabase = getSupabaseClient(c.env);
+
+  // Verify transaction exists and get its amount
+  const { data: tx, error: txErr } = await supabase
+    .from('transactions')
+    .select('id, amount, transaction_at')
+    .eq('id', txId)
+    .single();
+  if (txErr || !tx) return c.json({ error: 'NOT_FOUND', message: 'Transaction not found' }, 404);
+
+  await deleteAdjustmentsForTransaction(supabase, txId);
+  if (adjustments.length > 0) {
+    await insertAdjustments(supabase, txId, adjustments.map((a) => ({ ...a, transaction_at: tx.transaction_at as string })));
+  }
+  await computeAndWriteEffectiveAmounts(supabase, txId, tx.amount as number);
+
+  return c.json({ ok: true });
 });
 
 // ─── GET /pwa/budget ─────────────────────────────────────────────────────────
