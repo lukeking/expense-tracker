@@ -14,7 +14,7 @@
 
 **Purpose**: Confirm migration directory exists and is ready.
 
-- [ ] T001 Confirm `backend/supabase/migrations/` directory exists (no file creation needed)
+- [x] T001 Confirm `backend/supabase/migrations/` directory exists (no file creation needed)
 
 ---
 
@@ -26,15 +26,15 @@
 
 ### Implementation
 
-- [ ] T002 [US1] Write migration `backend/supabase/migrations/017_transactions_full_view.sql` using DDL from `specs/017-transactions-full-view/contracts/schema-ddl.sql`
-- [ ] T003 [US1] Apply migration to dev Supabase: `psql $DATABASE_URL -f backend/supabase/migrations/017_transactions_full_view.sql`
+- [x] T002 [US1] Write migration `backend/supabase/migrations/017_transactions_full_view.sql` using DDL from `specs/017-transactions-full-view/contracts/schema-ddl.sql`
+- [x] T003 [US1] Apply migration to dev Supabase: `psql $DATABASE_URL -f backend/supabase/migrations/017_transactions_full_view.sql`
 
 ### Verification (quickstart.md Steps 1–4)
 
-- [ ] T004 [US1] Verify row count: `SELECT COUNT(*) FROM v_transactions_full` equals `SELECT COUNT(*) FROM transactions`
-- [ ] T005 [US1] Verify items array: query a transaction with items and confirm `items` is a non-empty JSON array with correct shape
-- [ ] T006 [US1] Verify empty arrays: confirm transactions with no items return `items = []` (not NULL)
-- [ ] T007 [US1] Verify read-only: attempt INSERT into view and confirm database rejects it
+- [x] T004 [US1] Verify row count: `SELECT COUNT(*) FROM v_transactions_full` equals `SELECT COUNT(*) FROM transactions`
+- [x] T005 [US1] Verify items array: query a transaction with items and confirm `items` is a non-empty JSON array with correct shape
+- [x] T006 [US1] Verify empty arrays: confirm transactions with no items return `items = []` (not NULL)
+- [x] T007 [US1] Verify read-only: attempt INSERT into view and confirm database rejects it
 
 **Checkpoint**: All 4 verification queries pass — feature is complete and shippable.
 
@@ -42,7 +42,7 @@
 
 ## Phase 3: Polish & Commit
 
-- [ ] T008 Commit migration file to branch `017-transactions-full-view`
+- [x] T008 Commit migration file to branch `017-transactions-full-view`
 
 ---
 

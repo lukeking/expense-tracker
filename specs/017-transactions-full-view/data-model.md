@@ -16,7 +16,6 @@ One row per transaction. All fields from the `transactions` table plus two JSON 
 | `note` | `text` | `transactions.note` | nullable |
 | `transaction_at` | `timestamptz` | `transactions.transaction_at` | |
 | `created_at` | `timestamptz` | `transactions.created_at` | |
-| `updated_at` | `timestamptz` | `transactions.updated_at` | |
 | `parent_transaction_id` | `uuid` | `transactions.parent_transaction_id` | nullable |
 | `source` | `text` | `transactions.source` | nullable |
 | `items` | `json` | aggregated from `transaction_items` | `[]` when no items |
