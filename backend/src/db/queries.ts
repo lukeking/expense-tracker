@@ -557,7 +557,7 @@ export async function getTransactionItems(
 export async function replaceTransactionItems(
   supabase: SupabaseClient,
   transactionId: string,
-  items: { name: string; amount?: number | null; tags?: string[]; sort_order?: number }[]
+  items: { name: string; amount?: number | null; tags?: string[]; sort_order?: number; note?: string | null }[]
 ): Promise<void> {
   const { error: deleteError } = await supabase
     .from('transaction_items')

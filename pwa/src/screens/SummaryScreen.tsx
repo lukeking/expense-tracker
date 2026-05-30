@@ -3,6 +3,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, 
 import { TimeWindowPicker } from '../components/TimeWindowPicker';
 import { useSummaryData, useSubcategoryData, useTransactions, useTransactionPeriods, useMonthTransactions } from '../hooks/useSummary';
 import type { WindowOption, TxRecord, PeriodData } from '../hooks/useSummary';
+import { EditExpenseSheet } from '../components/EditExpenseSheet';
 
 const COLOURS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
 
@@ -53,7 +54,7 @@ function txLabel(tx: TxRecord): string {
   return label;
 }
 
-function TxEntry({ tx, parentMap }: { tx: TxRecord; parentMap: Map<string, TxRecord> }) {
+function TxEntry({ tx, parentMap, onEdit }: { tx: TxRecord; parentMap: Map<string, TxRecord>; onEdit?: (id: string) => void }) {
   return (
     <div className="px-4 py-1.5">
       <div className="flex justify-between text-sm">
@@ -61,8 +62,20 @@ function TxEntry({ tx, parentMap }: { tx: TxRecord; parentMap: Map<string, TxRec
           {txLabel(tx)}
           <span className="text-xs text-gray-400 dark:text-gray-500 ml-1.5">{localDt(tx.transaction_at, { time: true })}</span>
         </span>
-        <span className={`font-medium ${tx.transaction_type === 'refund' ? 'text-green-600' : 'text-gray-800 dark:text-gray-100'}`}>
-          {tx.transaction_type === 'refund' ? `-${formatMoney(tx.amount)}` : formatMoney(tx.amount)}
+        <span className="flex items-center gap-2">
+          {tx.transaction_type === 'expense' && onEdit && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onEdit(tx.id); }}
+              className="text-xs text-blue-500 hover:text-blue-700"
+              aria-label="編輯"
+            >
+              ✏
+            </button>
+          )}
+          <span className={`font-medium ${tx.transaction_type === 'refund' ? 'text-green-600' : 'text-gray-800 dark:text-gray-100'}`}>
+            {tx.transaction_type === 'refund' ? `-${formatMoney(tx.amount)}` : formatMoney(tx.amount)}
+          </span>
         </span>
       </div>
       {tx.parent_transaction_id && (
@@ -87,7 +100,7 @@ function TxEntry({ tx, parentMap }: { tx: TxRecord; parentMap: Map<string, TxRec
   );
 }
 
-function DateSubGroup({ dateLabel, items, parentMap }: { dateLabel: string; items: TxRecord[]; parentMap: Map<string, TxRecord> }) {
+function DateSubGroup({ dateLabel, items, parentMap, onEdit }: { dateLabel: string; items: TxRecord[]; parentMap: Map<string, TxRecord>; onEdit?: (id: string) => void }) {
   const [open, setOpen] = useState(false);
   const total = items.reduce((s, t) => s + (t.transaction_type === 'refund' ? -t.amount : t.amount), 0);
   return (
@@ -102,14 +115,14 @@ function DateSubGroup({ dateLabel, items, parentMap }: { dateLabel: string; item
       </button>
       {open && (
         <div className="ml-4 border-l-2 border-gray-200 dark:border-gray-700 mb-1">
-          {items.map((tx) => <TxEntry key={tx.id} tx={tx} parentMap={parentMap} />)}
+          {items.map((tx) => <TxEntry key={tx.id} tx={tx} parentMap={parentMap} onEdit={onEdit} />)}
         </div>
       )}
     </div>
   );
 }
 
-function HistoryGroup({ label, items, parentMap, showDateSubs }: { label: string; items: TxRecord[]; parentMap: Map<string, TxRecord>; showDateSubs?: boolean }) {
+function HistoryGroup({ label, items, parentMap, showDateSubs, onEdit }: { label: string; items: TxRecord[]; parentMap: Map<string, TxRecord>; showDateSubs?: boolean; onEdit?: (id: string) => void }) {
   const [open, setOpen] = useState(false);
   const total = items.reduce((s, t) => s + (t.transaction_type === 'refund' ? -t.amount : t.amount), 0);
 
@@ -137,15 +150,15 @@ function HistoryGroup({ label, items, parentMap, showDateSubs }: { label: string
       {open && (
         <div className="pb-2">
           {dateGroups
-            ? dateGroups.map(([d, txs]) => <DateSubGroup key={d} dateLabel={d} items={txs} parentMap={parentMap} />)
-            : items.map((tx) => <TxEntry key={tx.id} tx={tx} parentMap={parentMap} />)}
+            ? dateGroups.map(([d, txs]) => <DateSubGroup key={d} dateLabel={d} items={txs} parentMap={parentMap} onEdit={onEdit} />)
+            : items.map((tx) => <TxEntry key={tx.id} tx={tx} parentMap={parentMap} onEdit={onEdit} />)}
         </div>
       )}
     </div>
   );
 }
 
-function LazyHistoryGroup({ period }: { period: PeriodData }) {
+function LazyHistoryGroup({ period, onEdit }: { period: PeriodData; onEdit?: (id: string) => void }) {
   const [open, setOpen] = useState(false);
   const { data: txData, isLoading } = useMonthTransactions(period.from_date, period.to_date, open);
 
@@ -176,7 +189,7 @@ function LazyHistoryGroup({ period }: { period: PeriodData }) {
         <div className="pb-2">
           {isLoading
             ? <div className="px-4 py-2 text-sm text-gray-400 dark:text-gray-500">載入中…</div>
-            : dateGroups.map(([d, txs]) => <DateSubGroup key={d} dateLabel={d} items={txs} parentMap={parentMap} />)}
+            : dateGroups.map(([d, txs]) => <DateSubGroup key={d} dateLabel={d} items={txs} parentMap={parentMap} onEdit={onEdit} />)}
         </div>
       )}
     </div>
@@ -186,6 +199,7 @@ function LazyHistoryGroup({ period }: { period: PeriodData }) {
 export function SummaryScreen() {
   const [window, setWindow] = useState<WindowOption>('month');
   const [drilldown, setDrilldown] = useState<string | null>(null);
+  const [editingTxId, setEditingTxId] = useState<string | null>(null);
 
   const { data: summaryData, isLoading: summaryLoading } = useSummaryData(window);
   const { data: subData, isLoading: subLoading } = useSubcategoryData(drilldown, window);
@@ -198,6 +212,7 @@ export function SummaryScreen() {
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
+      {editingTxId && <EditExpenseSheet txId={editingTxId} onClose={() => setEditingTxId(null)} />}
       <div className="pt-4 pb-2">
         <TimeWindowPicker value={window} onChange={(w) => { setWindow(w); setDrilldown(null); }} />
       </div>
@@ -296,11 +311,11 @@ export function SummaryScreen() {
             ? <div className="p-4 text-center text-gray-400 dark:text-gray-500 text-sm">載入中…</div>
             : periods.length === 0
               ? <p className="text-center text-gray-400 dark:text-gray-500 text-sm py-4">此期間無交易</p>
-              : periods.map((p) => <LazyHistoryGroup key={p.period} period={p} />)
+              : periods.map((p) => <LazyHistoryGroup key={p.period} period={p} onEdit={setEditingTxId} />)
         ) : groups.length === 0 ? (
           <p className="text-center text-gray-400 dark:text-gray-500 text-sm py-4">此期間無交易</p>
         ) : (
-          groups.map((g) => <HistoryGroup key={g.label} label={g.label} items={g.items} parentMap={parentMap} showDateSubs={window !== 'month' && window !== 'last-month'} />)
+          groups.map((g) => <HistoryGroup key={g.label} label={g.label} items={g.items} parentMap={parentMap} showDateSubs={window !== 'month' && window !== 'last-month'} onEdit={setEditingTxId} />)
         )}
       </div>
     </div>
