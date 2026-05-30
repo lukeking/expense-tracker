@@ -213,11 +213,15 @@ export function SummaryScreen() {
 
   const handleNavigate = (delta: -1 | 1) => {
     setOffset((o) => o + delta);
+    setTag(null);
+    setPaymentMethod(null);
     setDrilldown(null);
   };
 
   const handlePickerSelect = (newOffset: number) => {
     setOffset(newOffset);
+    setTag(null);
+    setPaymentMethod(null);
     setPickerOpen(false);
     setDrilldown(null);
   };
