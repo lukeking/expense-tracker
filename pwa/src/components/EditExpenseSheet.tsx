@@ -209,7 +209,7 @@ function EditExpenseFormInner({ tx, onClose }: { tx: TxDetail; onClose: () => vo
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             placeholder="0"
-            className="text-3xl font-bold flex-1 border-b-2 border-gray-300 dark:border-gray-600 outline-none pb-1 focus:border-blue-500 bg-transparent text-gray-900 dark:text-white"
+            className="text-3xl font-bold flex-1 min-w-0 border-b-2 border-gray-300 dark:border-gray-600 outline-none pb-1 focus:border-blue-500 bg-transparent text-gray-900 dark:text-white"
             required
           />
           <button
