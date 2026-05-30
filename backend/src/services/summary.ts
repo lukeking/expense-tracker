@@ -56,17 +56,19 @@ export function aggregateByCategory(
     }
     const remainder = tx.amount - categorisedSum;
     if (remainder > 0) {
-      const fallbackTag = tx.tags.find((t) => t.includes(':'))
-        ?? items.flatMap((i) => i.tags).find((t) => t.includes(':'));
+      // Only use transaction-level category tags for fallback; item-level tags
+      // are irrelevant when items have no amounts (null) or didn't cover the tx.
+      const fallbackTag = tx.tags.find((t) => t.includes(':'));
       const bucket = fallbackTag ? fallbackTag.split(':')[0] : '其他';
       map.set(bucket, (map.get(bucket) ?? 0) + sign * remainder);
     }
   }
 
-  return Array.from(map.entries())
+  const raw = Array.from(map.entries())
     .filter(([, total]) => total > 0)
     .map(([category, total]) => ({ category, total }))
     .sort((a, b) => b.total - a.total);
+  return mergeOverflowCategories(raw);
 }
 
 // Applies the same top-4 + overflow-into-其他 logic to raw DB totals.
@@ -102,7 +104,15 @@ export function aggregateBySubcategory(
       const effectiveAmt = item.effective_amount ?? item.amount;
       if (effectiveAmt == null) continue;
       const categoryTag = item.tags.find((t) => t.startsWith(prefix)) ?? null;
-      if (!categoryTag) continue;
+      if (!categoryTag) {
+        // When drilling into '其他', items with no category tag (plain tags only)
+        // belong to subcategory '其他'.
+        if (category === '其他' && !item.tags.some((t) => t.includes(':'))) {
+          map.set('其他', (map.get('其他') ?? 0) + sign * effectiveAmt);
+          matchedSum += effectiveAmt;
+        }
+        continue;
+      }
       const subcategory = categoryTag.split(':').slice(1).join(':') || '其他';
       map.set(subcategory, (map.get(subcategory) ?? 0) + sign * effectiveAmt);
       matchedSum += effectiveAmt;
