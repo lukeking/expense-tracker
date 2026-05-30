@@ -99,7 +99,7 @@ pwaRouter.post('/expense', async (c) => {
     category_tag?: string | null;
     free_tags?: string[];
     note?: string | null;
-    items?: { name: string; amount?: number | null; tag?: string | null }[];
+    items?: { name: string; amount?: number | null; tag?: string | null; note?: string | null }[];
     adjustments?: AdjInput[];
   };
   let body: Body;
@@ -110,7 +110,10 @@ pwaRouter.post('/expense', async (c) => {
   }
 
   const { amount, payment_method, category_tag, free_tags: rawTags = [], note, items = [], adjustments = [] } = body;
-  const free_tags = rawTags.map((t) => t.replace(/^[#\s]+|[#\s]+$/g, '')).filter(Boolean);
+  const free_tags = rawTags
+    .map((t) => t.replace(/^[#\s]+|[#\s]+$/g, ''))
+    .filter(Boolean)
+    .filter((t) => !t.includes(':'));
 
   if (!Number.isInteger(amount) || amount <= 0) {
     return c.json({ error: 'INVALID_AMOUNT', message: 'amount must be a positive integer' }, 400);
@@ -158,6 +161,7 @@ pwaRouter.post('/expense', async (c) => {
         amount: item.amount ?? null,
         tags: item.tag != null ? [item.tag] : category_tag != null ? [category_tag] : [],
         sort_order: i,
+        note: item.note?.trim() || null,
       }))
     );
   }

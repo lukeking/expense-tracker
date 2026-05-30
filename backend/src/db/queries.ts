@@ -30,7 +30,7 @@ export async function insertTransaction(
 export async function insertTransactionItems(
   supabase: SupabaseClient,
   transactionId: string,
-  items: { name: string; amount?: number | null; tags?: string[]; sort_order?: number }[]
+  items: { name: string; amount?: number | null; tags?: string[]; sort_order?: number; note?: string | null }[]
 ): Promise<void> {
   if (items.length === 0) return;
   const rows = items.map((item, i) => {
@@ -43,6 +43,7 @@ export async function insertTransactionItems(
       amount: item.amount ?? null,
       tags: item.tags ?? [],
       sort_order: item.sort_order ?? i,
+      note: item.note ?? null,
     };
   });
   const { error } = await supabase.from('transaction_items').insert(rows);
