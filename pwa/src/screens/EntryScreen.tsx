@@ -24,7 +24,7 @@ function deriveCategoryTag(sel: CategorySelection | null): string | null {
 }
 
 function newItem(): ItemRowData {
-  return { id: crypto.randomUUID(), tagOverride: null, name: '', amount: null };
+  return { id: crypto.randomUUID(), tagOverride: null, name: '', amount: null, note: '', approxFlag: false };
 }
 
 function newAdjustment(): AdjustmentRowData {
@@ -38,8 +38,9 @@ function ExpenseForm() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('credit_card');
   const [category, setCategory] = useState<CategorySelection | null>(null);
   const [freeTags, setFreeTags] = useState<string[]>([]);
-  const [items, setItems] = useState<ItemRowData[]>([]);
+  const [items, setItems] = useState<ItemRowData[]>([newItem()]);
   const [adjustments, setAdjustments] = useState<AdjustmentRowData[]>([]);
+  const [showAdj, setShowAdj] = useState(false);
   const [note, setNote] = useState('');
   const [toast, setToast] = useState('');
 
@@ -76,7 +77,7 @@ function ExpenseForm() {
           category_tag: categoryTag,
           free_tags: freeTags,
           note: note.trim() || null,
-          items: items.map((i) => ({ name: i.name, amount: i.amount, tag: i.tagOverride })),
+          items: items.map((i) => ({ name: i.name, amount: i.amount, tag: i.tagOverride, note: i.note.trim() || null })),
           adjustments: adjustments
             .map((a) => ({ a, amt: resolveAdjAmount(a, percentBase) }))
             .filter(({ amt }) => amt != null && amt > 0)
@@ -90,7 +91,7 @@ function ExpenseForm() {
         }),
       }),
     onSuccess: () => {
-      setAmount(''); setCategory(null); setFreeTags([]); setItems([]); setAdjustments([]); setNote('');
+      setAmount(''); setCategory(null); setFreeTags([]); setItems([newItem()]); setAdjustments([]); setNote(''); setShowAdj(false);
       setToast('記錄成功！');
       queryClient.invalidateQueries({ queryKey: ['summary'] });
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
@@ -107,9 +108,42 @@ function ExpenseForm() {
     setAdjustments((prev) => prev.map((a) => (a.id === id ? updated : a)));
   }
 
+  function makeOnMax(itemId: string): (() => void) | null {
+    if (!amountVal) return null;
+    return () => {
+      const otherSum = items
+        .filter((i) => i.id !== itemId && i.amount !== null)
+        .reduce((s, i) => s + (i.amount as number), 0);
+
+      const absGross = adjustments.reduce((s, a) => {
+        if (a.mode !== 'absolute' || a.value == null) return s;
+        return a.kind === 'fee' ? s - a.value : s + a.value;
+      }, 0);
+
+      const pctGross = adjustments.reduce((s, a) => {
+        if (a.mode !== 'percentage' || a.value == null) return s;
+        return a.kind === 'fee' ? s - a.value : s + a.value;
+      }, 0);
+
+      const divisor = 1 - pctGross / 100;
+      if (divisor <= 0) return;
+      const rawGross = (amountVal + absGross) / divisor;
+      const grossTotal = Math.round(rawGross);
+      const maxVal = grossTotal - otherSum;
+      if (maxVal <= 0) return;
+
+      const approxFlag = Math.abs(rawGross - grossTotal) > 0.001;
+      setItems((prev) =>
+        prev.map((i) => (i.id === itemId ? { ...i, amount: maxVal, approxFlag } : i))
+      );
+    };
+  }
+
+  const canSubmit = amountVal > 0 && items.length > 0;
+
   return (
     <form
-      onSubmit={(e) => { e.preventDefault(); if (amountVal > 0) mutation.mutate(); }}
+      onSubmit={(e) => { e.preventDefault(); if (canSubmit) mutation.mutate(); }}
       className="flex flex-col gap-4 p-4 overflow-y-auto h-full"
     >
       {toast && (
@@ -121,15 +155,25 @@ function ExpenseForm() {
       {/* Amount */}
       <div>
         <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">金額 (NTD)</label>
-        <input
-          type="number"
-          min="1"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          placeholder="0"
-          className="text-3xl font-bold w-full border-b-2 border-gray-300 dark:border-gray-600 outline-none pb-1 focus:border-blue-500 bg-transparent text-gray-900 dark:text-white"
-          required
-        />
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min="1"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="0"
+            className="text-3xl font-bold flex-1 border-b-2 border-gray-300 dark:border-gray-600 outline-none pb-1 focus:border-blue-500 bg-transparent text-gray-900 dark:text-white"
+            required
+          />
+          <button
+            type="button"
+            onClick={() => setShowAdj((v) => !v)}
+            className="flex-shrink-0 text-gray-400 dark:text-gray-500 px-1 pb-1 text-sm"
+            aria-label="折抵設定"
+          >
+            {showAdj ? '▾' : '▸'}
+          </button>
+        </div>
       </div>
 
       {/* Payment method */}
@@ -150,6 +194,28 @@ function ExpenseForm() {
         <TagInput value={freeTags} onChange={setFreeTags} />
       </div>
 
+      {/* Adjustments — inline, between amount and items */}
+      {showAdj && (
+        <div className="border border-gray-200 dark:border-gray-700 rounded-lg px-3 pb-3 pt-2">
+          {adjustments.map((adj) => (
+            <AdjustmentRow
+              key={adj.id}
+              adj={adj}
+              base={percentBase}
+              onChange={(updated) => updateAdjustment(adj.id, updated)}
+              onRemove={() => setAdjustments((prev) => prev.filter((a) => a.id !== adj.id))}
+            />
+          ))}
+          <button
+            type="button"
+            onClick={() => setAdjustments((prev) => [...prev, newAdjustment()])}
+            className="mt-2 text-sm text-blue-600 flex items-center gap-1"
+          >
+            ＋ 新增折抵
+          </button>
+        </div>
+      )}
+
       {/* Items */}
       <div>
         <div className="flex items-center justify-between mb-1">
@@ -166,10 +232,14 @@ function ExpenseForm() {
             item={item}
             inheritedTag={categoryTag}
             extraTags={freeTags}
+            onMax={makeOnMax(item.id)}
             onChange={(updated) => updateItem(item.id, updated)}
             onRemove={() => setItems((prev) => prev.filter((i) => i.id !== item.id))}
           />
         ))}
+        {items.length === 0 && (
+          <p className="text-xs text-orange-500 mt-1">請至少新增一個品項</p>
+        )}
         <button
           type="button"
           onClick={() => setItems((prev) => [...prev, newItem()])}
@@ -208,34 +278,6 @@ function ExpenseForm() {
         </div>
       )}
 
-      {/* Adjustments */}
-      <details className="border border-gray-200 dark:border-gray-700 rounded-lg">
-        <summary className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400 cursor-pointer select-none">
-          折抵 / 手續費 / 退款
-          {adjustments.length > 0 && (
-            <span className="ml-2 text-blue-600">（{adjustments.length} 筆）</span>
-          )}
-        </summary>
-        <div className="px-3 pb-3">
-          {adjustments.map((adj) => (
-            <AdjustmentRow
-              key={adj.id}
-              adj={adj}
-              base={percentBase}
-              onChange={(updated) => updateAdjustment(adj.id, updated)}
-              onRemove={() => setAdjustments((prev) => prev.filter((a) => a.id !== adj.id))}
-            />
-          ))}
-          <button
-            type="button"
-            onClick={() => setAdjustments((prev) => [...prev, newAdjustment()])}
-            className="mt-2 text-sm text-blue-600 flex items-center gap-1"
-          >
-            ＋ 新增折抵
-          </button>
-        </div>
-      </details>
-
       {/* Note */}
       <div>
         <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">備註</label>
@@ -255,7 +297,7 @@ function ExpenseForm() {
 
       <button
         type="submit"
-        disabled={mutation.isPending || amountVal <= 0}
+        disabled={mutation.isPending || !canSubmit}
         className="mt-auto bg-blue-600 text-white rounded-xl py-3 font-semibold disabled:opacity-50"
       >
         {mutation.isPending ? '送出中…' : '送出'}
