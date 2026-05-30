@@ -474,7 +474,7 @@ export async function getTransactionsForPeriod(
   while (true) {
     const { data, error } = await supabase
       .from('transactions')
-      .select('id, amount, transaction_type, tags, transaction_at, parent_transaction_id, transaction_items(amount, tags)')
+      .select('id, amount, transaction_type, payment_method, tags, transaction_at, parent_transaction_id, transaction_items(amount, tags)')
       .in('transaction_type', ['expense', 'fee', 'refund'])
       .gte('transaction_at', start.toISOString())
       .lt('transaction_at', end.toISOString())
