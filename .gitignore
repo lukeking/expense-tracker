@@ -12,6 +12,7 @@ build/
 
 # Wrangler
 .wrangler/
+.dev.vars
 
 # Android
 android/app/src/main/res/values/secrets.xml

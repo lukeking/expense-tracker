@@ -77,7 +77,7 @@
 
 **Purpose**: End-to-end validation across all user stories.
 
-- [ ] T012 Run manual smoke test per `specs/018-item-note/quickstart.md` Steps 2–9; verify all acceptance scenarios pass (US1–US5 + submit guard + category tag guard)
+- [x] T012 Run manual smoke test per `specs/018-item-note/quickstart.md` Steps 2–9; verify all acceptance scenarios pass (US1–US5 + submit guard + category tag guard)
 
 ---
 
