@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
-import { TimeWindowPicker } from '../components/TimeWindowPicker';
+import { SummaryNav } from '../components/SummaryNav';
+import { PeriodPicker } from '../components/PeriodPicker';
+import { FilterBar } from '../components/FilterBar';
 import { useSummaryData, useSubcategoryData, useTransactions, useTransactionPeriods, useMonthTransactions } from '../hooks/useSummary';
-import type { WindowOption, TxRecord, PeriodData } from '../hooks/useSummary';
+import type { TimeBase, TxRecord, PeriodData } from '../hooks/useSummary';
 import { EditExpenseSheet } from '../components/EditExpenseSheet';
 
 const COLOURS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
@@ -21,17 +23,14 @@ function localDt(isoStr: string, opts: { date?: boolean; time?: boolean } = { da
   return time;
 }
 
-function groupTransactions(txs: TxRecord[], window: WindowOption): { label: string; items: TxRecord[] }[] {
+function groupTransactions(txs: TxRecord[], base: TimeBase): { label: string; items: TxRecord[] }[] {
   const groups = new Map<string, TxRecord[]>();
 
   for (const tx of txs) {
     const dt = new Date(tx.transaction_at);
     let key: string;
-    if (window === 'month' || window === 'last-month') {
+    if (base === 'week' || base === 'month') {
       key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-    } else if (window === '3months') {
-      const weekNum = Math.ceil(dt.getDate() / 7);
-      key = `${dt.getFullYear()}/${dt.getMonth() + 1} 第${weekNum}週`;
     } else {
       key = `${dt.getFullYear()}/${String(dt.getMonth() + 1).padStart(2, '0')}`;
     }
@@ -197,25 +196,90 @@ function LazyHistoryGroup({ period, onEdit }: { period: PeriodData; onEdit?: (id
 }
 
 export function SummaryScreen() {
-  const [window, setWindow] = useState<WindowOption>('month');
+  const [timeBase, setTimeBase] = useState<TimeBase>('week');
+  const [offset, setOffset] = useState(0);
+  const [tag, setTag] = useState<string | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<string | null>(null);
   const [drilldown, setDrilldown] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [editingTxId, setEditingTxId] = useState<string | null>(null);
 
-  const { data: summaryData, isLoading: summaryLoading } = useSummaryData(window);
-  const { data: subData, isLoading: subLoading } = useSubcategoryData(drilldown, window);
-  const { data: txData } = useTransactions(window, drilldown);
-  const { data: periods } = useTransactionPeriods(window);
+  const handleTimeBaseChange = (base: TimeBase) => {
+    setTimeBase(base);
+    setOffset(0);
+    setDrilldown(null);
+    // filters preserved per FR-010; filter bar hidden automatically when base==='all'
+  };
+
+  const handleNavigate = (delta: -1 | 1) => {
+    setOffset((o) => o + delta);
+    setDrilldown(null);
+  };
+
+  const handlePickerSelect = (newOffset: number) => {
+    setOffset(newOffset);
+    setPickerOpen(false);
+    setDrilldown(null);
+  };
+
+  const { data: summaryData, isLoading: summaryLoading } = useSummaryData(timeBase, offset, tag, paymentMethod);
+  const { data: subData, isLoading: subLoading } = useSubcategoryData(drilldown, timeBase, offset, tag, paymentMethod);
+  const { data: txData } = useTransactions(timeBase, offset, drilldown, tag, paymentMethod);
+  const { data: periods } = useTransactionPeriods(timeBase);
+
+  // Unfiltered tx fetch for filter bar chip population
+  const { data: allTxData } = useTransactions(timeBase, offset);
+  const availableTags = useMemo(() => {
+    const txs = allTxData?.transactions ?? [];
+    const set = new Set<string>();
+    for (const tx of txs) {
+      for (const t of tx.tags) { if (!t.includes(':')) set.add(t); }
+      for (const item of tx.items) {
+        for (const t of item.tags) { if (!t.includes(':')) set.add(t); }
+      }
+    }
+    return Array.from(set).sort();
+  }, [allTxData]);
+
+  const availablePaymentMethods = useMemo(() => {
+    const txs = allTxData?.transactions ?? [];
+    return Array.from(new Set(txs.map((tx) => tx.payment_method))).sort();
+  }, [allTxData]);
 
   const txs = txData?.transactions ?? [];
-  const groups = groupTransactions(txs, window);
+  const groups = groupTransactions(txs, timeBase);
   const parentMap = new Map(txs.map((tx) => [tx.id, tx]));
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
       {editingTxId && <EditExpenseSheet txId={editingTxId} onClose={() => setEditingTxId(null)} />}
-      <div className="pt-4 pb-2">
-        <TimeWindowPicker value={window} onChange={(w) => { setWindow(w); setDrilldown(null); }} />
-      </div>
+      {pickerOpen && timeBase !== 'all' && (
+        <PeriodPicker
+          timeBase={timeBase}
+          currentOffset={offset}
+          onSelect={handlePickerSelect}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
+
+      <SummaryNav
+        timeBase={timeBase}
+        offset={offset}
+        onTimeBaseChange={handleTimeBaseChange}
+        onNavigate={handleNavigate}
+        onPickerOpen={() => setPickerOpen(true)}
+      />
+
+      {timeBase !== 'all' && (
+        <FilterBar
+          tags={availableTags}
+          paymentMethods={availablePaymentMethods}
+          activeTag={tag}
+          activePayment={paymentMethod}
+          onTagChange={setTag}
+          onPaymentChange={setPaymentMethod}
+        />
+      )}
 
       {drilldown ? (
         /* ── Drilldown view ── */
@@ -306,7 +370,7 @@ export function SummaryScreen() {
         <div className="px-4 py-2">
           <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">交易記錄</span>
         </div>
-        {window === 'all' ? (
+        {timeBase === 'all' ? (
           periods === undefined
             ? <div className="p-4 text-center text-gray-400 dark:text-gray-500 text-sm">載入中…</div>
             : periods.length === 0
@@ -315,7 +379,16 @@ export function SummaryScreen() {
         ) : groups.length === 0 ? (
           <p className="text-center text-gray-400 dark:text-gray-500 text-sm py-4">此期間無交易</p>
         ) : (
-          groups.map((g) => <HistoryGroup key={g.label} label={g.label} items={g.items} parentMap={parentMap} showDateSubs={window !== 'month' && window !== 'last-month'} onEdit={setEditingTxId} />)
+          groups.map((g) => (
+            <HistoryGroup
+              key={g.label}
+              label={g.label}
+              items={g.items}
+              parentMap={parentMap}
+              showDateSubs={timeBase === 'year'}
+              onEdit={setEditingTxId}
+            />
+          ))
         )}
       </div>
     </div>

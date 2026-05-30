@@ -1,35 +1,51 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../api/client';
 
-export type WindowOption = 'month' | 'last-month' | '3months' | 'half-year' | 'year' | 'all';
+export type TimeBase = 'week' | 'month' | 'year' | 'all';
 
-export function windowToDates(window: WindowOption): { from: string; to: string } {
+const MONTH_LABELS = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+
+function pad(n: number) { return String(n).padStart(2, '0'); }
+function localDateStr(d: Date) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+
+function shortDay(d: Date) {
+  return `${d.getMonth()+1}/${d.getDate()}`;
+}
+
+export function timeBaseToRange(base: TimeBase, offset: number): { from: string; to: string; label: string } {
   const now = new Date();
   const y = now.getFullYear();
   const m = now.getMonth();
   const d = now.getDate();
 
-  function localDate(year: number, month: number, day: number): string {
-    const dt = new Date(year, month, day);
-    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+  if (base === 'week') {
+    const dow = now.getDay(); // 0=Sun
+    const thisSun = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dow + offset * 7);
+    const thisSat = new Date(thisSun.getFullYear(), thisSun.getMonth(), thisSun.getDate() + 6);
+    const from = localDateStr(thisSun);
+    const to = localDateStr(thisSat);
+    const label = `${shortDay(thisSun)} – ${shortDay(thisSat)}`;
+    return { from, to, label };
   }
 
-  const today = localDate(y, m, d);
-
-  switch (window) {
-    case 'month':
-      return { from: localDate(y, m, 1), to: today };
-    case 'last-month':
-      return { from: localDate(y, m - 1, 1), to: localDate(y, m, 1) };
-    case '3months':
-      return { from: localDate(y, m - 3, d), to: today };
-    case 'half-year':
-      return { from: localDate(y, m - 6, d), to: today };
-    case 'year':
-      return { from: localDate(y - 1, m, d), to: today };
-    case 'all':
-      return { from: '2000-01-01', to: today };
+  if (base === 'month') {
+    const target = new Date(y, m + offset, 1);
+    const ty = target.getFullYear();
+    const tm = target.getMonth();
+    const lastDay = new Date(ty, tm + 1, 0).getDate();
+    const from = `${ty}-${pad(tm+1)}-01`;
+    const to = `${ty}-${pad(tm+1)}-${pad(lastDay)}`;
+    const label = `${MONTH_LABELS[tm]} ${ty}`;
+    return { from, to, label };
   }
+
+  if (base === 'year') {
+    const ty = y + offset;
+    return { from: `${ty}-01-01`, to: `${ty}-12-31`, label: `${ty}` };
+  }
+
+  // all
+  return { from: '2000-01-01', to: localDateStr(now), label: '全部' };
 }
 
 export interface CategorySummary {
@@ -43,11 +59,13 @@ export interface SummaryData {
   categories: CategorySummary[];
 }
 
-export function useSummaryData(window: WindowOption) {
-  const { from, to } = windowToDates(window);
+export function useSummaryData(base: TimeBase, offset: number, tag?: string | null, paymentMethod?: string | null) {
+  const { from, to } = timeBaseToRange(base, offset);
+  const tagParam = tag ? `&tag=${encodeURIComponent(tag)}` : '';
+  const pmParam = paymentMethod ? `&payment_method=${encodeURIComponent(paymentMethod)}` : '';
   return useQuery({
-    queryKey: ['summary', window],
-    queryFn: () => apiFetch<SummaryData>(`/pwa/summary?from=${from}&to=${to}`),
+    queryKey: ['summary', base, offset, tag ?? null, paymentMethod ?? null],
+    queryFn: () => apiFetch<SummaryData>(`/pwa/summary?from=${from}&to=${to}${tagParam}${pmParam}`),
     staleTime: 60_000,
   });
 }
@@ -64,11 +82,13 @@ export interface SubcategoryData {
   subcategories: SubcategorySummary[];
 }
 
-export function useSubcategoryData(major: string | null, window: WindowOption) {
-  const { from, to } = windowToDates(window);
+export function useSubcategoryData(major: string | null, base: TimeBase, offset: number, tag?: string | null, paymentMethod?: string | null) {
+  const { from, to } = timeBaseToRange(base, offset);
+  const tagParam = tag ? `&tag=${encodeURIComponent(tag)}` : '';
+  const pmParam = paymentMethod ? `&payment_method=${encodeURIComponent(paymentMethod)}` : '';
   return useQuery({
-    queryKey: ['subcategories', major, window],
-    queryFn: () => apiFetch<SubcategoryData>(`/pwa/summary/subcategories?from=${from}&to=${to}&major=${encodeURIComponent(major!)}`),
+    queryKey: ['subcategories', major, base, offset, tag ?? null, paymentMethod ?? null],
+    queryFn: () => apiFetch<SubcategoryData>(`/pwa/summary/subcategories?from=${from}&to=${to}&major=${encodeURIComponent(major!)}${tagParam}${pmParam}`),
     enabled: major !== null,
     staleTime: 60_000,
   });
@@ -102,12 +122,40 @@ export interface PeriodData {
   total: number;
 }
 
-export function useTransactionPeriods(window: WindowOption) {
-  const { from, to } = windowToDates(window);
+const BASE_LIMIT: Record<TimeBase, number> = {
+  week: 200,
+  month: 300,
+  year: 2000,
+  all: 500,
+};
+
+export interface TransactionsData {
+  total: number;
+  page: number;
+  transactions: TxRecord[];
+}
+
+export function useTransactions(base: TimeBase, offset: number, category?: string | null, tag?: string | null, paymentMethod?: string | null) {
+  const { from, to } = timeBaseToRange(base, offset);
+  const limit = BASE_LIMIT[base];
+  const categoryParam = category ? `&category=${encodeURIComponent(category)}` : '';
+  const tagParam = tag ? `&tag=${encodeURIComponent(tag)}` : '';
+  const pmParam = paymentMethod ? `&payment_method=${encodeURIComponent(paymentMethod)}` : '';
   return useQuery({
-    queryKey: ['tx-periods', window],
+    queryKey: ['transactions', base, offset, category ?? null, tag ?? null, paymentMethod ?? null],
+    queryFn: () =>
+      apiFetch<TransactionsData>(`/pwa/transactions?from=${from}&to=${to}&limit=${limit}${categoryParam}${tagParam}${pmParam}`),
+    enabled: base !== 'all',
+    staleTime: 30_000,
+  });
+}
+
+export function useTransactionPeriods(base: TimeBase) {
+  const { from, to } = timeBaseToRange('all', 0);
+  return useQuery({
+    queryKey: ['tx-periods'],
     queryFn: () => apiFetch<PeriodData[]>(`/pwa/transaction-periods?from=${from}&to=${to}`),
-    enabled: window === 'all',
+    enabled: base === 'all',
     staleTime: 300_000,
   });
 }
@@ -118,33 +166,5 @@ export function useMonthTransactions(from: string, to: string, enabled: boolean)
     queryFn: () => apiFetch<TransactionsData>(`/pwa/transactions?from=${from}&to=${to}&limit=300`),
     enabled,
     staleTime: 300_000,
-  });
-}
-
-export interface TransactionsData {
-  total: number;
-  page: number;
-  transactions: TxRecord[];
-}
-
-const WINDOW_LIMIT: Record<WindowOption, number> = {
-  'month': 300,
-  'last-month': 300,
-  '3months': 600,
-  'half-year': 2000,
-  'year': 4000,
-  'all': 500,
-};
-
-export function useTransactions(window: WindowOption, category?: string | null, page = 1) {
-  const { from, to } = windowToDates(window);
-  const limit = WINDOW_LIMIT[window];
-  const categoryParam = category ? `&category=${encodeURIComponent(category)}` : '';
-  return useQuery({
-    queryKey: ['transactions', window, category ?? null, page],
-    queryFn: () =>
-      apiFetch<TransactionsData>(`/pwa/transactions?from=${from}&to=${to}&page=${page}&limit=${limit}${categoryParam}`),
-    enabled: window !== 'all',
-    staleTime: 30_000,
   });
 }
