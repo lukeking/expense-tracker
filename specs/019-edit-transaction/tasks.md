@@ -66,7 +66,7 @@
 
 ## Phase 5: Polish & Validation
 
-- [ ] T011 Manual smoke test per `specs/019-edit-transaction/quickstart.md` — run all 6 steps: (1) verify edit entry point, (2) pre-fill correctness, (3) edit and save, (4) save without changes, (5) save failure handling, (6) empty items list
+- [x] T011 Manual smoke test per `specs/019-edit-transaction/quickstart.md` — run all 6 steps: (1) verify edit entry point, (2) pre-fill correctness, (3) edit and save, (4) save without changes, (5) save failure handling, (6) empty items list
 
 ---
 
