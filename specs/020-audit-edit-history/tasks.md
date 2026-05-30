@@ -15,8 +15,8 @@
 **Purpose**: DB schema change that blocks all subsequent work.
 
 - [x] T001 Write `backend/supabase/migrations/019_transaction_edit_history.sql` from `specs/020-audit-edit-history/contracts/schema-ddl.sql`
-- [ ] T002 Apply migration to dev Supabase — paste `backend/supabase/migrations/019_transaction_edit_history.sql` into Supabase Studio SQL Editor
-- [ ] T003 Verify: `SELECT * FROM transaction_edit_history LIMIT 1` returns empty result without error
+- [x] T002 Apply migration to dev Supabase — paste `backend/supabase/migrations/019_transaction_edit_history.sql` into Supabase Studio SQL Editor
+- [x] T003 Verify: `SELECT * FROM transaction_edit_history LIMIT 1` returns empty result without error
 
 **Checkpoint**: Table exists — backend work can begin.
 
@@ -62,7 +62,7 @@
 
 **Independent Test**: Edit the same transaction 3 times; re-open edit sheet; 3 entries visible oldest-first, none missing or altered.
 
-- [ ] T012 [US3] Manual verification: edit a transaction 3 times, verify 3 rows in `transaction_edit_history` for that `transaction_id`, all entries present and unmodified — no code change required; mark complete when verified
+- [x] T012 [US3] Manual verification: edit a transaction 3 times, verify 3 rows in `transaction_edit_history` for that `transaction_id`, all entries present and unmodified — no code change required; mark complete when verified
 
 **Checkpoint**: Immutability confirmed — this is guaranteed by the append-only insert pattern (no UPDATE/DELETE in the code).
 
@@ -70,7 +70,7 @@
 
 ## Phase 5: Polish
 
-- [ ] T013 Run full smoke test per `specs/020-audit-edit-history/quickstart.md` Steps 1–6 using local dev servers (`wrangler dev` + `vite dev`)
+- [x] T013 Run full smoke test per `specs/020-audit-edit-history/quickstart.md` Steps 1–6 using local dev servers (`wrangler dev` + `vite dev`)
 
 ---
 
