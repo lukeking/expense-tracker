@@ -25,6 +25,11 @@ type PwaEnv = { Bindings: Env };
 
 const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'credit_card', 'easy_card', 'prepaid_wallet', 'bank_account'];
 
+function txHasPlainTag(tx: { tags: string[]; transaction_items: { tags: string[] }[] }, tag: string): boolean {
+  const isPlain = (t: string) => t === tag;
+  return tx.tags.some(isPlain) || tx.transaction_items.some((item) => item.tags.some(isPlain));
+}
+
 function enrichRefundTags(txs: TransactionForPeriod[]): TransactionForPeriod[] {
   const txById = new Map(txs.map((tx) => [tx.id, tx]));
   return txs.map((tx) => {
@@ -191,8 +196,14 @@ pwaRouter.get('/summary', async (c) => {
     return c.json({ error: 'INVALID_DATE', message: 'from and to must be valid ISO dates' }, 400);
   }
 
+  const tag = c.req.query('tag') || null;
+  const paymentMethod = c.req.query('payment_method') || null;
+
   const supabase = getSupabaseClient(c.env);
-  const txs = await getTransactionsForPeriod(supabase, start, end);
+  let txs = await getTransactionsForPeriod(supabase, start, end);
+  if (paymentMethod) txs = txs.filter((tx) => tx.payment_method === paymentMethod);
+  if (tag) txs = txs.filter((tx) => txHasPlainTag(tx, tag));
+
   const grandTotal = txs.reduce((s, tx) => s + (tx.transaction_type === 'refund' ? -tx.amount : tx.amount), 0);
   const rawTotals = aggregateByCategory(enrichRefundTags(txs));
   const categories = rawTotals.map((t) => ({
@@ -213,10 +224,16 @@ pwaRouter.get('/summary/subcategories', async (c) => {
     return c.json({ error: 'MISSING_PARAMS', message: 'from, to, and major are required' }, 400);
   }
 
+  const tag = c.req.query('tag') || null;
+  const paymentMethod = c.req.query('payment_method') || null;
+
   const start = new Date(from);
   const end = new Date(to + 'T23:59:59.999Z');
   const supabase = getSupabaseClient(c.env);
-  const txs = await getTransactionsForPeriod(supabase, start, end);
+  let txs = await getTransactionsForPeriod(supabase, start, end);
+  if (paymentMethod) txs = txs.filter((tx) => tx.payment_method === paymentMethod);
+  if (tag) txs = txs.filter((tx) => txHasPlainTag(tx, tag));
+
   const rawTotals = aggregateBySubcategory(enrichRefundTags(txs), major);
   const total = txs
     .filter((tx) => {
@@ -259,9 +276,11 @@ pwaRouter.get('/transactions', async (c) => {
   const page = Math.max(1, parseInt(c.req.query('page') ?? '1', 10) || 1);
   const limit = Math.min(5000, Math.max(1, parseInt(c.req.query('limit') ?? '50', 10) || 50));
   const category = c.req.query('category');
+  const tag = c.req.query('tag') || null;
+  const paymentMethod = c.req.query('payment_method') || null;
 
   const supabase = getSupabaseClient(c.env);
-  const { data, error, count } = await supabase
+  let query = supabase
     .from('transactions')
     .select(
       'id, amount, transaction_type, payment_method, tags, note, transaction_at, created_at, parent_transaction_id, transaction_items(id, name, amount, tags)',
@@ -269,8 +288,11 @@ pwaRouter.get('/transactions', async (c) => {
     )
     .gte('transaction_at', from)
     .lte('transaction_at', to + 'T23:59:59.999Z')
-    .order('transaction_at', { ascending: false })
-    .range((page - 1) * limit, page * limit - 1);
+    .order('transaction_at', { ascending: false });
+
+  if (paymentMethod) query = query.eq('payment_method', paymentMethod);
+
+  const { data, error, count } = await query.range((page - 1) * limit, page * limit - 1);
 
   if (error) return c.json({ error: 'DB_ERROR', message: error.message }, 500);
 
@@ -289,6 +311,7 @@ pwaRouter.get('/transactions', async (c) => {
       matchesCategory(tx.tags)
     );
   }
+  if (tag) transactions = transactions.filter((tx) => txHasPlainTag(tx, tag));
 
   return c.json({
     total: count ?? 0,

@@ -457,7 +457,7 @@ export async function findTransactionsWithoutInvoiceInRange(
   return (data ?? []) as Transaction[];
 }
 
-export type TransactionForPeriod = Pick<Transaction, 'id' | 'amount' | 'tags' | 'transaction_at' | 'transaction_type'> & {
+export type TransactionForPeriod = Pick<Transaction, 'id' | 'amount' | 'tags' | 'transaction_at' | 'transaction_type' | 'payment_method'> & {
   parent_transaction_id: string | null;
   transaction_items: { amount: number | null; effective_amount?: number | null; tags: string[] }[];
 };
