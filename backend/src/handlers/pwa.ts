@@ -297,6 +297,137 @@ pwaRouter.get('/transactions', async (c) => {
   });
 });
 
+// ─── GET /pwa/transactions/:id ───────────────────────────────────────────────
+
+pwaRouter.get('/transactions/:id', async (c) => {
+  const txId = c.req.param('id');
+  const supabase = getSupabaseClient(c.env);
+
+  const { data: tx, error } = await supabase
+    .from('transactions')
+    .select('id, amount, payment_method, tags, note, transaction_at, transaction_type, transaction_items(id, name, amount, tags, note, sort_order)')
+    .eq('id', txId)
+    .single();
+
+  if (error || !tx) return c.json({ error: 'NOT_FOUND', message: 'Transaction not found' }, 404);
+
+  const adjustments = await getAdjustmentsForTransaction(supabase, txId);
+
+  type ItemRow = { id: string; name: string; amount: number | null; tags: string[]; note: string | null; sort_order: number };
+  const items = ((tx.transaction_items as ItemRow[]) ?? []).sort((a, b) => a.sort_order - b.sort_order);
+
+  return c.json({
+    id: tx.id,
+    amount: tx.amount,
+    payment_method: tx.payment_method,
+    tags: (tx.tags as string[]) ?? [],
+    note: (tx.note as string | null) ?? null,
+    transaction_at: tx.transaction_at,
+    transaction_type: tx.transaction_type,
+    items: items.map((i) => ({ id: i.id, name: i.name, amount: i.amount, tags: i.tags ?? [], note: i.note ?? null, sort_order: i.sort_order })),
+    adjustments: adjustments.map((a) => ({
+      id: a.id,
+      kind: a.kind,
+      amount: a.amount,
+      note: a.note ?? null,
+      basis: a.basis ?? null,
+      basis_value: a.basis_value ?? null,
+    })),
+  });
+});
+
+// ─── PUT /pwa/transactions/:id ───────────────────────────────────────────────
+
+pwaRouter.put('/transactions/:id', async (c) => {
+  const txId = c.req.param('id');
+  type AdjInput = { kind: 'fee' | 'refund' | 'discount'; amount: number; note?: string | null; basis?: 'percentage' | null; basis_value?: number | null };
+  type Body = {
+    amount: number;
+    payment_method: string;
+    category_tag?: string | null;
+    free_tags?: string[];
+    note?: string | null;
+    items?: { name: string; amount?: number | null; tag?: string | null; note?: string | null }[];
+    adjustments?: AdjInput[];
+  };
+
+  let body: Body;
+  try {
+    body = await c.req.json<Body>();
+  } catch {
+    return c.json({ error: 'INVALID_PAYLOAD', message: 'Invalid JSON' }, 400);
+  }
+
+  const { amount, payment_method, category_tag, free_tags: rawTags = [], note, items = [], adjustments = [] } = body;
+  const free_tags = rawTags
+    .map((t) => t.replace(/^[#\s]+|[#\s]+$/g, ''))
+    .filter(Boolean)
+    .filter((t) => !t.includes(':'));
+
+  if (!Number.isInteger(amount) || amount <= 0)
+    return c.json({ error: 'INVALID_AMOUNT', message: 'amount must be a positive integer' }, 400);
+  if (!PAYMENT_METHODS.includes(payment_method as PaymentMethod))
+    return c.json({ error: 'INVALID_PAYMENT_METHOD', message: `payment_method must be one of: ${PAYMENT_METHODS.join(', ')}` }, 400);
+  for (const item of items) {
+    if (item.amount != null && (!Number.isInteger(item.amount) || item.amount <= 0))
+      return c.json({ error: 'INVALID_ITEM_AMOUNT', message: 'item amounts must be positive integers when set' }, 400);
+  }
+  for (const adj of adjustments) {
+    if (!['fee', 'refund', 'discount'].includes(adj.kind))
+      return c.json({ error: 'INVALID_ADJUSTMENT_KIND', message: 'adjustment kind must be fee, refund, or discount' }, 400);
+    if (!Number.isInteger(adj.amount) || adj.amount <= 0)
+      return c.json({ error: 'INVALID_ADJUSTMENT_AMOUNT', message: 'adjustment amount must be a positive integer' }, 400);
+    if (adj.basis != null && adj.basis !== 'percentage')
+      return c.json({ error: 'INVALID_ADJUSTMENT_BASIS', message: "basis must be 'percentage' or null" }, 400);
+    if (adj.basis_value != null && (!Number.isInteger(adj.basis_value) || adj.basis_value <= 0 || adj.basis_value > 100))
+      return c.json({ error: 'INVALID_ADJUSTMENT_BASIS_VALUE', message: 'basis_value must be 1..100' }, 400);
+  }
+
+  const supabase = getSupabaseClient(c.env);
+
+  const { data: tx, error: txErr } = await supabase
+    .from('transactions')
+    .select('id, transaction_type, transaction_at')
+    .eq('id', txId)
+    .single();
+  if (txErr || !tx) return c.json({ error: 'NOT_FOUND', message: 'Transaction not found' }, 404);
+  if (tx.transaction_type !== 'expense') return c.json({ error: 'NOT_EXPENSE', message: 'Only expense transactions can be edited' }, 403);
+
+  const { error: updateErr } = await supabase
+    .from('transactions')
+    .update({ amount, payment_method, tags: free_tags, note: note ?? null })
+    .eq('id', txId);
+  if (updateErr) return c.json({ error: 'DB_ERROR', message: updateErr.message }, 500);
+
+  const { error: delItemsErr } = await supabase.from('transaction_items').delete().eq('transaction_id', txId);
+  if (delItemsErr) return c.json({ error: 'DB_ERROR', message: delItemsErr.message }, 500);
+
+  if (items.length > 0) {
+    await insertTransactionItems(
+      supabase,
+      txId,
+      items.map((item, i) => ({
+        name: item.name,
+        amount: item.amount ?? null,
+        tags: item.tag != null ? [item.tag] : category_tag != null ? [category_tag] : [],
+        sort_order: i,
+        note: item.note?.trim() || null,
+      }))
+    );
+  }
+
+  await deleteAdjustmentsForTransaction(supabase, txId);
+  if (adjustments.length > 0) {
+    await insertAdjustments(supabase, txId, adjustments.map((a) => ({ ...a, transaction_at: tx.transaction_at as string })));
+  }
+
+  if (items.length > 0) {
+    await computeAndWriteEffectiveAmounts(supabase, txId, amount);
+  }
+
+  return c.json({ ok: true });
+});
+
 // ─── GET /pwa/parent-search ──────────────────────────────────────────────────
 
 pwaRouter.get('/parent-search', async (c) => {
