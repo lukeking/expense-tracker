@@ -53,8 +53,8 @@ A user wants to move backward and forward through equal-length time windows (wee
 1. **Given** the summary is in "month" mode showing May 2026, **When** the user taps the left arrow, **Then** the window shifts to April 2026 and all totals and the list reload for that period.
 2. **Given** the summary is in "month" mode showing May 2026, **When** the user taps the right arrow, **Then** the window shifts to June 2026.
 3. **Given** the user is on the current period, **When** the right arrow is tapped, **Then** the window does not advance beyond the current date (arrow disabled or no-op).
-4. **Given** the user changes the time base (e.g., month → week), **Then** the window resets to the current week and navigation uses week-sized steps from that point.
-5. **Given** a time window is displayed, **Then** the header shows the window label (e.g., "May 2026", "Week 22", "2026") clearly.
+4. **Given** the user changes the time base (e.g., month → week), **Then** the window resets to the current calendar week (Sun–Sat) and navigation uses week-sized steps from that point.
+5. **Given** a time window is displayed, **Then** the header shows the window label (e.g., "May 2026", "1 Jun – 7 Jun", "2026") clearly.
 
 ---
 
@@ -68,7 +68,7 @@ A user wants to choose between week, month, and year as the unit of time for the
 
 **Acceptance Scenarios**:
 
-1. **Given** the summary is in month mode, **When** the user switches to "week", **Then** the view shows only the current week's transactions and the window label reflects the week.
+1. **Given** the summary is in month mode, **When** the user switches to "week", **Then** the view shows only the current calendar week (Sun–Sat) and the window label reflects the exact date range.
 2. **Given** the user switches time bases, **Then** the left/right arrows always advance or retreat by exactly one unit of the active time base.
 3. **Given** the user switches time bases while a tag or payment method filter is active, **Then** the filter remains applied in the new time base.
 
@@ -85,16 +85,17 @@ A user wants to choose between week, month, and year as the unit of time for the
 
 ### Functional Requirements
 
-- **FR-001**: The summary screen MUST expose a tag filter control listing all plain tags present on transactions in the current time window.
-- **FR-002**: Selecting a tag MUST filter all summary totals and the transaction list to only transactions carrying that tag.
-- **FR-003**: The summary screen MUST expose a payment method filter showing all payment methods present in the current time window.
-- **FR-004**: Selecting a payment method MUST filter all summary totals and the transaction list to only transactions with that payment method.
+- **FR-001**: The summary screen MUST expose a tag filter control listing all plain tags present on transactions in the current time window; the available tag list is derived from the server response for the active window.
+- **FR-002**: Selecting a tag MUST trigger a new server request with the tag parameter; the returned totals and transaction list reflect only matching transactions.
+- **FR-003**: The summary screen MUST expose a payment method filter showing all payment methods present in the current time window; available options are derived from the server response.
+- **FR-004**: Selecting a payment method MUST trigger a new server request with the payment method parameter; the returned totals and transaction list reflect only matching transactions.
 - **FR-005**: When both a tag and a payment method filter are active, only transactions matching both filters MUST be shown (AND logic).
-- **FR-006**: The summary screen MUST provide a time-base selector with at least three options: week, month, year.
-- **FR-007**: The summary screen MUST display left (◀) and right (▶) navigation arrows that shift the current window by exactly one unit of the active time base.
-- **FR-008**: The right arrow MUST be disabled (or a no-op) when the current window includes the present date.
-- **FR-009**: The window header MUST display a human-readable label for the current time window (e.g., "May 2026", "Week 22 · 2026", "2026").
-- **FR-010**: Switching the time base MUST reset the window to the current period of the new base; active tag and payment method filters MUST be preserved.
+- **FR-006**: The summary screen MUST replace the existing preset pills with a time-base selector offering three options: week, month, year. The existing 本月/上月/近3個月/近半年/近一年/全部 control is removed.
+- **FR-007**: The summary screen MUST display left (◀) and right (▶) navigation arrows that shift the current window by exactly one calendar unit of the active time base.
+- **FR-008**: The right arrow MUST be disabled when the current window includes the present date.
+- **FR-009**: The window header MUST display a human-readable label for the current time window: month → "May 2026"; week → "1 Jun – 7 Jun"; year → "2026".
+- **FR-010**: Switching the time base MUST reset the window to the current calendar period of the new base; active tag and payment method filters MUST be preserved.
+- **FR-013**: On app open, the summary MUST always start at the current week (Sun–Sat) with no active tag or payment method filter. No state persists across sessions.
 - **FR-011**: All filters and the time window MUST be applied together; totals and the transaction list MUST always reflect all active constraints simultaneously.
 - **FR-012**: Clearing a filter MUST restore the full unfiltered view within the current time window.
 
@@ -120,5 +121,15 @@ A user wants to choose between week, month, and year as the unit of time for the
 - The existing summary screen's data-fetching layer can be extended to accept tag, payment method, and date-range parameters without a full rewrite.
 - "Plain tags" means free-text tags only (not category tags); category-based filtering is out of scope for this feature.
 - Only one tag and one payment method filter can be active at a time (no multi-select); multi-select is a future enhancement.
-- The "week" time base follows ISO weeks (Monday–Sunday).
+- All time windows are calendar-aligned, not rolling. Week = Sunday–Saturday; month = 1st to last day of the month; year = January 1 – December 31.
+- The default time base on app open is "week" (current Sun–Sat window); no filters are active. Nothing persists across sessions.
 - The summary screen already groups transactions by date; this feature extends the header area and filter bar without redesigning the list layout.
+- Filtering is executed server-side: the API receives `from`, `to`, `tag`, and `payment_method` query parameters and returns only matching transactions. Client-side filtering of a full dataset is not used.
+
+## Clarifications
+
+### Session 2026-05-30
+
+- Q: Where does filtering execute — server-side API params or client-side in-browser? → A: Server-side — API receives `from`, `to`, `tag`, `payment_method` params and returns pre-filtered data.
+- Q: Are time windows calendar-aligned or rolling? Week boundary: Sunday or Monday? → A: Calendar-aligned. Week = Sunday–Saturday. Month = 1st–last day. Year = Jan 1–Dec 31.
+- Q: Does filter/window state persist across app restarts? → A: No — always opens at current week, no active filters. Session-only state.
