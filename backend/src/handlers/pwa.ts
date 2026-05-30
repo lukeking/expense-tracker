@@ -297,6 +297,53 @@ pwaRouter.get('/transactions', async (c) => {
   });
 });
 
+// ─── Edit-history helpers ─────────────────────────────────────────────────────
+
+type HistoryItem = { name: string; amount: number | null; tags: string[]; note: string | null };
+type HistoryAdj  = { kind: string; amount: number; note: string | null; basis: string | null; basis_value: number | null };
+
+async function readItemsForDiff(supabase: ReturnType<typeof getSupabaseClient>, txId: string): Promise<HistoryItem[]> {
+  const { data, error } = await supabase
+    .from('transaction_items')
+    .select('name, amount, tags, note')
+    .eq('transaction_id', txId)
+    .order('sort_order', { ascending: true });
+  if (error) throw new Error(`readItemsForDiff: ${error.message}`);
+  return (data ?? []).map((r) => ({
+    name: r.name as string,
+    amount: r.amount as number | null,
+    tags: (r.tags as string[]) ?? [],
+    note: (r.note as string | null) ?? null,
+  }));
+}
+
+function computeEditDiff(
+  before: { amount: number; payment_method: string; tags: string[]; note: string | null; items: HistoryItem[]; adjustments: HistoryAdj[] },
+  after:  { amount: number; payment_method: string; free_tags: string[]; note: string | null; items: HistoryItem[]; adjustments: HistoryAdj[] }
+): Record<string, unknown> | null {
+  const norm = (n: string | null | undefined) => n?.trim() || null;
+  const tagsEq = (a: string[], b: string[]) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
+  const itemsEq = (a: HistoryItem[], b: HistoryItem[]) =>
+    JSON.stringify(a.map((i) => ({ name: i.name, amount: i.amount, tags: i.tags, note: i.note }))) ===
+    JSON.stringify(b.map((i) => ({ name: i.name, amount: i.amount, tags: i.tags, note: i.note })));
+  const adjsEq = (a: HistoryAdj[], b: HistoryAdj[]) =>
+    JSON.stringify(a.map((x) => ({ kind: x.kind, amount: x.amount, note: x.note, basis: x.basis, basis_value: x.basis_value }))) ===
+    JSON.stringify(b.map((x) => ({ kind: x.kind, amount: x.amount, note: x.note, basis: x.basis, basis_value: x.basis_value })));
+
+  const header: Record<string, { before: unknown; after: unknown }> = {};
+  if (before.amount !== after.amount)                header.amount          = { before: before.amount,          after: after.amount };
+  if (before.payment_method !== after.payment_method) header.payment_method = { before: before.payment_method,  after: after.payment_method };
+  if (norm(before.note) !== norm(after.note))         header.note           = { before: before.note,            after: after.note };
+  if (!tagsEq(before.tags, after.free_tags))          header.tags           = { before: before.tags,            after: after.free_tags };
+
+  const diff: Record<string, unknown> = {};
+  if (Object.keys(header).length > 0)     diff.header      = header;
+  if (!itemsEq(before.items, after.items)) diff.items       = { before: before.items, after: after.items };
+  if (!adjsEq(before.adjustments, after.adjustments)) diff.adjustments = { before: before.adjustments, after: after.adjustments };
+
+  return Object.keys(diff).length > 0 ? diff : null;
+}
+
 // ─── GET /pwa/transactions/:id ───────────────────────────────────────────────
 
 pwaRouter.get('/transactions/:id', async (c) => {
@@ -311,7 +358,15 @@ pwaRouter.get('/transactions/:id', async (c) => {
 
   if (error || !tx) return c.json({ error: 'NOT_FOUND', message: 'Transaction not found' }, 404);
 
-  const adjustments = await getAdjustmentsForTransaction(supabase, txId);
+  const [adjustments, historyRows] = await Promise.all([
+    getAdjustmentsForTransaction(supabase, txId),
+    supabase
+      .from('transaction_edit_history')
+      .select('id, edited_at, diff')
+      .eq('transaction_id', txId)
+      .order('edited_at', { ascending: true })
+      .then(({ data }) => data ?? []),
+  ]);
 
   type ItemRow = { id: string; name: string; amount: number | null; tags: string[]; note: string | null; sort_order: number };
   const items = ((tx.transaction_items as ItemRow[]) ?? []).sort((a, b) => a.sort_order - b.sort_order);
@@ -333,6 +388,7 @@ pwaRouter.get('/transactions/:id', async (c) => {
       basis: a.basis ?? null,
       basis_value: a.basis_value ?? null,
     })),
+    history: historyRows.map((h) => ({ id: h.id, edited_at: h.edited_at, diff: h.diff })),
   });
 });
 
@@ -387,11 +443,17 @@ pwaRouter.put('/transactions/:id', async (c) => {
 
   const { data: tx, error: txErr } = await supabase
     .from('transactions')
-    .select('id, transaction_type, transaction_at')
+    .select('id, transaction_type, transaction_at, amount, payment_method, tags, note')
     .eq('id', txId)
     .single();
   if (txErr || !tx) return c.json({ error: 'NOT_FOUND', message: 'Transaction not found' }, 404);
   if (tx.transaction_type !== 'expense') return c.json({ error: 'NOT_EXPENSE', message: 'Only expense transactions can be edited' }, 403);
+
+  // Capture before-state for audit history
+  const [beforeItems, beforeAdjs] = await Promise.all([
+    readItemsForDiff(supabase, txId),
+    getAdjustmentsForTransaction(supabase, txId),
+  ]);
 
   const { error: updateErr } = await supabase
     .from('transactions')
@@ -402,27 +464,43 @@ pwaRouter.put('/transactions/:id', async (c) => {
   const { error: delItemsErr } = await supabase.from('transaction_items').delete().eq('transaction_id', txId);
   if (delItemsErr) return c.json({ error: 'DB_ERROR', message: delItemsErr.message }, 500);
 
-  if (items.length > 0) {
+  const afterItems: HistoryItem[] = items.map((item) => ({
+    name: item.name,
+    amount: item.amount ?? null,
+    tags: item.tag != null ? [item.tag] : category_tag != null ? [category_tag] : [],
+    note: item.note?.trim() || null,
+  }));
+
+  if (afterItems.length > 0) {
     await insertTransactionItems(
       supabase,
       txId,
-      items.map((item, i) => ({
-        name: item.name,
-        amount: item.amount ?? null,
-        tags: item.tag != null ? [item.tag] : category_tag != null ? [category_tag] : [],
-        sort_order: i,
-        note: item.note?.trim() || null,
-      }))
+      afterItems.map((item, i) => ({ ...item, sort_order: i }))
     );
   }
 
   await deleteAdjustmentsForTransaction(supabase, txId);
+  const afterAdjs: HistoryAdj[] = adjustments.map((a) => ({
+    kind: a.kind,
+    amount: a.amount,
+    note: a.note ?? null,
+    basis: a.basis ?? null,
+    basis_value: a.basis_value ?? null,
+  }));
   if (adjustments.length > 0) {
     await insertAdjustments(supabase, txId, adjustments.map((a) => ({ ...a, transaction_at: tx.transaction_at as string })));
   }
 
-  if (items.length > 0) {
+  if (afterItems.length > 0) {
     await computeAndWriteEffectiveAmounts(supabase, txId, amount);
+  }
+
+  const diff = computeEditDiff(
+    { amount: tx.amount as number, payment_method: tx.payment_method as string, tags: (tx.tags as string[]) ?? [], note: (tx.note as string | null) ?? null, items: beforeItems, adjustments: beforeAdjs.map((a) => ({ kind: a.kind, amount: a.amount, note: a.note, basis: a.basis, basis_value: a.basis_value })) },
+    { amount, payment_method, free_tags, note: note ?? null, items: afterItems, adjustments: afterAdjs }
+  );
+  if (diff !== null) {
+    await supabase.from('transaction_edit_history').insert({ transaction_id: txId, diff });
   }
 
   return c.json({ ok: true });

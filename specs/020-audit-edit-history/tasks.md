@@ -14,8 +14,8 @@
 
 **Purpose**: DB schema change that blocks all subsequent work.
 
-- [ ] T001 Write `backend/supabase/migrations/019_transaction_edit_history.sql` from `specs/020-audit-edit-history/contracts/schema-ddl.sql`
-- [ ] T002 Apply migration to dev Supabase (via `npx supabase migration up` or Studio SQL editor)
+- [x] T001 Write `backend/supabase/migrations/019_transaction_edit_history.sql` from `specs/020-audit-edit-history/contracts/schema-ddl.sql`
+- [ ] T002 Apply migration to dev Supabase — paste `backend/supabase/migrations/019_transaction_edit_history.sql` into Supabase Studio SQL Editor
 - [ ] T003 Verify: `SELECT * FROM transaction_edit_history LIMIT 1` returns empty result without error
 
 **Checkpoint**: Table exists — backend work can begin.
@@ -30,10 +30,10 @@
 
 ### Implementation
 
-- [ ] T004 [US2] Extend the `SELECT` in the PUT handler in `backend/src/handlers/pwa.ts` (line ~388) to also fetch `amount, payment_method, tags, note` from `transactions` in the same query that currently fetches `id, transaction_type, transaction_at`
-- [ ] T005 [P] [US2] Add `readItemsForDiff` helper in `backend/src/handlers/pwa.ts`: SELECT `name, amount, tags, note` from `transaction_items` WHERE `transaction_id = txId` ORDER BY `sort_order`
-- [ ] T006 [US2] Add `computeEditDiff(before, after)` function in `backend/src/handlers/pwa.ts` implementing the diff logic from `specs/020-audit-edit-history/data-model.md` — header field comparison (note null/empty equivalence, tag sort), items deep equality, adjustments deep equality; returns `null` when nothing changed
-- [ ] T007 [US2] In the PUT handler (`backend/src/handlers/pwa.ts`), after all validation and before the UPDATE call: call `readItemsForDiff`, call `getAdjustmentsForTransaction`, call `computeEditDiff`; after ALL write operations succeed (update + items replace + adjustments replace + effective amounts), if diff is non-null insert a row into `transaction_edit_history`
+- [x] T004 [US2] Extend the `SELECT` in the PUT handler in `backend/src/handlers/pwa.ts` (line ~388) to also fetch `amount, payment_method, tags, note` from `transactions` in the same query that currently fetches `id, transaction_type, transaction_at`
+- [x] T005 [P] [US2] Add `readItemsForDiff` helper in `backend/src/handlers/pwa.ts`: SELECT `name, amount, tags, note` from `transaction_items` WHERE `transaction_id = txId` ORDER BY `sort_order`
+- [x] T006 [US2] Add `computeEditDiff(before, after)` function in `backend/src/handlers/pwa.ts` implementing the diff logic from `specs/020-audit-edit-history/data-model.md` — header field comparison (note null/empty equivalence, tag sort), items deep equality, adjustments deep equality; returns `null` when nothing changed
+- [x] T007 [US2] In the PUT handler (`backend/src/handlers/pwa.ts`), after all validation and before the UPDATE call: call `readItemsForDiff`, call `getAdjustmentsForTransaction`, call `computeEditDiff`; after ALL write operations succeed (update + items replace + adjustments replace + effective amounts), if diff is non-null insert a row into `transaction_edit_history`
 
 **Checkpoint**: POST to PUT endpoint with a change → `transaction_edit_history` row created. No-op PUT → no row created.
 
@@ -47,10 +47,10 @@
 
 ### Implementation
 
-- [ ] T008 [US1] Extend `GET /pwa/transactions/:id` in `backend/src/handlers/pwa.ts` (line ~302): after fetching adjustments, query `transaction_edit_history` for `id, edited_at, diff` WHERE `transaction_id = txId` ORDER BY `edited_at ASC`; append as `history: []` to the JSON response
-- [ ] T009 [P] [US1] Add `EditDiff` TypeScript type in `pwa/src/components/EditExpenseSheet.tsx` mirroring the JSONB diff schema from `specs/020-audit-edit-history/data-model.md`; extend `TxDetail` type with `history: { id: string; edited_at: string; diff: EditDiff }[]`
-- [ ] T010 [P] [US1] Create `pwa/src/components/EditHistorySection.tsx`: props `{ history: TxDetail['history'] }`; renders nothing when `history.length === 0`; shows collapsed "編輯紀錄 (N)" toggle; each expanded entry shows `edited_at` formatted as `YYYY-MM-DD HH:mm` (local time) and a diff summary: one line per changed header field ("金額 100 → 120"), items count change ("品項: 2 → 3 項"), adjustments count change ("折抵: 0 → 1 筆")
-- [ ] T011 [US1] In `EditExpenseFormInner` in `pwa/src/components/EditExpenseSheet.tsx`, render `<EditHistorySection history={tx.history} />` between the Note field and the Save button
+- [x] T008 [US1] Extend `GET /pwa/transactions/:id` in `backend/src/handlers/pwa.ts` (line ~302): after fetching adjustments, query `transaction_edit_history` for `id, edited_at, diff` WHERE `transaction_id = txId` ORDER BY `edited_at ASC`; append as `history: []` to the JSON response
+- [x] T009 [P] [US1] Add `EditDiff` TypeScript type in `pwa/src/components/EditExpenseSheet.tsx` mirroring the JSONB diff schema from `specs/020-audit-edit-history/data-model.md`; extend `TxDetail` type with `history: { id: string; edited_at: string; diff: EditDiff }[]`
+- [x] T010 [P] [US1] Create `pwa/src/components/EditHistorySection.tsx`: props `{ history: TxDetail['history'] }`; renders nothing when `history.length === 0`; shows collapsed "編輯紀錄 (N)" toggle; each expanded entry shows `edited_at` formatted as `YYYY-MM-DD HH:mm` (local time) and a diff summary: one line per changed header field ("金額 100 → 120"), items count change ("品項: 2 → 3 項"), adjustments count change ("折抵: 0 → 1 筆")
+- [x] T011 [US1] In `EditExpenseFormInner` in `pwa/src/components/EditExpenseSheet.tsx`, render `<EditHistorySection history={tx.history} />` between the Note field and the Save button
 
 **Checkpoint**: Open edit sheet for edited transaction → history section visible with correct entries.
 

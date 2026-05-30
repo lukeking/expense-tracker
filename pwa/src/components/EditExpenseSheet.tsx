@@ -10,6 +10,13 @@ import { AdjustmentRow, KIND_LABELS, resolveAdjAmount } from './AdjustmentRow';
 import type { AdjustmentRowData, AdjustmentKind } from './AdjustmentRow';
 import { PaymentPills } from './PaymentPills';
 import type { PaymentMethod } from './PaymentPills';
+import { EditHistorySection } from './EditHistorySection';
+
+type EditDiff = {
+  header?: Record<string, { before: unknown; after: unknown }>;
+  items?: { before: { name: string; amount: number | null; tags: string[]; note: string | null }[]; after: { name: string; amount: number | null; tags: string[]; note: string | null }[] };
+  adjustments?: { before: { kind: string; amount: number; note: string | null }[]; after: { kind: string; amount: number; note: string | null }[] };
+};
 
 type TxDetail = {
   id: string;
@@ -21,6 +28,7 @@ type TxDetail = {
   transaction_type: string;
   items: { id: string; name: string; amount: number | null; tags: string[]; note: string | null; sort_order: number }[];
   adjustments: { id: string; kind: string; amount: number; note: string | null; basis: string | null; basis_value: number | null }[];
+  history: { id: string; edited_at: string; diff: EditDiff }[];
 };
 
 function deriveCategoryTag(items: TxDetail['items']): string | null {
@@ -323,6 +331,9 @@ function EditExpenseFormInner({ tx, onClose }: { tx: TxDetail; onClose: () => vo
           className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
         />
       </div>
+
+      {/* Edit history */}
+      <EditHistorySection history={tx.history} />
 
       {/* Save error */}
       {mutation.error && (
