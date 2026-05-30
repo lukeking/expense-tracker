@@ -53,6 +53,8 @@ A user wants to move backward and forward through equal-length time windows (wee
 1. **Given** the summary is in "month" mode showing May 2026, **When** the user taps the left arrow, **Then** the window shifts to April 2026 and all totals and the list reload for that period.
 2. **Given** the summary is in "month" mode showing May 2026, **When** the user taps the right arrow, **Then** the window shifts to June 2026.
 3. **Given** the user is on the current period, **When** the right arrow is tapped, **Then** the window does not advance beyond the current date (arrow disabled or no-op).
+6. **Given** the user needs to jump to a distant period (e.g., April 2019), **When** they tap the window header label, **Then** a period picker opens allowing direct year and month/week selection without repeated arrow taps.
+7. **Given** the period picker is open, **When** the user attempts to select a future period, **Then** future options are disabled and unselectable.
 4. **Given** the user changes the time base (e.g., month → week), **Then** the window resets to the current calendar week (Sun–Sat) and navigation uses week-sized steps from that point.
 5. **Given** a time window is displayed, **Then** the header shows the window label (e.g., "May 2026", "1 Jun – 7 Jun", "2026") clearly.
 
@@ -95,9 +97,10 @@ A user wants to choose between week, month, and year as the unit of time for the
 - **FR-008**: The right arrow MUST be disabled when the current window includes the present date.
 - **FR-009**: The window header MUST display a human-readable label for the current time window: month → "May 2026"; week → "1 Jun – 7 Jun"; year → "2026".
 - **FR-010**: Switching the time base MUST reset the window to the current calendar period of the new base; active tag and payment method filters MUST be preserved.
-- **FR-013**: On app open, the summary MUST always start at the current week (Sun–Sat) with no active tag or payment method filter. No state persists across sessions.
 - **FR-011**: All filters and the time window MUST be applied together; totals and the transaction list MUST always reflect all active constraints simultaneously.
 - **FR-012**: Clearing a filter MUST restore the full unfiltered view within the current time window.
+- **FR-013**: On app open, the summary MUST always start at the current week (Sun–Sat) with no active tag or payment method filter. No state persists across sessions.
+- **FR-014**: Tapping the window header label MUST open a period picker for direct navigation (e.g., select year then month/week); the picker MUST NOT allow selecting a future period beyond the current date.
 
 ### Key Entities
 
@@ -133,3 +136,4 @@ A user wants to choose between week, month, and year as the unit of time for the
 - Q: Where does filtering execute — server-side API params or client-side in-browser? → A: Server-side — API receives `from`, `to`, `tag`, `payment_method` params and returns pre-filtered data.
 - Q: Are time windows calendar-aligned or rolling? Week boundary: Sunday or Monday? → A: Calendar-aligned. Week = Sunday–Saturday. Month = 1st–last day. Year = Jan 1–Dec 31.
 - Q: Does filter/window state persist across app restarts? → A: No — always opens at current week, no active filters. Session-only state.
+- Q: Fast navigation for distant periods — arrows only, or a direct picker? → A: Tap header label to open a period picker for direct year/month/week selection; ◀/▶ arrows remain for ±1 step navigation.
