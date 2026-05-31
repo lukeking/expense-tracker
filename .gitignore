@@ -30,6 +30,7 @@ android/local.properties
 test-invoices.csv
 *.test.csv
 NaggingMoney_*.csv
+invoices/
 
 # Audit reports (generated artifacts — regenerate with scripts/audit-legacy.ts)
 specs/015-legacy-audit-catalog/audit-reports/*.json
