@@ -120,14 +120,42 @@ describe('parseCSVRows', () => {
 
 describe('groupInvoices', () => {
   it('groups multiple rows for the same invoice number into one invoice with items', () => {
-    const row1 = makeRow({ '消費明細_品名': '牛肉麵', '消費明細_金額': '120', '消費明細_數量': '1', '消費明細_單價': '120' });
-    const row2 = makeRow({ '消費明細_品名': '珍珠奶茶', '消費明細_金額': '60', '消費明細_數量': '1', '消費明細_單價': '60' });
+    const row1 = makeRow({ '發票金額': '120', '消費明細_品名': '牛肉麵', '消費明細_金額': '120', '消費明細_數量': '1', '消費明細_單價': '120' });
+    const row2 = makeRow({ '發票金額': '60', '消費明細_品名': '珍珠奶茶', '消費明細_金額': '60', '消費明細_數量': '1', '消費明細_單價': '60' });
     const { rows } = parseCSVRows(makeCSV([row1, row2]));
     const { invoices } = groupInvoices(rows);
     expect(invoices).toHaveLength(1);
+    expect(invoices[0].gross_amount).toBe(180);
+    expect(invoices[0].net_amount).toBe(180);
     expect(invoices[0].items).toHaveLength(2);
     expect(invoices[0].items[0].name).toBe('牛肉麵');
     expect(invoices[0].items[1].name).toBe('珍珠奶茶');
+  });
+
+  it('sums positive rows and treats negative rows as inline discounts', () => {
+    const row1 = makeRow({ '發票金額': '60', '消費明細_品名': '特大冰美式', '消費明細_金額': '60' });
+    const row2 = makeRow({ '發票金額': '45', '消費明細_品名': '雞蛋沙拉三明治', '消費明細_金額': '45' });
+    const row3 = makeRow({ '發票金額': '-5', '消費明細_品名': '環保杯', '消費明細_金額': '-5' });
+    const { rows } = parseCSVRows(makeCSV([row1, row2, row3]));
+    const { invoices } = groupInvoices(rows);
+    expect(invoices).toHaveLength(1);
+    expect(invoices[0].gross_amount).toBe(105);
+    expect(invoices[0].allowance).toBe(5);
+    expect(invoices[0].net_amount).toBe(100);
+    expect(invoices[0].items).toHaveLength(2);
+    expect(invoices[0].items.map((i) => i.name)).toEqual(['特大冰美式', '雞蛋沙拉三明治']);
+  });
+
+  it('combines inline discounts with formal 折讓 allowance', () => {
+    const row1 = makeRow({ '發票金額': '200', '折讓': '30', '消費明細_品名': '商品A', '消費明細_金額': '200' });
+    const row2 = makeRow({ '發票金額': '-20', '折讓': '30', '消費明細_品名': '促銷折扣', '消費明細_金額': '-20' });
+    const { rows } = parseCSVRows(makeCSV([row1, row2]));
+    const { invoices } = groupInvoices(rows);
+    expect(invoices[0].gross_amount).toBe(200);
+    expect(invoices[0].allowance).toBe(50); // 30 formal + 20 inline
+    expect(invoices[0].net_amount).toBe(150);
+    expect(invoices[0].items).toHaveLength(1);
+    expect(invoices[0].items[0].name).toBe('商品A');
   });
 
   it('filters out voided invoices and increments skippedVoidedCount', () => {

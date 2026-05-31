@@ -90,62 +90,82 @@ export function groupInvoices(rows: RawInvoiceRow[]): {
   skippedVoidedCount: number;
   skippedZeroCount: number;
 } {
-  const invoiceMap = new Map<string, ParsedInvoice>();
-  let skippedVoidedCount = 0;
-  let skippedZeroCount = 0;
-  const processedNumbers = new Set<string>();
-
+  // First pass: group rows by invoice number preserving order
+  const rowGroups = new Map<string, RawInvoiceRow[]>();
   for (const row of rows) {
     const invoiceNumber = row['發票號碼'].trim();
     if (!invoiceNumber) continue;
-
-    const status = row['發票狀態'].trim();
-    const grossAmount = Number(row['發票金額']) || 0;
-    const allowance = Number(row['折讓']) || 0;
-    const netAmount = grossAmount - allowance;
-    const isVoided = status === '已作廢';
-    const isZero = netAmount === 0;
-
-    // Track skipped counts only once per invoice
-    if (!invoiceMap.has(invoiceNumber) && !processedNumbers.has(invoiceNumber)) {
-      processedNumbers.add(invoiceNumber);
-      if (isVoided) { skippedVoidedCount++; continue; }
-      if (isZero) { skippedZeroCount++; continue; }
-
-      let invoiceDate: Date;
-      try {
-        invoiceDate = parseROCDate(row['發票日期']);
-      } catch {
-        continue;
-      }
-
-      invoiceMap.set(invoiceNumber, {
-        invoice_number: invoiceNumber,
-        seller_name: row['賣方名稱'].trim(),
-        seller_tax_id: row['賣方統一編號'].trim(),
-        invoice_date: invoiceDate,
-        gross_amount: grossAmount,
-        allowance,
-        net_amount: netAmount,
-        invoice_status: 'active',
-        items: [],
-      });
-    }
-
-    // Accumulate line items
-    const existing = invoiceMap.get(invoiceNumber);
-    if (existing && row['消費明細_品名'].trim()) {
-      const item: InvoiceItem = {
-        name: row['消費明細_品名'].trim(),
-        quantity: Number(row['消費明細_數量']) || 1,
-        unit_price: Number(row['消費明細_單價']) || 0,
-        amount: Number(row['消費明細_金額']) || 0,
-      };
-      existing.items.push(item);
-    }
+    if (!rowGroups.has(invoiceNumber)) rowGroups.set(invoiceNumber, []);
+    rowGroups.get(invoiceNumber)!.push(row);
   }
 
-  const invoices = Array.from(invoiceMap.values());
+  const invoices: ParsedInvoice[] = [];
+  let skippedVoidedCount = 0;
+  let skippedZeroCount = 0;
+
+  for (const [invoiceNumber, group] of rowGroups) {
+    const firstRow = group[0];
+
+    if (firstRow['發票狀態'].trim() === '已作廢') {
+      skippedVoidedCount++;
+      continue;
+    }
+
+    // Sum all row amounts to get true gross and inline discount amounts
+    let grossAmount = 0;
+    let inlineDiscount = 0;
+    const items: InvoiceItem[] = [];
+
+    for (const row of group) {
+      const rowAmount = Number(row['發票金額']) || 0;
+      if (rowAmount > 0) {
+        grossAmount += rowAmount;
+      } else if (rowAmount < 0) {
+        inlineDiscount += Math.abs(rowAmount);
+      }
+
+      const itemName = row['消費明細_品名'].trim();
+      const itemAmount = Number(row['消費明細_金額']) || 0;
+      if (itemName && itemAmount > 0) {
+        items.push({
+          name: itemName,
+          quantity: Number(row['消費明細_數量']) || 1,
+          unit_price: Number(row['消費明細_單價']) || 0,
+          amount: itemAmount,
+        });
+      }
+    }
+
+    // Combine inline discounts with any formal allowance from 折讓 column
+    const formalAllowance = Number(firstRow['折讓']) || 0;
+    const allowance = formalAllowance + inlineDiscount;
+    const netAmount = grossAmount - allowance;
+
+    if (netAmount === 0) {
+      skippedZeroCount++;
+      continue;
+    }
+
+    let invoiceDate: Date;
+    try {
+      invoiceDate = parseROCDate(firstRow['發票日期']);
+    } catch {
+      continue;
+    }
+
+    invoices.push({
+      invoice_number: invoiceNumber,
+      seller_name: firstRow['賣方名稱'].trim(),
+      seller_tax_id: firstRow['賣方統一編號'].trim(),
+      invoice_date: invoiceDate,
+      gross_amount: grossAmount,
+      allowance,
+      net_amount: netAmount,
+      invoice_status: 'active',
+      items,
+    });
+  }
+
   if (invoices.length > 1000) throw new RowLimitError(invoices.length);
   return { invoices, skippedVoidedCount, skippedZeroCount };
 }

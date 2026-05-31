@@ -708,11 +708,17 @@ pwaRouter.post('/import', async (c) => {
   const supabase = getSupabaseClient(c.env);
   const importRun = await createImportRun(supabase, file.name ?? null);
 
-  const counters = await runImportPipeline(supabase, invoices, importRun.id, c.env, {
-    voidedCount: skippedVoidedCount,
-    zeroCount: skippedZeroCount,
-    parseFailedCount,
-  });
+  let counters: Awaited<ReturnType<typeof runImportPipeline>>;
+  try {
+    counters = await runImportPipeline(supabase, invoices, importRun.id, c.env, {
+      voidedCount: skippedVoidedCount,
+      zeroCount: skippedZeroCount,
+      parseFailedCount,
+    });
+  } catch (err) {
+    console.error('[import] pipeline error:', err);
+    return c.json({ error: 'PIPELINE_ERROR', message: String(err) }, 500);
+  }
 
   await updateImportRun(supabase, importRun.id, {
     total_rows: counters.totalRows,
