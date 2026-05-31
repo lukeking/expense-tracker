@@ -66,18 +66,19 @@ async function populateItemsFromInvoice(
   transactionId: string,
   invoiceLineItems: InvoiceItem[]
 ): Promise<{ discardedNames: string[] }> {
-  if (invoiceLineItems.length === 0) return { discardedNames: [] };
+  const positiveItems = invoiceLineItems.filter((li) => li.amount == null || li.amount > 0);
+  if (positiveItems.length === 0) return { discardedNames: [] };
   const existingItems = await getTransactionItems(supabase, transactionId);
-  if (existingItems.length === invoiceLineItems.length) {
+  if (existingItems.length === positiveItems.length) {
     for (let i = 0; i < existingItems.length; i++) {
       if (existingItems[i].amount == null) {
-        await updateTransactionItemAmount(supabase, existingItems[i].id, invoiceLineItems[i].amount);
+        await updateTransactionItemAmount(supabase, existingItems[i].id, positiveItems[i].amount);
       }
     }
     return { discardedNames: [] };
   }
   const discardedNames = existingItems.map((item) => item.name);
-  await replaceTransactionItems(supabase, transactionId, invoiceLineItems.map((li, idx) => ({
+  await replaceTransactionItems(supabase, transactionId, positiveItems.map((li, idx) => ({
     name: li.name, amount: li.amount, tags: [], sort_order: idx,
   })));
   return { discardedNames };
@@ -176,7 +177,7 @@ export async function runImportPipeline(
       transaction_at: invoice.invoice_date.toISOString(),
     });
     const lineItems = invoice.items.length > 0
-      ? invoice.items.map((i, idx) => ({ name: i.name, amount: i.amount, tags: [] as string[], sort_order: idx }))
+      ? invoice.items.filter((i) => i.amount == null || i.amount > 0).map((i, idx) => ({ name: i.name, amount: i.amount, tags: [] as string[], sort_order: idx }))
       : parsed.items.map((i, idx) => ({ name: i.name, amount: i.amount ?? null, tags: i.tags ?? [], sort_order: idx }));
     await insertTransactionItems(supabase, tx.id, lineItems);
     const inv = await insertInvoice(supabase, invoice, importRunId, 'auto_created', tx.id);
