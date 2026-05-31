@@ -22,8 +22,12 @@ export function decodeCSVBuffer(buffer: ArrayBuffer): string {
 }
 
 export function parseROCDate(raw: string): Date {
-  const parts = raw.trim().split('/');
-  if (parts.length !== 3) throw new Error(`Invalid ROC date: ${raw}`);
+  const s = raw.trim();
+  if (/^\d{8}$/.test(s)) {
+    return new Date(Date.UTC(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8)));
+  }
+  const parts = s.split('/');
+  if (parts.length !== 3) throw new Error(`Invalid date: ${raw}`);
   const [rocYear, month, day] = parts.map(Number);
   return new Date(Date.UTC(rocYear + 1911, month - 1, day));
 }
@@ -33,7 +37,7 @@ export function validateHeaders(headers: string[]): boolean {
 }
 
 export function parseCSVRows(csv: string): { rows: RawInvoiceRow[]; parseFailedCount: number } {
-  const lines = csv.split(/\r?\n/).filter((l) => l.trim() !== '');
+  const lines = csv.split(/\r?\n/).filter((l) => l.trim() !== '' && l.includes(','));
   if (lines.length < 2) return { rows: [], parseFailedCount: 0 };
 
   const headers = lines[0].split(',');

@@ -66,6 +66,13 @@ describe('parseROCDate', () => {
     expect(d.getUTCDate()).toBe(1);
   });
 
+  it('converts YYYYMMDD Gregorian format to correct date', () => {
+    const d = parseROCDate('20260430');
+    expect(d.getUTCFullYear()).toBe(2026);
+    expect(d.getUTCMonth()).toBe(3); // April
+    expect(d.getUTCDate()).toBe(30);
+  });
+
   it('throws on malformed date', () => {
     expect(() => parseROCDate('invalid')).toThrow();
   });
