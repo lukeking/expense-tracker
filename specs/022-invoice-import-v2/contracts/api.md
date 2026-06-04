@@ -73,8 +73,8 @@ transactions (re-derived per request, so candidates linked since import drop out
 }
 ```
 
-`candidate_source` = `exact` when exact-amount candidates exist; `forex` when the
-candidates were sourced from the ±5% near-amount fallback.
+`candidate_source` = `exact` when exact-amount candidates exist (±2-day window);
+`forex` when sourced from the ±5% near-amount fallback (±7-day window).
 
 ---
 
@@ -97,8 +97,9 @@ Manually link an ambiguous invoice to a chosen transaction (FR-011).
 2. Items: `replace_items=true` → replace existing items with the invoice's
    positive-amount line items (outcome `replaced`); `false` → fill only if the
    transaction has zero items, else keep (outcome `filled`/`kept`).
-3. Set invoice `match_status='matched'`, `match_confidence` (from date diff),
-   `matched_transaction_id`.
+3. Set invoice `match_status='matched'`, `matched_transaction_id`, and
+   `match_confidence` = `exact` only if the tx is same calendar day **and**
+   `amount === net_amount`, else `near` (forex resolves to `near`).
 
 **Response 200:**
 ```jsonc

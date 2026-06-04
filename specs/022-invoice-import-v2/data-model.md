@@ -52,17 +52,19 @@ parsed → dedup hit ───────────────────�
 ### Candidate Transaction (derived, not stored)
 
 An existing `transaction` where `transaction_type='expense'`, `matched_invoice_id IS
-NULL`, `transaction_at` within ±2 days of `invoice_date`, and amount matches:
-- **exact candidate**: `amount = invoice.net_amount`
-- **forex candidate**: `floor(net*0.95) ≤ amount ≤ ceil(net*1.05)` (only sourced when
-  there are 0 exact candidates)
+NULL`, and amount/date match one of:
+- **exact candidate**: `amount = invoice.net_amount`, `transaction_at` within **±2 days**
+- **forex candidate**: `floor(net*0.95) ≤ amount ≤ ceil(net*1.05)`, `transaction_at`
+  within **±7 days** (only sourced when there are 0 exact candidates; never auto-linked)
 
 Surfaced to the client with `{ id, transaction_at, amount, note, items }`.
 
 ### Match Confidence
 
-`exact` (same calendar day) | `near` (within ±2 days, not same day). Computed from the
-matched transaction date vs invoice date at link time (import or resolve).
+`exact` (same calendar day **AND** matched amount equals invoice net amount) | `near`
+(every other linked match — different day or different amount). Computed at link time
+(import or resolve) from the matched transaction's date and amount. Forex matches
+(inexact amount) are therefore always `near`.
 
 ### Items Outcome (per matched invoice; not stored, returned in summary)
 

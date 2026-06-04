@@ -23,9 +23,15 @@ commands are removed.
    are deleted; `register-commands.ts` drops both command definitions.
 2. **Forex kept as a candidate source, never auto-linked.** Primary match is exact
    net amount within ±2 days. When **0 exact candidates** exist, the invoice is held
-   as `ambiguous` if any ±5% near-amount candidate exists, so the user can link it
-   manually. Forex matches are never auto-linked (amount mismatch is inherently
-   ambiguous — consistent with Constitution IV).
+   as `ambiguous` if any ±5% near-amount candidate exists within a **±7-day window**
+   (wider than the exact window, since foreign-currency purchases can post several
+   days after the invoice date), so the user can link it manually. Forex matches are
+   never auto-linked (amount mismatch is inherently ambiguous — consistent with
+   Constitution IV).
+
+   **Confidence (from clarification):** `exact` = same calendar day AND exact net
+   amount; `near` = every other linked match. Forex matches are therefore always
+   `near`. See `spec.md` → Clarifications (Session 2026-06-04).
 
 ## Technical Context
 
@@ -134,7 +140,7 @@ no constraint change needed. `match_confidence` is set only on `matched` invoice
 ### Phase B — Backend queries (`db/queries.ts`)
 
 - **Keep** `findMatchingExpenseTransaction` (exact amount, ±2 days, `matched_invoice_id IS NULL`, expense) — the exact-candidate finder.
-- **Widen** `findForexCandidateTransaction` → `findForexCandidateTransactions` returning `Transaction[]` (drop `.limit(1)`); ±5% amount band, same window/filters. Used both at import time (≥1 → ambiguous) and by the ambiguous-list endpoint.
+- **Widen** `findForexCandidateTransaction` → `findForexCandidateTransactions` returning `Transaction[]` (drop `.limit(1)`); ±5% amount band, **±7-day window** (vs the ±2-day exact window), unlinked expense. Used both at import time (≥1 → ambiguous) and by the ambiguous-list endpoint.
 - **Add** `linkInvoiceToTransaction(supabase, invoiceId, txId, confidence)` — sets `match_status='matched'`, `match_confidence`, `matched_transaction_id`. (Replaces `resolveHeldInvoice` usage; `resolveHeldInvoice` is removed with the Discord flow.)
 - **Remove** (now dead): `findExactMatchIncludingLinked`, `findAllHeldForexInvoices`, `resolveHeldInvoice`. Keep `findAllAmbiguousInvoices`, `findExistingInvoiceNumbers`, `insertInvoice`, `enrichTransaction`, `getTransactionItems`, `replaceTransactionItems`, `updateTransactionItemAmount`.
 
@@ -207,7 +213,9 @@ return counters
    flips **last**, so a mid-way failure leaves it `ambiguous` and re-runnable):
    1. `enrichTransaction(tx, …)`
    2. items: `replace_items` → `replaceTransactionItems(positive invoice items)` (outcome `replaced`); else `populateItemsFromInvoice` (fill-if-empty / keep)
-   3. `linkInvoiceToTransaction(invoice, tx, confidence)` — confidence from date diff
+   3. `linkInvoiceToTransaction(invoice, tx, confidence)` — `confidence = 'exact'`
+      only when the tx is same calendar day AND `tx.amount === net_amount`; otherwise
+      `'near'` (so a resolved forex match is always `near`).
    Returns the resolved invoice detail (same shape as a `matched[]` entry).
 
    *Atomicity note:* Supabase JS has no multi-statement transaction; for a

@@ -4,6 +4,13 @@
 **Created**: 2026-05-31
 **Status**: Draft
 
+## Clarifications
+
+### Session 2026-06-04
+
+- Q: How should match confidence be labeled, given forex matches have a different amount than the invoice? → A: `exact` = same calendar day AND exact net amount; `near` = any other linked match. Forex matches are therefore always `near`.
+- Q: Is the ±2-day window wide enough for foreign-currency purchases, whose card posting can lag the invoice date? → A: Keep ±2 days for exact-amount auto-link; use a wider ±7-day window for the forex fallback. Forex candidates are never auto-linked (manual resolution only), so the wider window adds options without risking wrong auto-links.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 — Upload CSV and Auto-Match Confident Invoices (Priority: P1)
@@ -63,6 +70,7 @@ After upload (and after each ambiguous resolution), the user sees a clear summar
 - What happens when an invoice's date cannot be parsed? → Skipped silently, not counted in any user-visible bucket.
 - What happens if the user re-uploads mid-resolution (some ambiguous already resolved)? → Dedup skips the already-resolved ones; remaining ambiguous re-appear.
 - What if a candidate transaction already has a linked invoice? → Excluded from candidates so it cannot be double-linked.
+- What happens when an invoice has no exact-amount candidate but a foreign-currency transaction with a slightly different amount exists nearby? → Forex candidates (within ±5% amount and ±7 days) are surfaced and the invoice is held `ambiguous` for manual resolution; it is never auto-linked.
 
 ## Requirements *(mandatory)*
 
@@ -71,22 +79,23 @@ After upload (and after each ambiguous resolution), the user sees a clear summar
 - **FR-001**: System MUST skip any invoice whose `invoice_number` already exists in the invoices table before any matching is attempted.
 - **FR-002**: System MUST compute a single invoice's net amount by summing all positive `發票金額` rows minus the absolute value of all negative `發票金額` rows plus any formal `折讓` allowance.
 - **FR-003**: System MUST auto-link an invoice to a transaction when exactly one candidate exists within a ±2-day date window with a matching net amount.
-- **FR-004**: System MUST classify auto-linked matches as `exact` (same calendar day) or `near` (within ±2 days but not same day).
+- **FR-004**: System MUST classify a linked invoice as `exact` only when the matched transaction is on the same calendar day AND its amount equals the invoice net amount; every other linked match (different day, or different amount such as any forex match) MUST be classified `near`.
 - **FR-005**: System MUST NOT create new transactions at any point during the import process.
 - **FR-006**: System MUST hold invoices with two or more candidates as `ambiguous` for manual resolution.
-- **FR-007**: System MUST skip invoices with zero candidates without creating any record.
+- **FR-007**: System MUST count an invoice as `skipped_unmatched` and persist no record only when it has zero exact-amount candidates within ±2 days AND zero forex candidates within ±7 days.
 - **FR-008**: When linking an invoice to a transaction, if the transaction has zero existing items, system MUST fill items from the invoice's positive-amount line items only.
 - **FR-009**: When linking an invoice to a transaction that already has items, system MUST leave existing items unchanged unless the user explicitly chooses to replace them.
 - **FR-010**: System MUST exclude already-linked transactions (those with an existing matched invoice) from the candidate pool.
 - **FR-011**: System MUST provide a resolution endpoint that accepts an invoice ID, a chosen transaction ID, and a replace-items flag, and applies the link atomically.
 - **FR-012**: System MUST return a post-import summary including counts for: `matched_exact`, `matched_near`, `ambiguous`, `skipped_unmatched`, `skipped_duplicate`, `skipped_voided`, `skipped_zero`, and per-matched-invoice details (seller, confidence, items outcome).
+- **FR-013**: When an invoice has zero exact-amount candidates within ±2 days, the system MUST search for forex candidates — unlinked expense transactions whose amount is within ±5% of the net amount and whose date is within ±7 days of the invoice date — and, if any exist, hold the invoice as `ambiguous` for manual resolution. Forex candidates MUST NEVER be auto-linked, regardless of how many exist.
 
 ### Key Entities
 
 - **Invoice**: Official government receipt tied to a purchase. Key attributes: invoice number (unique dedup key), seller name, seller tax ID, invoice date, net amount, line items (positive only), match status, confidence level.
-- **Candidate Transaction**: An existing manually-entered transaction whose amount and date fall within the match window for a given invoice.
-- **Ambiguous Invoice**: An invoice with ≥2 candidate transactions, held for manual user resolution.
-- **Match Confidence**: `exact` (same-day match) or `near` (within ±2 days).
+- **Candidate Transaction**: An existing unlinked expense transaction proposed for a given invoice. **Exact candidates** match the net amount exactly within ±2 days. **Forex candidates** (used only when no exact candidate exists) match within ±5% of the net amount within ±7 days.
+- **Ambiguous Invoice**: An invoice held for manual user resolution — either ≥2 exact candidates, or (when no exact candidate exists) ≥1 forex candidate.
+- **Match Confidence**: `exact` (same calendar day AND exact net amount) or `near` (any other linked match, including every forex match).
 - **Items Outcome**: Result of items handling for a matched invoice — `filled` (items were empty, filled from invoice), `kept` (items existed, left unchanged), or `replaced` (user explicitly replaced items).
 
 ## Success Criteria *(mandatory)*
@@ -103,7 +112,7 @@ After upload (and after each ambiguous resolution), the user sees a clear summar
 
 - The user always has pre-existing manually-entered transactions before running an import; invoice import is an enrichment step, not primary data entry.
 - Import frequency is low (monthly or less) — performance optimisation for large CSVs is out of scope.
-- The ±2-day match window is sufficient to cover date-entry variance; tighter windows can be reconsidered after real-world usage data is available.
+- The ±2-day window covers date-entry variance for exact-amount domestic matches. Foreign-currency purchases may post several days after the invoice date, so the forex fallback uses a wider ±7-day window; because forex matches are manual-confirm only, the wider window adds candidate options without risking wrong auto-links.
 - Discount line items (negative `發票金額` rows) are folded into the net amount calculation and excluded from transaction items — they are not represented as adjustments.
 - The user accepts that `near`-confidence matches may occasionally be wrong; the summary makes confidence level visible so the user can manually unlink if needed. An unlink/undo flow is out of scope for this version.
 - Formal `折讓` allowance and inline negative rows are treated additively as part of the same allowance total.
