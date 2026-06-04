@@ -14,10 +14,16 @@ import {
   computeAndWriteEffectiveAmounts,
   getAdjustmentsForTransaction,
   deleteAdjustmentsForTransaction,
+  findAllAmbiguousInvoices,
+  findMatchingExpenseTransaction,
+  findForexCandidateTransactions,
+  enrichTransaction,
+  linkInvoiceToTransaction,
+  getTransactionItems,
   type TransactionForPeriod,
 } from '../db/queries';
 import { getBudgetProgress } from '../services/budget';
-import { runImportPipeline } from '../services/invoice-matcher';
+import { runImportPipeline, computeConfidence, applyInvoiceItems } from '../services/invoice-matcher';
 import { decodeCSVBuffer, parseCSVRows, groupInvoices, RowLimitError } from '../services/csv-parser';
 import { aggregateByCategory, aggregateBySubcategory } from '../services/summary';
 
@@ -710,7 +716,7 @@ pwaRouter.post('/import', async (c) => {
 
   let counters: Awaited<ReturnType<typeof runImportPipeline>>;
   try {
-    counters = await runImportPipeline(supabase, invoices, importRun.id, c.env, {
+    counters = await runImportPipeline(supabase, invoices, importRun.id, {
       voidedCount: skippedVoidedCount,
       zeroCount: skippedZeroCount,
       parseFailedCount,
@@ -720,26 +726,140 @@ pwaRouter.post('/import', async (c) => {
     return c.json({ error: 'PIPELINE_ERROR', message: String(err) }, 500);
   }
 
+  const totalRows =
+    counters.matchedExact + counters.matchedNear + counters.ambiguous +
+    counters.skippedUnmatched + counters.skippedDuplicate +
+    counters.skippedVoided + counters.skippedZero + counters.parseFailed;
+
   await updateImportRun(supabase, importRun.id, {
-    total_rows: counters.totalRows,
-    matched_count: counters.matchedCount,
-    auto_created_count: counters.autoCreatedCount,
-    skipped_duplicate_count: counters.skippedDuplicateCount,
-    skipped_voided_count: counters.skippedVoidedCount,
-    held_forex_count: counters.heldForexCount,
-    ambiguous_count: counters.ambiguousCount,
-    parse_failed_count: counters.parseFailedCount,
+    total_rows: totalRows,
+    matched_count: counters.matchedExact + counters.matchedNear,
+    matched_exact_count: counters.matchedExact,
+    matched_near_count: counters.matchedNear,
+    ambiguous_count: counters.ambiguous,
+    skipped_unmatched_count: counters.skippedUnmatched,
+    skipped_duplicate_count: counters.skippedDuplicate,
+    skipped_voided_count: counters.skippedVoided,
+    skipped_zero_count: counters.skippedZero,
+    parse_failed_count: counters.parseFailed,
   });
 
   return c.json({
-    filename: file.name,
-    matched_count: counters.matchedCount,
-    auto_created_count: counters.autoCreatedCount,
-    skipped_duplicate_count: counters.skippedDuplicateCount,
-    held_forex_count: counters.heldForexCount,
-    ambiguous_count: counters.ambiguousCount,
-    skipped_voided_count: counters.skippedVoidedCount,
-    parse_failed_count: counters.parseFailedCount,
+    filename: file.name ?? null,
+    matched_exact: counters.matchedExact,
+    matched_near: counters.matchedNear,
+    ambiguous: counters.ambiguous,
+    skipped_unmatched: counters.skippedUnmatched,
+    skipped_duplicate: counters.skippedDuplicate,
+    skipped_voided: counters.skippedVoided,
+    skipped_zero: counters.skippedZero,
+    matched: counters.matched,
+  });
+});
+
+// ─── GET /pwa/import/ambiguous ────────────────────────────────────────────────
+// Lists invoices held as `ambiguous` with their candidate transactions re-derived
+// live (so candidates linked since import drop out via the matched_invoice_id filter).
+
+pwaRouter.get('/import/ambiguous', async (c) => {
+  const supabase = getSupabaseClient(c.env);
+  const invoices = await findAllAmbiguousInvoices(supabase);
+
+  const entries = [];
+  for (const inv of invoices) {
+    const invoiceDate = new Date(inv.invoice_date);
+    let source: 'exact' | 'forex' = 'exact';
+    let candidates = await findMatchingExpenseTransaction(supabase, inv.net_amount, invoiceDate);
+    if (candidates.length === 0) {
+      source = 'forex';
+      candidates = await findForexCandidateTransactions(supabase, inv.net_amount, invoiceDate);
+    }
+
+    const candidatesWithItems = [];
+    for (const tx of candidates) {
+      const items = await getTransactionItems(supabase, tx.id);
+      candidatesWithItems.push({
+        id: tx.id,
+        transaction_at: tx.transaction_at,
+        amount: tx.amount,
+        note: tx.note,
+        items: items.map((it) => ({ name: it.name, amount: it.amount })),
+      });
+    }
+
+    entries.push({
+      id: inv.id,
+      invoice_number: inv.invoice_number,
+      seller_name: inv.seller_name,
+      invoice_date: inv.invoice_date,
+      net_amount: inv.net_amount,
+      items: inv.items,
+      candidate_source: source,
+      candidates: candidatesWithItems,
+    });
+  }
+
+  return c.json({ ambiguous: entries });
+});
+
+// ─── POST /pwa/import/resolve ─────────────────────────────────────────────────
+// Manually link an ambiguous invoice to a chosen transaction (FR-011). Ordered
+// writes with the invoice status flipped LAST, so a mid-way failure leaves the
+// invoice `ambiguous` and the call can be safely retried.
+
+pwaRouter.post('/import/resolve', async (c) => {
+  type Body = { invoice_id: string; transaction_id: string; replace_items?: boolean };
+  let body: Body;
+  try {
+    body = await c.req.json<Body>();
+  } catch {
+    return c.json({ error: 'INVALID_PAYLOAD', message: 'Invalid JSON' }, 400);
+  }
+  const { invoice_id, transaction_id, replace_items = false } = body;
+  if (!invoice_id || !transaction_id) {
+    return c.json({ error: 'INVALID_PAYLOAD', message: 'invoice_id and transaction_id are required' }, 400);
+  }
+
+  const supabase = getSupabaseClient(c.env);
+
+  const { data: invoice, error: invErr } = await supabase
+    .from('invoices').select('*').eq('id', invoice_id).single();
+  if (invErr || !invoice) return c.json({ error: 'NOT_FOUND', message: 'Invoice not found' }, 404);
+  if (invoice.match_status !== 'ambiguous') {
+    return c.json({ error: 'INVOICE_NOT_AMBIGUOUS', message: 'Invoice is not awaiting resolution' }, 409);
+  }
+
+  const { data: tx, error: txErr } = await supabase
+    .from('transactions').select('*').eq('id', transaction_id).single();
+  if (txErr || !tx) return c.json({ error: 'NOT_FOUND', message: 'Transaction not found' }, 404);
+  if (tx.matched_invoice_id !== null) {
+    return c.json({ error: 'TRANSACTION_ALREADY_LINKED', message: 'Transaction already linked to an invoice' }, 409);
+  }
+
+  // 1. Enrich the transaction.
+  await enrichTransaction(supabase, tx.id, {
+    invoiceNumber: invoice.invoice_number,
+    sellerName: invoice.seller_name,
+    sellerTaxId: invoice.seller_tax_id,
+    invoiceId: invoice.id,
+  });
+  // 2. Handle items (replace, or fill-if-empty / keep).
+  const itemsOutcome = await applyInvoiceItems(supabase, tx.id, invoice.items ?? [], replace_items);
+  // 3. Flip invoice status last.
+  const confidence = computeConfidence(
+    new Date(invoice.invoice_date).toISOString(), tx.transaction_at, tx.amount, invoice.net_amount
+  );
+  await linkInvoiceToTransaction(supabase, invoice.id, tx.id, confidence);
+
+  return c.json({
+    resolved: {
+      seller_name: invoice.seller_name,
+      invoice_number: invoice.invoice_number,
+      transaction_at: tx.transaction_at,
+      amount: tx.amount,
+      confidence,
+      items_outcome: itemsOutcome,
+    },
   });
 });
 

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Transaction, Receipt, BudgetSettings, TransactionItem, PaymentMethod, MobileWallet, TransactionType, Invoice, ImportRun, ParsedInvoice, InvoiceMatchStatus, TransactionItemRow, TransactionAdjustment } from '../types';
+import type { Transaction, Receipt, BudgetSettings, TransactionItem, PaymentMethod, MobileWallet, TransactionType, Invoice, ImportRun, ParsedInvoice, InvoiceMatchStatus, MatchConfidence, TransactionItemRow, TransactionAdjustment } from '../types';
 
 export async function insertTransaction(
   supabase: SupabaseClient,
@@ -314,32 +314,16 @@ export async function findMatchingExpenseTransaction(
   return (data ?? []) as Transaction[];
 }
 
-export async function findExactMatchIncludingLinked(
+export async function findForexCandidateTransactions(
   supabase: SupabaseClient,
   netAmount: number,
   invoiceDate: Date
 ): Promise<Transaction[]> {
-  const windowStart = new Date(invoiceDate.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const windowEnd = new Date(invoiceDate.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const { data, error } = await supabase
-    .from('transactions')
-    .select('*')
-    .eq('transaction_type', 'expense')
-    .eq('amount', netAmount)
-    .gte('transaction_at', windowStart)
-    .lte('transaction_at', windowEnd + 'T23:59:59Z')
-    .order('created_at', { ascending: false });
-  if (error) throw new Error(`findExactMatchIncludingLinked: ${error.message}`);
-  return (data ?? []) as Transaction[];
-}
-
-export async function findForexCandidateTransaction(
-  supabase: SupabaseClient,
-  netAmount: number,
-  invoiceDate: Date
-): Promise<Transaction | null> {
-  const windowStart = new Date(invoiceDate.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const windowEnd = new Date(invoiceDate.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  // Forex fallback uses a wider ±7-day window than the ±2-day exact match, because
+  // foreign-currency purchases can post several days after the invoice date. Never
+  // auto-linked — these candidates are surfaced for manual resolution only.
+  const windowStart = new Date(invoiceDate.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const windowEnd = new Date(invoiceDate.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const low = Math.floor(netAmount * 0.95);
   const high = Math.ceil(netAmount * 1.05);
   const { data, error } = await supabase
@@ -351,10 +335,9 @@ export async function findForexCandidateTransaction(
     .lte('amount', high)
     .gte('transaction_at', windowStart)
     .lte('transaction_at', windowEnd + 'T23:59:59Z')
-    .order('created_at', { ascending: false })
-    .limit(1);
-  if (error) throw new Error(`findForexCandidateTransaction: ${error.message}`);
-  return data && data.length > 0 ? (data[0] as Transaction) : null;
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(`findForexCandidateTransactions: ${error.message}`);
+  return (data ?? []) as Transaction[];
 }
 
 export async function insertInvoice(
@@ -362,7 +345,8 @@ export async function insertInvoice(
   invoice: ParsedInvoice,
   importRunId: string,
   matchStatus: InvoiceMatchStatus,
-  matchedTxId?: string
+  matchedTxId?: string,
+  confidence?: MatchConfidence
 ): Promise<Invoice> {
   const { data, error } = await supabase
     .from('invoices')
@@ -377,6 +361,7 @@ export async function insertInvoice(
       items: invoice.items.length > 0 ? invoice.items : null,
       invoice_status: invoice.invoice_status,
       match_status: matchStatus,
+      match_confidence: confidence ?? null,
       matched_transaction_id: matchedTxId ?? null,
     })
     .select()
@@ -408,15 +393,6 @@ export async function enrichTransaction(
   if (error) throw new Error(`enrichTransaction: ${error.message}`);
 }
 
-export async function findAllHeldForexInvoices(supabase: SupabaseClient): Promise<Invoice[]> {
-  const { data, error } = await supabase
-    .from('invoices')
-    .select('*')
-    .eq('match_status', 'held_forex');
-  if (error) throw new Error(`findAllHeldForexInvoices: ${error.message}`);
-  return (data ?? []) as Invoice[];
-}
-
 export async function findAllAmbiguousInvoices(supabase: SupabaseClient): Promise<Invoice[]> {
   const { data, error } = await supabase
     .from('invoices')
@@ -427,17 +403,17 @@ export async function findAllAmbiguousInvoices(supabase: SupabaseClient): Promis
   return (data ?? []) as Invoice[];
 }
 
-export async function resolveHeldInvoice(
+export async function linkInvoiceToTransaction(
   supabase: SupabaseClient,
   invoiceId: string,
   txId: string,
-  matchStatus: 'matched' | 'auto_created'
+  confidence: MatchConfidence
 ): Promise<void> {
   const { error } = await supabase
     .from('invoices')
-    .update({ match_status: matchStatus, matched_transaction_id: txId })
+    .update({ match_status: 'matched', match_confidence: confidence, matched_transaction_id: txId })
     .eq('id', invoiceId);
-  if (error) throw new Error(`resolveHeldInvoice: ${error.message}`);
+  if (error) throw new Error(`linkInvoiceToTransaction: ${error.message}`);
 }
 
 export async function findTransactionsWithoutInvoiceInRange(

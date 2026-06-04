@@ -1,7 +1,77 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ParsedInvoice } from '../../src/types';
+import { runImportPipeline, computeConfidence, applyInvoiceItems } from '../../src/services/invoice-matcher';
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+// ─── Minimal in-memory fake Supabase ──────────────────────────────────────────
+// Supports the chainable subset the pipeline/queries use (select/insert/update +
+// eq/is/in/gte/lte/order/limit/single). Filters are applied against seeded tables
+// so the REAL pipeline runs end-to-end. `calls.insertTransactions` lets tests
+// assert the SC-003 invariant: the import never creates a transaction.
+
+type Row = Record<string, unknown>;
+
+function makeFakeSupabase(seed: { transactions?: Row[]; invoices?: Row[]; transaction_items?: Row[] }) {
+  const tables: Record<string, Row[]> = {
+    transactions: seed.transactions ?? [],
+    invoices: seed.invoices ?? [],
+    transaction_items: seed.transaction_items ?? [],
+  };
+  const calls = { insertTransactions: 0 };
+  let idCounter = 1;
+
+  function from(table: string) {
+    const filters: ((r: Row) => boolean)[] = [];
+    let mode: 'select' | 'insert' | 'update' | 'delete' = 'select';
+    let insertRows: Row[] = [];
+    let updatePatch: Row = {};
+    let wantSingle = false;
+
+    function execute() {
+      if (mode === 'insert') {
+        const created = insertRows.map((r) => ({ id: `gen-${idCounter++}`, ...r }));
+        tables[table].push(...created);
+        if (table === 'transactions') calls.insertTransactions += created.length;
+        return wantSingle ? { data: created[0], error: null } : { data: created, error: null };
+      }
+      if (mode === 'update') {
+        const matched = tables[table].filter((r) => filters.every((f) => f(r)));
+        for (const r of matched) Object.assign(r, updatePatch);
+        return { data: matched, error: null };
+      }
+      if (mode === 'delete') {
+        tables[table] = tables[table].filter((r) => !filters.every((f) => f(r)));
+        return { data: null, error: null };
+      }
+      const rows = tables[table].filter((r) => filters.every((f) => f(r)));
+      if (wantSingle) return { data: rows[0] ?? null, error: rows[0] ? null : { message: 'not found' } };
+      return { data: rows, error: null };
+    }
+
+    const builder: Record<string, unknown> = {
+      select() { return builder; },
+      insert(rows: Row | Row[]) {
+        mode = 'insert';
+        insertRows = Array.isArray(rows) ? rows : [rows];
+        return builder;
+      },
+      update(patch: Row) { mode = 'update'; updatePatch = patch; return builder; },
+      delete() { mode = 'delete'; return builder; },
+      eq(col: string, val: unknown) { filters.push((r) => r[col] === val); return builder; },
+      is(col: string, val: unknown) { filters.push((r) => (val === null ? r[col] == null : r[col] === val)); return builder; },
+      in(col: string, arr: unknown[]) { filters.push((r) => arr.includes(r[col])); return builder; },
+      gte(col: string, val: unknown) { filters.push((r) => String(r[col]) >= String(val)); return builder; },
+      lte(col: string, val: unknown) { filters.push((r) => String(r[col]) <= String(val)); return builder; },
+      order() { return builder; },
+      limit() { return builder; },
+      single() { wantSingle = true; return builder; },
+      then(resolve: (v: unknown) => void) { resolve(execute()); },
+    };
+    return builder;
+  }
+
+  return { client: { from } as unknown as SupabaseClient, tables, calls };
+}
 
 function makeInvoice(overrides: Partial<ParsedInvoice> = {}): ParsedInvoice {
   return {
@@ -18,352 +88,170 @@ function makeInvoice(overrides: Partial<ParsedInvoice> = {}): ParsedInvoice {
   };
 }
 
-function makeTx(id = 'tx-001', amount = 180) {
+function makeTxRow(over: Partial<Row> = {}): Row {
   return {
-    id,
-    amount,
-    transaction_type: 'expense' as const,
-    items: null,
-    tags: [],
-    payment_method: 'cash' as const,
-    wallet: null,
-    bank_name: null,
-    note: null,
-    is_matched: false,
-    matched_receipt_id: null,
-    parent_transaction_id: null,
-    discord_message_id: null,
-    invoice_number: null,
-    seller_name: null,
-    seller_tax_id: null,
+    id: 'tx-001',
+    transaction_type: 'expense',
+    amount: 180,
     matched_invoice_id: null,
-    transaction_at: '2025-04-18T00:00:00.000Z',
-    created_at: '2025-04-18T00:01:00.000Z',
+    note: null,
+    transaction_at: '2025-04-18T10:00:00.000Z',
+    created_at: '2025-04-18T10:00:00.000Z',
+    ...over,
   };
 }
 
-function makeInvoiceRecord(id = 'inv-001', status = 'held_forex', netAmount = 1500) {
-  return {
-    id,
-    import_run_id: 'run-001',
-    invoice_number: 'NF-00000001',
-    seller_name: 'Netflix',
-    seller_tax_id: '99999999',
-    invoice_date: '2025-05-06',
-    gross_amount: netAmount,
-    allowance: 0,
-    net_amount: netAmount,
-    items: null,
-    invoice_status: 'active' as const,
-    match_status: status as 'held_forex',
-    matched_transaction_id: null,
-    created_at: '2025-05-06T00:00:00.000Z',
-  };
-}
+const NO_SKIP = { voidedCount: 0, zeroCount: 0, parseFailedCount: 0 };
 
-// ─── Pipeline dedup logic ────────────────────────────────────────────────────
+// ─── computeConfidence (FR-004) ───────────────────────────────────────────────
 
-describe('import pipeline — dedup', () => {
-  it('skips invoices already in the DB (dedup by invoice_number)', async () => {
-    const invoice = makeInvoice();
-    const existingNumbers = [invoice.invoice_number];
-
-    const toProcess = [invoice].filter((i) => !existingNumbers.includes(i.invoice_number));
-    expect(toProcess).toHaveLength(0);
+describe('computeConfidence', () => {
+  it('exact = same calendar day AND exact amount', () => {
+    expect(computeConfidence('2025-04-18T00:00:00Z', '2025-04-18T09:00:00Z', 180, 180)).toBe('exact');
   });
-
-  it('processes invoices not yet in the DB', () => {
-    const invoice = makeInvoice({ invoice_number: 'AB-NEW-001' });
-    const existingNumbers = ['AB-OLD-001'];
-
-    const toProcess = [invoice].filter((i) => !existingNumbers.includes(i.invoice_number));
-    expect(toProcess).toHaveLength(1);
+  it('near when different day even if amount matches', () => {
+    expect(computeConfidence('2025-04-18T00:00:00Z', '2025-04-20T09:00:00Z', 180, 180)).toBe('near');
+  });
+  it('near when same day but amount differs (forex)', () => {
+    expect(computeConfidence('2025-04-18T00:00:00Z', '2025-04-18T09:00:00Z', 175, 180)).toBe('near');
   });
 });
 
-// ─── Primary match logic ─────────────────────────────────────────────────────
+// ─── runImportPipeline (enrichment-only) ──────────────────────────────────────
 
-describe('import pipeline — primary match', () => {
-  it('classifies invoice as matched when exact expense tx found', () => {
-    const invoice = makeInvoice({ net_amount: 180 });
-    const tx = makeTx('tx-180', 180);
-
-    // Simulate: exact match found → status = 'matched'
-    const status = tx.amount === invoice.net_amount ? 'matched' : 'unmatched';
-    expect(status).toBe('matched');
-  });
-
-  it('classifies invoice as unmatched when no exact tx', () => {
-    const invoice = makeInvoice({ net_amount: 180 });
-    const foundTx = null; // no match
-
-    const status = foundTx ? 'matched' : 'unmatched';
-    expect(status).toBe('unmatched');
+describe('runImportPipeline — dedup (FR-001)', () => {
+  it('skips invoices already present and does not reprocess them', async () => {
+    const { client, calls } = makeFakeSupabase({
+      invoices: [{ invoice_number: 'AB-00000001' }],
+      transactions: [makeTxRow()],
+    });
+    const counters = await runImportPipeline(client, [makeInvoice()], 'run-1', NO_SKIP);
+    expect(counters.skippedDuplicate).toBe(1);
+    expect(counters.matchedExact + counters.matchedNear).toBe(0);
+    expect(calls.insertTransactions).toBe(0);
   });
 });
 
-// ─── Forex secondary pass ────────────────────────────────────────────────────
+describe('runImportPipeline — auto-link (FR-003/FR-004)', () => {
+  it('1 same-day exact candidate → matched_exact, enriched, items filled', async () => {
+    const fake = makeFakeSupabase({
+      transactions: [makeTxRow({ id: 'tx-180', amount: 180, transaction_at: '2025-04-18T08:00:00.000Z' })],
+    });
+    const invoice = makeInvoice({ items: [{ name: '咖啡', quantity: 1, unit_price: 180, amount: 180 }] });
+    const counters = await runImportPipeline(fake.client, [invoice], 'run-1', NO_SKIP);
 
-describe('import pipeline — forex secondary pass', () => {
-  it('classifies invoice as held_forex when within ±5% of a tx', () => {
-    const invoiceAmount = 1523;
-    const txAmount = 1500;
-
-    const low = Math.floor(invoiceAmount * 0.95);
-    const high = Math.ceil(invoiceAmount * 1.05);
-    const isForexMatch = txAmount >= low && txAmount <= high;
-    expect(isForexMatch).toBe(true);
+    expect(counters.matchedExact).toBe(1);
+    expect(counters.matched[0]).toMatchObject({ confidence: 'exact', items_outcome: 'filled', invoice_number: 'AB-00000001' });
+    const tx = fake.tables.transactions[0];
+    expect(tx.matched_invoice_id).not.toBeNull();
+    expect(tx.invoice_number).toBe('AB-00000001');
+    expect(fake.tables.invoices[0]).toMatchObject({ match_status: 'matched', match_confidence: 'exact' });
+    expect(fake.tables.transaction_items.some((i) => i.name === '咖啡')).toBe(true);
+    expect(fake.calls.insertTransactions).toBe(0); // SC-003
   });
 
-  it('does not match when difference exceeds ±5%', () => {
-    const invoiceAmount = 1000;
-    const txAmount = 800; // 20% difference
-
-    const low = Math.floor(invoiceAmount * 0.95);
-    const high = Math.ceil(invoiceAmount * 1.05);
-    const isForexMatch = txAmount >= low && txAmount <= high;
-    expect(isForexMatch).toBe(false);
+  it('1 exact candidate 2 days off → matched_near', async () => {
+    const fake = makeFakeSupabase({
+      transactions: [makeTxRow({ id: 'tx-180', amount: 180, transaction_at: '2025-04-16T08:00:00.000Z' })],
+    });
+    const counters = await runImportPipeline(fake.client, [makeInvoice()], 'run-1', NO_SKIP);
+    expect(counters.matchedNear).toBe(1);
+    expect(counters.matched[0].confidence).toBe('near');
   });
 
-  it('held_forex invoice is stored in DB without linking a transaction', () => {
-    const invoice = makeInvoice({ net_amount: 1523 });
-    const matchStatus = 'held_forex';
-    const matchedTxId = undefined;
-
-    // Simulates what insertInvoice receives for a forex hold
-    expect(matchStatus).toBe('held_forex');
-    expect(matchedTxId).toBeUndefined();
-  });
-});
-
-// ─── Auto-create ─────────────────────────────────────────────────────────────
-
-describe('import pipeline — auto-create', () => {
-  it('creates new expense transaction for truly unmatched invoice', () => {
-    const invoice = makeInvoice({ net_amount: 320, seller_name: '麥當勞' });
-
-    const newTx = {
-      amount: invoice.net_amount,
-      transaction_type: 'expense' as const,
-      payment_method: 'cash' as const,
-      note: invoice.seller_name,
-      transaction_at: invoice.invoice_date.toISOString(),
-    };
-
-    expect(newTx.transaction_type).toBe('expense');
-    expect(newTx.payment_method).toBe('cash');
-    expect(newTx.amount).toBe(320);
-    expect(newTx.note).toBe('麥當勞');
+  it('does not overwrite items when the transaction already has items (FR-009 → kept)', async () => {
+    const fake = makeFakeSupabase({
+      transactions: [makeTxRow({ id: 'tx-180', amount: 180 })],
+      transaction_items: [{ id: 'it-1', transaction_id: 'tx-180', name: '舊項目', amount: 180 }],
+    });
+    const invoice = makeInvoice({ items: [{ name: '發票項目', quantity: 1, unit_price: 180, amount: 180 }] });
+    const counters = await runImportPipeline(fake.client, [invoice], 'run-1', NO_SKIP);
+    expect(counters.matched[0].items_outcome).toBe('kept');
+    expect(fake.tables.transaction_items.map((i) => i.name)).toEqual(['舊項目']);
   });
 });
 
-// ─── Reconciliation pass ─────────────────────────────────────────────────────
-
-describe('runReconciliationPass', () => {
-  it('resolves held_forex invoice to matched when exact tx found after /amend', () => {
-    const heldInvoice = makeInvoiceRecord('inv-nf', 'held_forex', 1523);
-    const tx = makeTx('tx-nf', 1523); // user ran /amend to correct amount to 1523
-
-    // Exact match found → should set to 'matched'
-    const newStatus = tx.amount === heldInvoice.net_amount ? 'matched' : 'still_held';
-    expect(newStatus).toBe('matched');
+describe('runImportPipeline — ambiguous (FR-006/FR-013)', () => {
+  it('≥2 exact candidates → ambiguous, no transaction enriched', async () => {
+    const fake = makeFakeSupabase({
+      transactions: [
+        makeTxRow({ id: 'tx-a', amount: 180 }),
+        makeTxRow({ id: 'tx-b', amount: 180 }),
+      ],
+    });
+    const counters = await runImportPipeline(fake.client, [makeInvoice()], 'run-1', NO_SKIP);
+    expect(counters.ambiguous).toBe(1);
+    expect(fake.tables.invoices[0].match_status).toBe('ambiguous');
+    expect(fake.tables.transactions.every((t) => t.matched_invoice_id === null)).toBe(true);
   });
 
-  it('keeps held_forex when tx is still within ±5% but not exact', () => {
-    const heldInvoice = makeInvoiceRecord('inv-nf', 'held_forex', 1523);
-    const txAmount = 1500; // within 5% but not exact
-
-    const isExact = txAmount === heldInvoice.net_amount;
-    const low = Math.floor(heldInvoice.net_amount * 0.95);
-    const high = Math.ceil(heldInvoice.net_amount * 1.05);
-    const isForex = txAmount >= low && txAmount <= high;
-
-    expect(isExact).toBe(false);
-    expect(isForex).toBe(true);
-    // → stays held_forex
-  });
-
-  it('auto-creates transaction when no candidate exists at all for held_forex invoice', () => {
-    const heldInvoice = makeInvoiceRecord('inv-orphan', 'held_forex', 999);
-    const noExactTx = null;
-    const noForexTx = null;
-
-    // → should auto-create
-    const shouldAutoCreate = !noExactTx && !noForexTx;
-    expect(shouldAutoCreate).toBe(true);
-  });
-
-  it('detects collision when exact-match candidate is already linked to another invoice (FR-009)', () => {
-    // findMatchingExpenseTransaction returns [] (filters matched_invoice_id IS NULL)
-    const unlinkedExactCandidates: ReturnType<typeof makeTx>[] = [];
-    // findExactMatchIncludingLinked returns the already-linked candidate
-    const allExactCandidates = [{ ...makeTx('tx-taken', 1523), matched_invoice_id: 'other-invoice-id' }];
-
-    const hasCollision =
-      unlinkedExactCandidates.length === 0 &&
-      allExactCandidates.some((tx) => tx.matched_invoice_id !== null);
-
-    expect(hasCollision).toBe(true);
-  });
-
-  it('does not auto-create when a collision is detected — invoice stays held (FR-009)', () => {
-    const unlinkedExactCandidates: ReturnType<typeof makeTx>[] = [];
-    const allExactCandidates = [{ ...makeTx('tx-taken', 1523), matched_invoice_id: 'other-invoice-id' }];
-    const noForexCandidate = null;
-
-    const hasCollision =
-      unlinkedExactCandidates.length === 0 &&
-      allExactCandidates.some((tx) => tx.matched_invoice_id !== null);
-    const shouldAutoCreate = !hasCollision && noForexCandidate === null;
-
-    expect(shouldAutoCreate).toBe(false);
+  it('0 exact but a forex candidate within ±7 days → ambiguous (never auto-linked)', async () => {
+    const fake = makeFakeSupabase({
+      // amount 175 ≈ 180 within ±5%; 5 days off → inside ±7-day forex window, outside ±2-day exact
+      transactions: [makeTxRow({ id: 'tx-fx', amount: 175, transaction_at: '2025-04-23T08:00:00.000Z' })],
+    });
+    const counters = await runImportPipeline(fake.client, [makeInvoice()], 'run-1', NO_SKIP);
+    expect(counters.ambiguous).toBe(1);
+    expect(counters.matchedExact + counters.matchedNear).toBe(0);
+    expect(fake.tables.invoices[0].match_status).toBe('ambiguous');
   });
 });
 
-// ─── Ambiguous match (FR-005) ────────────────────────────────────────────────
-
-describe('import pipeline — ambiguous match', () => {
-  it('classifies invoice as ambiguous when multiple exact-amount transactions exist on same date', () => {
-    const invoice = makeInvoice({ net_amount: 150 });
-    const tx1 = makeTx('tx-a', 150);
-    const tx2 = { ...makeTx('tx-b', 150), created_at: '2025-04-18T00:00:30.000Z' };
-
-    // Simulate findMatchingExpenseTransaction returning two candidates
-    const candidates = [tx1, tx2];
-
-    const status = candidates.length === 1 ? 'matched'
-      : candidates.length > 1 ? 'ambiguous'
-      : 'unmatched';
-
-    expect(status).toBe('ambiguous');
-  });
-
-  it('does not enrich any transaction when invoice is held as ambiguous', () => {
-    const tx1 = makeTx('tx-a', 150);
-    const tx2 = { ...makeTx('tx-b', 150), created_at: '2025-04-18T00:00:30.000Z' };
-
-    const candidates = [tx1, tx2];
-    const enriched: string[] = [];
-
-    // Simulate: ambiguous → no enrichTransaction call
-    if (candidates.length === 1) enriched.push(candidates[0].id);
-
-    expect(enriched).toHaveLength(0);
-    expect(tx1.is_matched).toBe(false);
-    expect(tx2.is_matched).toBe(false);
-  });
-
-  it('passes invoice to ambiguousItems with all candidate transactions', () => {
-    const invoice = makeInvoice({ net_amount: 150 });
-    const tx1 = makeTx('tx-a', 150);
-    const tx2 = { ...makeTx('tx-b', 150), created_at: '2025-04-18T00:00:30.000Z' };
-
-    const candidates = [tx1, tx2];
-    const ambiguousItems: Array<{ invoice: typeof invoice; candidates: typeof candidates }> = [];
-
-    if (candidates.length > 1) ambiguousItems.push({ invoice, candidates });
-
-    expect(ambiguousItems).toHaveLength(1);
-    expect(ambiguousItems[0].invoice.invoice_number).toBe(invoice.invoice_number);
-    expect(ambiguousItems[0].candidates).toHaveLength(2);
-  });
-
-  it('single-candidate invoice is NOT classified as ambiguous', () => {
-    const invoice = makeInvoice({ net_amount: 180 });
-    const candidates = [makeTx('tx-only', 180)];
-
-    const status = candidates.length === 1 ? 'matched'
-      : candidates.length > 1 ? 'ambiguous'
-      : 'unmatched';
-
-    expect(status).toBe('matched');
+describe('runImportPipeline — skipped_unmatched (FR-007)', () => {
+  it('0 exact and 0 forex → skipped_unmatched, NO invoice row persisted', async () => {
+    const fake = makeFakeSupabase({ transactions: [] });
+    const counters = await runImportPipeline(fake.client, [makeInvoice()], 'run-1', NO_SKIP);
+    expect(counters.skippedUnmatched).toBe(1);
+    expect(fake.tables.invoices).toHaveLength(0);
+    expect(fake.calls.insertTransactions).toBe(0);
   });
 });
 
-// ─── Reconciliation pass — ambiguous invoice loop (FR-003) ───────────────────
-
-describe('runReconciliationPass — ambiguous invoice loop', () => {
-  it('auto-links ambiguous invoice when exactly 1 candidate remains', () => {
-    const candidates = [makeTx('tx-only', 150)];
-    const newStatus = candidates.length === 1 ? 'matched'
-      : candidates.length > 1 ? 'ambiguous'
-      : 'auto_created';
-    expect(newStatus).toBe('matched');
-    expect(candidates[0].id).toBe('tx-only');
-  });
-
-  it('auto-creates transaction for ambiguous invoice when 0 candidates remain', () => {
-    const inv = makeInvoiceRecord('inv-amb', 'ambiguous', 200);
-    const candidates: ReturnType<typeof makeTx>[] = [];
-    const newStatus = candidates.length === 1 ? 'matched'
-      : candidates.length > 1 ? 'ambiguous'
-      : 'auto_created';
-    expect(newStatus).toBe('auto_created');
-    expect(inv.net_amount).toBe(200);
-  });
-
-  it('leaves ambiguous invoice held when 2+ candidates remain', () => {
-    const tx1 = makeTx('tx-a', 150);
-    const tx2 = { ...makeTx('tx-b', 150), created_at: '2025-04-18T00:00:30.000Z' };
-    const candidates = [tx1, tx2];
-    const newStatus = candidates.length === 1 ? 'matched'
-      : candidates.length > 1 ? 'ambiguous'
-      : 'auto_created';
-    expect(newStatus).toBe('ambiguous');
-    expect(candidates).toHaveLength(2);
-  });
-
-  it('ReconciliationResult separates forexLinked from ambiguousAutoLinked', () => {
-    const mockResult = {
-      forexLinked: 2,
-      forexAutoCreated: 1,
-      forexStillHeld: 1,
-      ambiguousAutoLinked: 1,
-      ambiguousAutoCreated: 0,
-      ambiguousRemaining: [] as ReturnType<typeof makeInvoiceRecord>[],
-      collisionCount: 0,
-    };
-    expect(mockResult.forexLinked).toBe(2);
-    expect(mockResult.ambiguousAutoLinked).toBe(1);
-    expect(mockResult.ambiguousRemaining).toHaveLength(0);
-    // runImportPipeline uses forexLinked + forexAutoCreated for forexResolvedCount
-    expect(mockResult.forexLinked + mockResult.forexAutoCreated).toBe(3);
-  });
-
-  it('forexStillHeld increments when held_forex candidate is still within ±5%', () => {
-    const mockResult = {
-      forexLinked: 0,
-      forexAutoCreated: 0,
-      forexStillHeld: 2,
-      ambiguousAutoLinked: 0,
-      ambiguousAutoCreated: 0,
-      ambiguousRemaining: [] as ReturnType<typeof makeInvoiceRecord>[],
-      collisionCount: 0,
-    };
-    expect(mockResult.forexStillHeld).toBe(2);
+describe('runImportPipeline — SC-003 invariant (never creates transactions)', () => {
+  it('across a mixed batch, transaction count is unchanged', async () => {
+    const fake = makeFakeSupabase({
+      transactions: [
+        makeTxRow({ id: 'tx-exact', amount: 100, transaction_at: '2025-04-18T00:00:00.000Z' }),
+        makeTxRow({ id: 'tx-fx', amount: 295, transaction_at: '2025-04-20T00:00:00.000Z' }),
+      ],
+    });
+    const before = fake.tables.transactions.length;
+    const invoices = [
+      makeInvoice({ invoice_number: 'M-1', net_amount: 100 }),                       // exact
+      makeInvoice({ invoice_number: 'F-1', net_amount: 300, invoice_date: new Date('2025-04-18T00:00:00Z') }), // forex → ambiguous
+      makeInvoice({ invoice_number: 'U-1', net_amount: 9999 }),                       // unmatched
+    ];
+    const counters = await runImportPipeline(fake.client, invoices, 'run-1', NO_SKIP);
+    expect(fake.tables.transactions.length).toBe(before);
+    expect(fake.calls.insertTransactions).toBe(0);
+    expect(counters.matchedExact + counters.matchedNear).toBe(1);
+    expect(counters.ambiguous).toBe(1);
+    expect(counters.skippedUnmatched).toBe(1);
   });
 });
 
-// ─── Date window ────────────────────────────────────────────────────────────
+// ─── applyInvoiceItems (FR-008/009) ───────────────────────────────────────────
 
-describe('date window matching', () => {
-  it('±2 day window correctly identifies adjacent dates', () => {
-    const invoiceDate = new Date('2025-04-18T00:00:00Z');
-    const txDate = new Date('2025-04-16T00:00:00Z'); // 2 days before
+describe('applyInvoiceItems', () => {
+  const invItems = [{ name: 'A', quantity: 1, unit_price: 50, amount: 50 }, { name: 'B', quantity: 1, unit_price: 50, amount: 50 }];
 
-    const windowStart = new Date(invoiceDate.getTime() - 2 * 24 * 60 * 60 * 1000);
-    const windowEnd = new Date(invoiceDate.getTime() + 2 * 24 * 60 * 60 * 1000);
-
-    expect(txDate >= windowStart && txDate <= windowEnd).toBe(true);
+  it('fills when the transaction has no items', async () => {
+    const fake = makeFakeSupabase({ transaction_items: [] });
+    const outcome = await applyInvoiceItems(fake.client, 'tx-1', invItems, false);
+    expect(outcome).toBe('filled');
+    expect(fake.tables.transaction_items).toHaveLength(2);
   });
 
-  it('rejects dates outside ±2 day window', () => {
-    const invoiceDate = new Date('2025-04-18T00:00:00Z');
-    const txDate = new Date('2025-04-21T00:00:00Z'); // 3 days after
+  it('keeps existing items untouched (no replace)', async () => {
+    const fake = makeFakeSupabase({ transaction_items: [{ id: 'x', transaction_id: 'tx-1', name: 'keep', amount: 100 }] });
+    const outcome = await applyInvoiceItems(fake.client, 'tx-1', invItems, false);
+    expect(outcome).toBe('kept');
+    expect(fake.tables.transaction_items.map((i) => i.name)).toEqual(['keep']);
+  });
 
-    const windowStart = new Date(invoiceDate.getTime() - 2 * 24 * 60 * 60 * 1000);
-    const windowEnd = new Date(invoiceDate.getTime() + 2 * 24 * 60 * 60 * 1000);
-
-    expect(txDate >= windowStart && txDate <= windowEnd).toBe(false);
+  it('replaces existing items when replace=true', async () => {
+    const fake = makeFakeSupabase({ transaction_items: [{ id: 'x', transaction_id: 'tx-1', name: 'old', amount: 100 }] });
+    const outcome = await applyInvoiceItems(fake.client, 'tx-1', invItems, true);
+    expect(outcome).toBe('replaced');
   });
 });

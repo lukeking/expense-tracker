@@ -20,7 +20,7 @@ app.route('/pwa', pwaRouter);
 export function formatReminderMessage(latestRun: { uploaded_at: string; file_name: string | null } | null): string {
   const lines = [
     '📋 **發票匯入提醒**',
-    '請至財政部電子發票整合服務平台下載最新 CSV 並使用 `/import` 上傳。',
+    '請至財政部電子發票整合服務平台下載最新 CSV，並於 PWA 的「匯入」頁面上傳。',
   ];
   if (latestRun) {
     const utc8Date = new Date(new Date(latestRun.uploaded_at).getTime() + 8 * 60 * 60 * 1000)

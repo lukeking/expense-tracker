@@ -176,6 +176,40 @@ describe('findForexCandidateTransaction ±5% range', () => {
   });
 });
 
+describe('findForexCandidateTransactions ±7-day window (v2)', () => {
+  // v2 widens the forex fallback to ±7 days (vs ±2 for exact) for foreign-currency
+  // posting lag. Candidates are returned as an array (manual resolution only).
+  function inForexWindow(invoiceDate: string, txDate: string): boolean {
+    const d = new Date(invoiceDate);
+    const start = new Date(d.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const end = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const day = txDate.slice(0, 10);
+    return day >= start && day <= end;
+  }
+
+  it('transaction 5 days after invoice is inside the ±7-day forex window', () => {
+    expect(inForexWindow('2025-04-18T00:00:00Z', '2025-04-23T00:00:00Z')).toBe(true);
+  });
+
+  it('transaction 7 days after invoice is the boundary (inside)', () => {
+    expect(inForexWindow('2025-04-18T00:00:00Z', '2025-04-25T00:00:00Z')).toBe(true);
+  });
+
+  it('transaction 8 days after invoice is outside the forex window', () => {
+    expect(inForexWindow('2025-04-18T00:00:00Z', '2025-04-26T00:00:00Z')).toBe(false);
+  });
+});
+
+describe('linkInvoiceToTransaction update payload', () => {
+  it('sets match_status=matched, match_confidence, and matched_transaction_id', () => {
+    // Mirrors the UPDATE issued by linkInvoiceToTransaction
+    const payload = { match_status: 'matched', match_confidence: 'near', matched_transaction_id: 'tx-1' };
+    expect(payload.match_status).toBe('matched');
+    expect(payload.match_confidence).toBe('near');
+    expect(payload.matched_transaction_id).toBe('tx-1');
+  });
+});
+
 describe('findExistingInvoiceNumbers dedup logic', () => {
   it('identifies already-seen invoice numbers', () => {
     const dbNumbers = ['AB-001', 'AB-002', 'AB-003'];

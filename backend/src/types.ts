@@ -76,6 +76,13 @@ export type InvoiceMatchStatus =
   | 'skipped_zero'
   | 'parse_failed';
 
+// Invoice Import v2 — `exact` requires same calendar day AND exact net amount;
+// `near` is every other linked match (different day or different amount, incl. forex).
+export type MatchConfidence = 'exact' | 'near';
+
+// Result of items handling when an invoice is linked to a transaction.
+export type ItemsOutcome = 'filled' | 'kept' | 'replaced';
+
 export interface InvoiceItem {
   name: string;
   quantity: number;
@@ -96,6 +103,7 @@ export interface Invoice {
   items: InvoiceItem[] | null;
   invoice_status: 'active' | 'voided';
   match_status: InvoiceMatchStatus;
+  match_confidence: MatchConfidence | null;
   matched_transaction_id: string | null;
   created_at: string;
 }
@@ -113,8 +121,57 @@ export interface ImportRun {
   ambiguous_count: number;
   forex_resolved_count: number;
   parse_failed_count: number;
+  matched_exact_count: number;
+  matched_near_count: number;
+  skipped_unmatched_count: number;
   uploaded_at: string;
   created_at: string;
+}
+
+// ─── Invoice Import v2 response shapes ────────────────────────────────────────
+
+// One row in the post-import / post-resolve "matched" list.
+export interface MatchedInvoiceDetail {
+  seller_name: string | null;
+  invoice_number: string;
+  transaction_at: string;
+  amount: number;
+  confidence: MatchConfidence;
+  items_outcome: ItemsOutcome;
+}
+
+// POST /pwa/import response body.
+export interface ImportSummary {
+  filename: string | null;
+  matched_exact: number;
+  matched_near: number;
+  ambiguous: number;
+  skipped_unmatched: number;
+  skipped_duplicate: number;
+  skipped_voided: number;
+  skipped_zero: number;
+  matched: MatchedInvoiceDetail[];
+}
+
+// A candidate transaction shown for an ambiguous invoice.
+export interface AmbiguousCandidate {
+  id: string;
+  transaction_at: string;
+  amount: number;
+  note: string | null;
+  items: { name: string; amount: number | null }[];
+}
+
+// One entry in GET /pwa/import/ambiguous.
+export interface AmbiguousInvoiceEntry {
+  id: string;
+  invoice_number: string;
+  seller_name: string | null;
+  invoice_date: string;
+  net_amount: number;
+  items: InvoiceItem[] | null;
+  candidate_source: 'exact' | 'forex';
+  candidates: AmbiguousCandidate[];
 }
 
 export interface RawInvoiceRow {
