@@ -98,7 +98,8 @@ replaced (not duplicated) and other invoice lines are not added.
 
 1. **Given** a transaction with a placeholder item, **When** the user manually links an
    invoice and chooses to replace that placeholder with one invoice line, **Then** the
-   transaction ends with the invoice line in place of the placeholder (no duplicate).
+   placeholder's name becomes the invoice line's name (no duplicate) while its amount,
+   effective amount, and tags are preserved.
 2. **Given** a multi-line invoice, **When** the user replaces a placeholder with one line,
    **Then** only that line is applied — the other lines are not added.
 3. **Given** the user does not choose replace, **When** they manually link, **Then**
@@ -112,16 +113,27 @@ replaced (not duplicated) and other invoice lines are not added.
   considered → must remain ambiguous (never silently auto-link to one).
 - Discount-aware matching must not widen matches for transactions that record fees or
   refunds rather than discounts (only discounts raise the comparison amount).
-- Replacing a placeholder whose amount differs from the invoice line → the transaction's
-  paid amount is unchanged; the item breakdown is reconciled as it is for any item edit.
+- Replacing a placeholder whose amount differs from the invoice line → only the item name
+  changes; the existing amount and effective amount are kept, so the item breakdown and the
+  paid total are unchanged.
 - "Mark all as read" with zero unacknowledged matches is a no-op.
+
+## Clarifications
+
+### Session 2026-06-05
+
+- Q: After a match is marked read and leaves the review list, how can it still be un-linked? → A: A "顯示已讀" toggle keeps acknowledged (read) matches listed and un-linkable on demand, hidden by default.
+- Q: When replacing a placeholder item with an invoice line, what carries over? → A: Rename only — take the invoice line's name but keep the existing item's amount, effective amount, and tags (the recorded amount reflects discounts the invoice's face amount doesn't).
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
 - **FR-001**: The linked-invoice review list MUST show only matches the user has not yet
-  acknowledged (marked as read).
+  acknowledged (marked as read) **by default**.
+- **FR-001a**: Users MUST be able to reveal acknowledged (read) matches on demand (a
+  "顯示已讀" toggle), and a revealed acknowledged match MUST remain un-linkable — so the
+  list stays the single un-link surface for any matched invoice.
 - **FR-002**: Users MUST be able to mark an individual linked invoice as read, removing it
   from the review list.
 - **FR-003**: Users MUST be able to mark all currently-listed linked invoices as read in
@@ -140,8 +152,10 @@ replaced (not duplicated) and other invoice lines are not added.
 - **FR-009**: When exactly one expense matches an invoice by pre-discount total (and none
   by paid amount), the system MUST auto-link it; if more than one matches, it MUST remain
   ambiguous (never silently pick one).
-- **FR-010**: During manual link, users MUST be able to replace a chosen existing item with
-  a selected invoice line, as an alternative to appending.
+- **FR-010**: During manual link, users MUST be able to replace a chosen existing item's
+  name with a selected invoice line's name, as an alternative to appending. The replace
+  MUST preserve the existing item's amount, effective amount, and tags (the recorded amount
+  reflects discounts that the invoice's face amount does not).
 - **FR-011**: A replace action MUST apply only the user-selected invoice line(s) and MUST
   NOT add other lines from the same invoice.
 - **FR-012**: All actions in this feature MUST remain enrichment-only — no action creates
@@ -185,9 +199,10 @@ replaced (not duplicated) and other invoice lines are not added.
   out of scope for raising the match amount (they have different, messier semantics).
 - US2 only helps expenses recorded *with* their discount going forward; legacy flat-amount
   expenses are not repaired by it and continue to rely on manual link.
-- For US3, replacing a placeholder item adopts the invoice line's name and amount while
-  preserving the existing item's category tags (so the user keeps categorisation while
-  gaining the real product name). [To confirm in /speckit-clarify if undesired.]
+- For US3, replacing a placeholder item changes only its name to the invoice line's name,
+  preserving the existing item's amount, effective amount, and tags — because the recorded
+  amount reflects discounts (e.g. an eco-cup discount) that the invoice's face amount does
+  not. (Clarified 2026-06-05.)
 - Acknowledgement (read) state is per-invoice and one-way; there is no "mark as unread"
   in this feature (a re-match after un-link naturally produces a fresh, unread match).
 - The matched/linked review list and the awaiting-resolution list both reflect the full

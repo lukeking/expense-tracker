@@ -31,7 +31,8 @@
 
 ## Notes
 
-- US3 item-replace tag behaviour is captured as an assumption (preserve existing tags,
-  adopt invoice line name + amount). Flagged for optional confirmation in `/speckit-clarify`;
-  not a blocking ambiguity — a reasonable default exists, so no [NEEDS CLARIFICATION] marker.
+- Clarified in `/speckit-clarify` (Session 2026-06-05):
+  - US1 — acknowledged (read) matches stay un-linkable via a "顯示已讀" toggle (hidden by default).
+  - US3 — replace is rename-only: take the invoice line's name, keep the existing item's
+    amount, effective amount, and tags.
 - Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`.
