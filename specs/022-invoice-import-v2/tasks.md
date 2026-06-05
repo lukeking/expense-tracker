@@ -116,7 +116,7 @@ Web app: backend CF Worker at `backend/`, PWA at `pwa/`. Paths below are repo-re
 
 - [X] T020 [P] Run the full backend suite (`cd backend && pnpm test`) and fix any regressions across invoice-matcher / queries / discord / pwa-import tests
 - [X] T021 Deploy step: re-run `cd backend && pnpm tsx scripts/register-commands.ts` to deregister the removed Discord `/import` and `/reconcile` commands (per quickstart.md)
-- [ ] T022 Run `specs/022-invoice-import-v2/quickstart.md` end-to-end (import → resolve keep & replace → re-import dedup; verify transaction count unchanged)
+- [X] T022 Run `specs/022-invoice-import-v2/quickstart.md` end-to-end (import → resolve keep & replace → re-import dedup; verify transaction count unchanged)
 
 ---
 
