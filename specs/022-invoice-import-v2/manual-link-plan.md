@@ -115,3 +115,18 @@ filled items (remove via the edit screen). Applies cleanly to all new links.
 
 - **D** discount-aware matching (deferred).
 - Replace/delete of existing items inside manual-link (use `EditExpenseSheet`).
+
+## Deferred enhancements
+
+- **Discount-aware matching (D)** — match invoice net against a transaction's gross
+  (`amount` + recorded discount adjustments) so a properly-recorded discounted expense
+  auto-links. Only helps future entries that record the discount; doesn't fix legacy-flat
+  rows. See the earlier conversation; not built.
+- **Per-item replace toggle in manual-link ("用發票品項取代")** — let a *checked* invoice
+  item replace a *chosen existing* item, rather than only appending. Motivating case:
+  legacy-imported transactions carry placeholder items (e.g. `早餐` / tag `食:早餐`) that
+  the user wants overwritten with the invoice's real product name. Append-only can't do
+  this, and the resolve flow's blunt "取代品項" (replace ALL) would wrongly pull in sibling
+  invoice lines (e.g. a pre-paid item). Workaround today: link with nothing checked, then
+  rename the placeholder in `EditExpenseSheet`. Worth building only if invoice-driven
+  cleanup of legacy items becomes frequent — it adds a second item-editor surface.
