@@ -24,7 +24,7 @@ export interface AmbiguousEntry {
   seller_name: string | null;
   invoice_date: string;
   net_amount: number;
-  items: { name: string }[] | null;
+  items: { name: string; amount: number | null }[] | null;
   candidate_source: 'exact' | 'forex';
   candidates: Candidate[];
 }
@@ -34,7 +34,7 @@ function fmtDate(iso: string): string {
   return `${String(d.getUTCMonth() + 1).padStart(2, '0')}/${String(d.getUTCDate()).padStart(2, '0')}`;
 }
 
-export function AmbiguousInvoiceCard({ entry, onResolved }: { entry: AmbiguousEntry; onResolved: (r: MatchedDetail) => void }) {
+export function AmbiguousInvoiceCard({ entry, onResolved, onManualLink }: { entry: AmbiguousEntry; onResolved: (r: MatchedDetail) => void; onManualLink: () => void }) {
   const [selected, setSelected] = useState<string | null>(entry.candidates[0]?.id ?? null);
   const [replaceItems, setReplaceItems] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -112,6 +112,14 @@ export function AmbiguousInvoiceCard({ entry, onResolved }: { entry: AmbiguousEn
           </button>
         </>
       )}
+
+      <button
+        type="button"
+        onClick={onManualLink}
+        className="text-xs text-blue-600 dark:text-blue-400 underline self-start"
+      >
+        都不對？手動連結到其他交易
+      </button>
     </div>
   );
 }

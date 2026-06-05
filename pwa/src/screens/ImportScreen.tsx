@@ -1,9 +1,21 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { apiFetch, ApiError } from '../api/client';
 import { AmbiguousInvoiceCard, type AmbiguousEntry, type MatchedDetail } from '../components/AmbiguousInvoiceCard';
+import { ManualLinkSheet, type UnmatchedInvoice, type ManualLinkInvoice, type ManualLinkSource } from '../components/ManualLinkSheet';
+
+interface LinkedInvoice {
+  id: string;
+  invoice_number: string;
+  seller_name: string | null;
+  invoice_date: string;
+  net_amount: number;
+  match_confidence: 'exact' | 'near' | null;
+  transaction: { id: string; amount: number; transaction_at: string; note: string | null } | null;
+}
 
 interface ImportResult {
   filename: string | null;
+  import_run_id: string;
   matched_exact: number;
   matched_near: number;
   ambiguous: number;
@@ -12,6 +24,7 @@ interface ImportResult {
   skipped_voided: number;
   skipped_zero: number;
   matched: MatchedDetail[];
+  skipped_unmatched_detail: UnmatchedInvoice[];
 }
 
 const CONFIDENCE_LABEL: Record<MatchedDetail['confidence'], string> = { exact: '同日', near: '鄰近' };
@@ -24,9 +37,52 @@ export function ImportScreen() {
   const [error, setError] = useState('');
   const [matched, setMatched] = useState<MatchedDetail[]>([]);
   const [ambiguous, setAmbiguous] = useState<AmbiguousEntry[]>([]);
-  const [ambiguousCount, setAmbiguousCount] = useState(0);
   const [exactCount, setExactCount] = useState(0);
   const [nearCount, setNearCount] = useState(0);
+  const [unmatched, setUnmatched] = useState<UnmatchedInvoice[]>([]);
+  const [linkTarget, setLinkTarget] = useState<{ invoice: ManualLinkInvoice; source: ManualLinkSource } | null>(null);
+  const [linked, setLinked] = useState<LinkedInvoice[]>([]);
+  const [unlinking, setUnlinking] = useState<string | null>(null);
+
+  async function loadLinked() {
+    try {
+      const data = await apiFetch<{ matched: LinkedInvoice[] }>('/pwa/import/matched');
+      setLinked(data.matched);
+    } catch {
+      // Non-critical: the management list just stays empty if it fails to load.
+    }
+  }
+
+  // Always load the full ambiguous backlog (incl. invoices held by earlier imports),
+  // not just what the current run produced — otherwise leftovers are orphaned.
+  async function loadAmbiguous() {
+    try {
+      const data = await apiFetch<{ ambiguous: AmbiguousEntry[] }>('/pwa/import/ambiguous');
+      setAmbiguous(data.ambiguous);
+    } catch {
+      // Non-critical: the list just stays empty if it fails to load.
+    }
+  }
+
+  useEffect(() => {
+    loadLinked();
+    loadAmbiguous();
+  }, []);
+
+  async function handleUnlink(invoiceId: string) {
+    setUnlinking(invoiceId);
+    try {
+      await apiFetch('/pwa/import/unlink', {
+        method: 'POST',
+        body: JSON.stringify({ invoice_id: invoiceId }),
+      });
+      setLinked((prev) => prev.filter((l) => l.id !== invoiceId));
+    } catch {
+      // Leave the row in place on failure so the user can retry.
+    } finally {
+      setUnlinking(null);
+    }
+  }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     setFile(e.target.files?.[0] ?? null);
@@ -45,15 +101,11 @@ export function ImportScreen() {
       const data = await apiFetch<ImportResult>('/pwa/import', { method: 'POST', body: formData });
       setResult(data);
       setMatched(data.matched);
+      setUnmatched(data.skipped_unmatched_detail);
       setExactCount(data.matched_exact);
       setNearCount(data.matched_near);
-      setAmbiguousCount(data.ambiguous);
-      if (data.ambiguous > 0) {
-        const amb = await apiFetch<{ ambiguous: AmbiguousEntry[] }>('/pwa/import/ambiguous');
-        setAmbiguous(amb.ambiguous);
-      } else {
-        setAmbiguous([]);
-      }
+      loadAmbiguous();
+      loadLinked();
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.code === 'INVALID_CSV') setError(`無效的 CSV 格式：${err.message}`);
@@ -70,9 +122,44 @@ export function ImportScreen() {
   function handleResolved(entryId: string, resolved: MatchedDetail) {
     setAmbiguous((prev) => prev.filter((e) => e.id !== entryId));
     setMatched((prev) => [...prev, resolved]);
-    setAmbiguousCount((n) => Math.max(0, n - 1));
     if (resolved.confidence === 'exact') setExactCount((n) => n + 1);
     else setNearCount((n) => n + 1);
+  }
+
+  function openUnmatchedLink(u: UnmatchedInvoice) {
+    setLinkTarget({
+      invoice: {
+        invoice_number: u.invoice_number,
+        seller_name: u.seller_name,
+        invoice_date: u.invoice_date,
+        net_amount: u.net_amount,
+        items: u.items.map((i) => ({ name: i.name, amount: i.amount })),
+      },
+      source: { kind: 'unmatched', payload: u, importRunId: result!.import_run_id },
+    });
+  }
+
+  function openAmbiguousLink(entry: AmbiguousEntry) {
+    setLinkTarget({
+      invoice: {
+        invoice_number: entry.invoice_number,
+        seller_name: entry.seller_name,
+        invoice_date: entry.invoice_date,
+        net_amount: entry.net_amount,
+        items: (entry.items ?? []).map((i) => ({ name: i.name, amount: i.amount })),
+      },
+      source: { kind: 'ambiguous', invoiceId: entry.id },
+    });
+  }
+
+  function handleLinked(resolved: MatchedDetail) {
+    setUnmatched((prev) => prev.filter((u) => u.invoice_number !== resolved.invoice_number));
+    setAmbiguous((prev) => prev.filter((e) => e.invoice_number !== resolved.invoice_number));
+    setMatched((prev) => [...prev, resolved]);
+    if (resolved.confidence === 'exact') setExactCount((n) => n + 1);
+    else setNearCount((n) => n + 1);
+    setLinkTarget(null);
+    loadLinked();
   }
 
   function reset() {
@@ -80,15 +167,18 @@ export function ImportScreen() {
     setResult(null);
     setError('');
     setMatched([]);
-    setAmbiguous([]);
+    setUnmatched([]);
+    // Keep the persistent backlogs visible; refresh them.
+    loadAmbiguous();
+    loadLinked();
   }
 
   const resultRows = result
     ? [
         { label: '已配對（同日）', value: exactCount },
         { label: '已配對（鄰近）', value: nearCount },
-        { label: '模糊待處理', value: ambiguousCount },
-        { label: '略過（未配對）', value: result.skipped_unmatched },
+        { label: '模糊待處理', value: ambiguous.length },
+        { label: '略過（未配對）', value: unmatched.length },
         { label: '略過（重複）', value: result.skipped_duplicate },
         { label: '略過（作廢）', value: result.skipped_voided },
         { label: '略過（零額）', value: result.skipped_zero },
@@ -125,6 +215,48 @@ export function ImportScreen() {
           >
             {loading ? '處理中…' : '上傳並處理'}
           </button>
+
+          {ambiguous.length > 0 && (
+            <div className="flex flex-col gap-3">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">待手動確認（{ambiguous.length}）</h3>
+              {ambiguous.map((entry) => (
+                <AmbiguousInvoiceCard key={entry.id} entry={entry} onResolved={(r) => handleResolved(entry.id, r)} onManualLink={() => openAmbiguousLink(entry)} />
+              ))}
+            </div>
+          )}
+
+          {linked.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">已配對發票（可解除）</h3>
+              <p className="text-xs text-gray-400 dark:text-gray-500">若發票配對到錯誤的交易，可在此解除連結。</p>
+              <div className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl overflow-hidden">
+                {linked.map((l) => (
+                  <div key={l.id} className="flex justify-between items-center gap-2 px-4 py-3 border-b border-gray-50 dark:border-gray-700 last:border-0">
+                    <div className="min-w-0">
+                      <p className="text-sm text-gray-800 dark:text-gray-100 truncate">{l.seller_name || '未知商家'}</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
+                        {l.invoice_number} · NT${l.net_amount.toLocaleString()} · {l.invoice_date}
+                      </p>
+                      {l.transaction && (
+                        <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
+                          → 交易 NT${l.transaction.amount.toLocaleString()}
+                          {l.transaction.note ? ` · ${l.transaction.note}` : ''}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleUnlink(l.id)}
+                      disabled={unlinking === l.id}
+                      className="shrink-0 text-xs px-3 py-1.5 rounded-lg border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 disabled:opacity-50"
+                    >
+                      {unlinking === l.id ? '解除中…' : '解除'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </>
       ) : (
         <>
@@ -148,7 +280,7 @@ export function ImportScreen() {
             <div className="flex flex-col gap-3">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white">待手動確認（{ambiguous.length}）</h3>
               {ambiguous.map((entry) => (
-                <AmbiguousInvoiceCard key={entry.id} entry={entry} onResolved={(r) => handleResolved(entry.id, r)} />
+                <AmbiguousInvoiceCard key={entry.id} entry={entry} onResolved={(r) => handleResolved(entry.id, r)} onManualLink={() => openAmbiguousLink(entry)} />
               ))}
             </div>
           )}
@@ -173,6 +305,32 @@ export function ImportScreen() {
             </div>
           )}
 
+          {unmatched.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">略過·未配對（{unmatched.length}）</h3>
+              <p className="text-xs text-gray-400 dark:text-gray-500">找不到金額與日期相符的交易。可手動連結到既有交易（否則不會被儲存）。</p>
+              <div className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl overflow-hidden">
+                {unmatched.map((u) => (
+                  <div key={u.invoice_number} className="flex justify-between items-center gap-2 px-4 py-3 border-b border-gray-50 dark:border-gray-700 last:border-0">
+                    <div className="min-w-0">
+                      <p className="text-sm text-gray-800 dark:text-gray-100 truncate">{u.seller_name || '未知商家'}</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
+                        {u.invoice_number} · NT${u.net_amount.toLocaleString()} · {u.invoice_date.slice(0, 10)}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openUnmatchedLink(u)}
+                      className="shrink-0 text-xs px-3 py-1.5 rounded-lg border border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400"
+                    >
+                      手動連結
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <button
             type="button"
             onClick={reset}
@@ -181,6 +339,15 @@ export function ImportScreen() {
             再次匯入
           </button>
         </>
+      )}
+
+      {linkTarget && (
+        <ManualLinkSheet
+          invoice={linkTarget.invoice}
+          source={linkTarget.source}
+          onClose={() => setLinkTarget(null)}
+          onLinked={handleLinked}
+        />
       )}
     </div>
   );
