@@ -41,7 +41,7 @@ Web app: backend CF Worker at `backend/`, PWA at `pwa/`. Paths below are repo-re
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T002 Apply migration 020 to the Supabase dev database (operational prerequisite for any pipeline write)
+- [X] T002 Apply migration 020 to the Supabase dev database (operational prerequisite for any pipeline write)
 - [X] T003 [P] Update `backend/src/types.ts`: add `match_confidence: 'exact' | 'near' | null` to `Invoice`; add `MatchConfidence` and `ItemsOutcome` (`'filled' | 'kept' | 'replaced'`) types; add v2 import-summary + matched-detail + ambiguous-candidate response types; add the three new `import_runs` count fields to `ImportRun`; prune v1-only types no longer produced (`held_forex`/`auto_created`/`parse_failed` usages) where safe
 - [X] T004 Remove the Discord CSV-import surface so nothing depends on the old pipeline shape: delete the `import` and `reconcile` command dispatch + `handleImportCommand`, import-summary builder, `handleReconcileCommand`, `handleReconcileLink`, `handleReconcileSkip`, and the `reconcile_link:`/`reconcile_skip:` button dispatch in `backend/src/handlers/discord.ts`; remove the `import` and `reconcile` defs in `backend/scripts/register-commands.ts`; update the `/import` help text in `backend/src/index.ts`; drop import/reconcile cases in `backend/tests/handlers/discord.test.ts`
 - [X] T005 Update `backend/src/db/queries.ts` (after T004): widen `findForexCandidateTransaction` → `findForexCandidateTransactions` returning `Transaction[]` (drop `.limit(1)`, ±5% amount band, **±7-day** window, unlinked expense); add `linkInvoiceToTransaction(supabase, invoiceId, txId, confidence)` setting `match_status='matched'` + `match_confidence` + `matched_transaction_id`; remove now-dead `findExactMatchIncludingLinked`, `findAllHeldForexInvoices`, `resolveHeldInvoice`
@@ -115,7 +115,7 @@ Web app: backend CF Worker at `backend/`, PWA at `pwa/`. Paths below are repo-re
 ## Phase 6: Polish & Cross-Cutting Concerns
 
 - [X] T020 [P] Run the full backend suite (`cd backend && pnpm test`) and fix any regressions across invoice-matcher / queries / discord / pwa-import tests
-- [ ] T021 Deploy step: re-run `cd backend && pnpm tsx scripts/register-commands.ts` to deregister the removed Discord `/import` and `/reconcile` commands (per quickstart.md)
+- [X] T021 Deploy step: re-run `cd backend && pnpm tsx scripts/register-commands.ts` to deregister the removed Discord `/import` and `/reconcile` commands (per quickstart.md)
 - [ ] T022 Run `specs/022-invoice-import-v2/quickstart.md` end-to-end (import → resolve keep & replace → re-import dedup; verify transaction count unchanged)
 
 ---
