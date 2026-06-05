@@ -130,3 +130,14 @@ filled items (remove via the edit screen). Applies cleanly to all new links.
   invoice lines (e.g. a pre-paid item). Workaround today: link with nothing checked, then
   rename the placeholder in `EditExpenseSheet`. Worth building only if invoice-driven
   cleanup of legacy items becomes frequent — it adds a second item-editor surface.
+
+- **"Mark as read" on linked cards (已配對發票 review-queue)** — solves the unbounded-growth
+  + N+1 cost of loading *every* matched invoice on screen entry. Add a per-card 已讀 action
+  (and a 全部標為已讀 bulk action) that hides a matched invoice from 已配對發票 once the user
+  has verified the match. The list becomes a review queue of *unacknowledged* matches, not a
+  full history — so it stays small and the N+1 transaction fetch is over a handful of rows.
+  Ambiguous cards are NOT dismissible — they persist in 待手動確認 until finally linked.
+  Sketch: `invoices.reviewed_at timestamptz NULL` (migration 022); `findAllMatchedInvoices`
+  filters `reviewed_at IS NULL`; `POST /pwa/import/mark-read` (single + bulk by id list); UI
+  buttons on `ImportScreen`'s 已配對發票 section. (Until then, an interim cheap win is batching
+  the `GET /import/matched` transaction fetch into one `.in('id', […])` query.)
