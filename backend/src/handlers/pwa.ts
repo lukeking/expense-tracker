@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import type { Env, PaymentMethod } from '../types';
+import type { Env, PaymentMethod, ParsedInvoice, UnmatchedInvoiceDetail, Invoice, InvoiceItem } from '../types';
 import { androidAuth } from '../middleware/android-auth';
 import { getSupabaseClient } from '../db/client';
 import {
@@ -15,10 +15,17 @@ import {
   getAdjustmentsForTransaction,
   deleteAdjustmentsForTransaction,
   findAllAmbiguousInvoices,
+  findAllMatchedInvoices,
+  findExistingInvoiceNumbers,
   findMatchingExpenseTransaction,
   findForexCandidateTransactions,
+  findTransactionsWithoutInvoiceInRange,
   enrichTransaction,
+  clearTransactionInvoiceLink,
   linkInvoiceToTransaction,
+  insertInvoice,
+  deleteInvoice,
+  deleteTransactionItemsBySourceInvoice,
   getTransactionItems,
   type TransactionForPeriod,
 } from '../db/queries';
@@ -746,6 +753,7 @@ pwaRouter.post('/import', async (c) => {
 
   return c.json({
     filename: file.name ?? null,
+    import_run_id: importRun.id,
     matched_exact: counters.matchedExact,
     matched_near: counters.matchedNear,
     ambiguous: counters.ambiguous,
@@ -754,6 +762,7 @@ pwaRouter.post('/import', async (c) => {
     skipped_voided: counters.skippedVoided,
     skipped_zero: counters.skippedZero,
     matched: counters.matched,
+    skipped_unmatched_detail: counters.skippedUnmatchedDetail,
   });
 });
 
@@ -844,7 +853,7 @@ pwaRouter.post('/import/resolve', async (c) => {
     invoiceId: invoice.id,
   });
   // 2. Handle items (replace, or fill-if-empty / keep).
-  const itemsOutcome = await applyInvoiceItems(supabase, tx.id, invoice.items ?? [], replace_items);
+  const itemsOutcome = await applyInvoiceItems(supabase, tx.id, invoice.items ?? [], replace_items, invoice.id);
   // 3. Flip invoice status last.
   const confidence = computeConfidence(
     new Date(invoice.invoice_date).toISOString(), tx.transaction_at, tx.amount, invoice.net_amount
@@ -859,6 +868,209 @@ pwaRouter.post('/import/resolve', async (c) => {
       amount: tx.amount,
       confidence,
       items_outcome: itemsOutcome,
+    },
+  });
+});
+
+// ─── GET /pwa/import/matched ──────────────────────────────────────────────────
+// Lists currently linked invoices with their matched transaction, so a wrong
+// auto-match (e.g. an amount collision) can be spotted and undone.
+
+pwaRouter.get('/import/matched', async (c) => {
+  const supabase = getSupabaseClient(c.env);
+  const invoices = await findAllMatchedInvoices(supabase);
+
+  const entries = [];
+  for (const inv of invoices) {
+    let transaction = null;
+    if (inv.matched_transaction_id) {
+      const { data: tx } = await supabase
+        .from('transactions')
+        .select('id, amount, transaction_at, note')
+        .eq('id', inv.matched_transaction_id)
+        .single();
+      if (tx) transaction = tx;
+    }
+    entries.push({
+      id: inv.id,
+      invoice_number: inv.invoice_number,
+      seller_name: inv.seller_name,
+      invoice_date: inv.invoice_date,
+      net_amount: inv.net_amount,
+      match_confidence: inv.match_confidence,
+      transaction,
+    });
+  }
+
+  return c.json({ matched: entries });
+});
+
+// ─── POST /pwa/import/unlink ──────────────────────────────────────────────────
+// Reverses an invoice→transaction link: detach the transaction (keeping it matched
+// if a receipt is still linked), remove only the items this invoice created (by
+// provenance) and recompute effective amounts, then delete the invoice row. The
+// transaction itself is never deleted (SC-003).
+
+pwaRouter.post('/import/unlink', async (c) => {
+  type Body = { invoice_id: string };
+  let body: Body;
+  try {
+    body = await c.req.json<Body>();
+  } catch {
+    return c.json({ error: 'INVALID_PAYLOAD', message: 'Invalid JSON' }, 400);
+  }
+  const { invoice_id } = body;
+  if (!invoice_id) {
+    return c.json({ error: 'INVALID_PAYLOAD', message: 'invoice_id is required' }, 400);
+  }
+
+  const supabase = getSupabaseClient(c.env);
+
+  const { data: invoice, error: invErr } = await supabase
+    .from('invoices').select('*').eq('id', invoice_id).single();
+  if (invErr || !invoice) return c.json({ error: 'NOT_FOUND', message: 'Invoice not found' }, 404);
+  if (invoice.match_status !== 'matched') {
+    return c.json({ error: 'INVOICE_NOT_MATCHED', message: 'Invoice is not linked to a transaction' }, 409);
+  }
+
+  const txId = invoice.matched_transaction_id;
+  if (txId) {
+    const { data: tx } = await supabase
+      .from('transactions').select('amount, matched_receipt_id').eq('id', txId).single();
+    // 1. Detach the transaction (stays matched only if a receipt is still linked).
+    await clearTransactionInvoiceLink(supabase, txId, tx?.matched_receipt_id != null);
+    // 2. Remove only the items this invoice created (by provenance), then recompute
+    //    effective amounts over whatever items remain.
+    await deleteTransactionItemsBySourceInvoice(supabase, txId, invoice_id);
+    if (tx) await computeAndWriteEffectiveAmounts(supabase, txId, tx.amount as number);
+  }
+  // 3. Delete the invoice row last (re-attempted on a future import).
+  await deleteInvoice(supabase, invoice_id);
+
+  return c.json({ unlinked: { invoice_number: invoice.invoice_number, transaction_id: txId } });
+});
+
+// ─── GET /pwa/import/link-candidates ──────────────────────────────────────────
+// Unlinked expense transactions near an invoice's date, for the manual-link picker.
+// No amount filter (manual link is amount-agnostic); the client filters by note/item.
+
+pwaRouter.get('/import/link-candidates', async (c) => {
+  const dateParam = c.req.query('date');
+  if (!dateParam) return c.json({ error: 'INVALID_PAYLOAD', message: 'date is required' }, 400);
+  const invoiceDate = new Date(dateParam);
+  if (isNaN(invoiceDate.getTime())) return c.json({ error: 'INVALID_PAYLOAD', message: 'invalid date' }, 400);
+  const windowDays = Number(c.req.query('window')) || 7;
+  const from = new Date(invoiceDate.getTime() - windowDays * 24 * 60 * 60 * 1000);
+  const to = new Date(invoiceDate.getTime() + windowDays * 24 * 60 * 60 * 1000);
+
+  const supabase = getSupabaseClient(c.env);
+  const txs = await findTransactionsWithoutInvoiceInRange(supabase, from, to);
+
+  const candidates = [];
+  for (const tx of txs) {
+    const items = await getTransactionItems(supabase, tx.id);
+    candidates.push({
+      id: tx.id,
+      transaction_at: tx.transaction_at,
+      amount: tx.amount,
+      note: tx.note,
+      items: items.map((it) => ({ name: it.name, amount: it.amount })),
+    });
+  }
+  return c.json({ candidates });
+});
+
+// ─── POST /pwa/import/manual-link ─────────────────────────────────────────────
+// Link an invoice to a user-chosen transaction, amount-agnostic. Two entry points:
+//   • `invoice_id` — an already-persisted `ambiguous` invoice (its forex candidates
+//     were wrong/empty); reuse the row and flip it to matched.
+//   • `invoice` (+ `import_run_id`) — an unmatched invoice (FR-007: carried by the
+//     client, not stored until now); persist it as pending first.
+// Then: append only the checked invoice line items (provenance-stamped; never deletes
+// existing items), recompute effective amounts, and flip to matched LAST.
+
+pwaRouter.post('/import/manual-link', async (c) => {
+  type Body = {
+    invoice_id?: string;
+    invoice?: UnmatchedInvoiceDetail;
+    import_run_id?: string;
+    transaction_id: string;
+    item_indexes?: number[];
+  };
+  let body: Body;
+  try {
+    body = await c.req.json<Body>();
+  } catch {
+    return c.json({ error: 'INVALID_PAYLOAD', message: 'Invalid JSON' }, 400);
+  }
+  const { invoice_id, invoice, import_run_id, transaction_id, item_indexes = [] } = body;
+  if (!transaction_id || (!invoice_id && !invoice)) {
+    return c.json({ error: 'INVALID_PAYLOAD', message: 'transaction_id and one of invoice_id / invoice are required' }, 400);
+  }
+
+  const supabase = getSupabaseClient(c.env);
+
+  // Resolve the invoice row: an existing ambiguous one, or insert the unmatched payload.
+  let inv: Invoice;
+  if (invoice_id) {
+    const { data, error } = await supabase.from('invoices').select('*').eq('id', invoice_id).single();
+    if (error || !data) return c.json({ error: 'NOT_FOUND', message: 'Invoice not found' }, 404);
+    if (data.match_status !== 'ambiguous') {
+      return c.json({ error: 'INVOICE_NOT_AMBIGUOUS', message: 'Invoice is not awaiting resolution' }, 409);
+    }
+    inv = data as Invoice;
+  } else {
+    if (!invoice!.invoice_number || !import_run_id) {
+      return c.json({ error: 'INVALID_PAYLOAD', message: 'invoice.invoice_number and import_run_id are required' }, 400);
+    }
+    const existing = await findExistingInvoiceNumbers(supabase, [invoice!.invoice_number]);
+    if (existing.length > 0) {
+      return c.json({ error: 'ALREADY_IMPORTED', message: 'Invoice already imported' }, 409);
+    }
+    const parsed: ParsedInvoice = { ...invoice!, invoice_date: new Date(invoice!.invoice_date) };
+    inv = await insertInvoice(supabase, parsed, import_run_id, 'pending');
+  }
+
+  const { data: tx, error: txErr } = await supabase
+    .from('transactions').select('*').eq('id', transaction_id).single();
+  if (txErr || !tx) return c.json({ error: 'NOT_FOUND', message: 'Transaction not found' }, 404);
+  if (tx.matched_invoice_id !== null) {
+    return c.json({ error: 'TRANSACTION_ALREADY_LINKED', message: 'Transaction already linked to an invoice' }, 409);
+  }
+
+  // Enrich the transaction.
+  await enrichTransaction(supabase, tx.id, {
+    invoiceNumber: inv.invoice_number,
+    sellerName: inv.seller_name,
+    sellerTaxId: inv.seller_tax_id,
+    invoiceId: inv.id,
+  });
+  // Append only the checked, positive-amount invoice items (provenance-stamped).
+  const invoiceItems: InvoiceItem[] = inv.items ?? [];
+  const positive = invoiceItems
+    .filter((_, idx) => item_indexes.includes(idx))
+    .filter((li) => li.amount == null || li.amount > 0);
+  if (positive.length > 0) {
+    const base = (await getTransactionItems(supabase, tx.id)).length;
+    await insertTransactionItems(supabase, tx.id, positive.map((li, i) => ({
+      name: li.name, amount: li.amount, tags: [], sort_order: base + i, source_invoice_id: inv.id,
+    })));
+    await computeAndWriteEffectiveAmounts(supabase, tx.id, tx.amount as number);
+  }
+  // Flip invoice status to matched LAST.
+  const confidence = computeConfidence(
+    new Date(inv.invoice_date).toISOString(), tx.transaction_at, tx.amount, inv.net_amount
+  );
+  await linkInvoiceToTransaction(supabase, inv.id, tx.id, confidence);
+
+  return c.json({
+    resolved: {
+      seller_name: inv.seller_name,
+      invoice_number: inv.invoice_number,
+      transaction_at: tx.transaction_at,
+      amount: tx.amount,
+      confidence,
+      items_outcome: positive.length > 0 ? 'filled' : 'kept',
     },
   });
 });

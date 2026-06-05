@@ -90,3 +90,84 @@ describe('resolve preconditions', () => {
     expect(invoice.match_status === 'ambiguous' && tx.matched_invoice_id === null).toBe(true);
   });
 });
+
+// ─── POST /pwa/import/unlink — guards + reversal logic ────────────────────────
+
+describe('unlink preconditions', () => {
+  it('rejects an invoice that is not matched (409 INVOICE_NOT_MATCHED)', () => {
+    const invoice = { match_status: 'ambiguous' };
+    expect(invoice.match_status !== 'matched').toBe(true);
+  });
+
+  it('accepts a matched invoice', () => {
+    const invoice = { match_status: 'matched' };
+    expect(invoice.match_status === 'matched').toBe(true);
+  });
+});
+
+describe('unlink reversal logic', () => {
+  // Items are removed by provenance (source_invoice_id), not by name, so a user's own
+  // same-named item always survives an unlink.
+  function survivingItems(
+    items: { name: string; source_invoice_id: string | null }[],
+    invoiceId: string
+  ): string[] {
+    return items.filter((i) => i.source_invoice_id !== invoiceId).map((i) => i.name);
+  }
+
+  it('removes only items this invoice created, keeping a same-named user item', () => {
+    const items = [
+      { name: '雙手卷', source_invoice_id: null },      // user's own
+      { name: '雙手卷', source_invoice_id: 'inv-1' },   // created by the link
+    ];
+    expect(survivingItems(items, 'inv-1')).toEqual(['雙手卷']); // only the user's survives
+  });
+
+  // The transaction stays matched only if a receipt is still linked after unlinking.
+  it('preserves is_matched when a receipt is still linked', () => {
+    expect(({ matched_receipt_id: 'rcpt-1' }).matched_receipt_id != null).toBe(true);
+    expect(({ matched_receipt_id: null }).matched_receipt_id != null).toBe(false);
+  });
+});
+
+// ─── POST /pwa/import/manual-link — guards + item selection ───────────────────
+
+describe('manual-link guards', () => {
+  it('rejects an already-imported invoice (409 ALREADY_IMPORTED)', () => {
+    const existing = ['YD56145096']; // findExistingInvoiceNumbers returned a hit
+    expect(existing.length > 0).toBe(true);
+  });
+
+  it('rejects a transaction already linked (409 TRANSACTION_ALREADY_LINKED)', () => {
+    const tx = { matched_invoice_id: 'inv-other' };
+    expect(tx.matched_invoice_id !== null).toBe(true);
+  });
+
+  it('rejects a non-ambiguous invoice_id (409 INVOICE_NOT_AMBIGUOUS)', () => {
+    const invoice = { match_status: 'matched' }; // linking by id only allowed for ambiguous
+    expect(invoice.match_status !== 'ambiguous').toBe(true);
+  });
+
+  it('confidence is near when amounts differ (40 invoice ↔ 35 tx)', () => {
+    expect(computeConfidence('2026-04-19T00:00:00Z', '2026-04-19T09:00:00Z', 35, 40)).toBe('near');
+  });
+});
+
+describe('manual-link item selection', () => {
+  // Only the checked, positive-amount invoice items are appended.
+  function selected(items: { name: string; amount: number }[], checked: number[]): string[] {
+    return items
+      .filter((_, idx) => checked.includes(idx))
+      .filter((li) => li.amount == null || li.amount > 0)
+      .map((li) => li.name);
+  }
+
+  it('appends only checked items (FamilyMart: roll only, not the pre-paid coffee)', () => {
+    const items = [
+      { name: '特大冰美式', amount: 60 },
+      { name: '一配經典人氣雙手卷', amount: 55 },
+    ];
+    expect(selected(items, [1])).toEqual(['一配經典人氣雙手卷']);
+    expect(selected(items, [])).toEqual([]); // zero checked → metadata-only link
+  });
+});

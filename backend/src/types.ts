@@ -140,9 +140,26 @@ export interface MatchedInvoiceDetail {
   items_outcome: ItemsOutcome;
 }
 
+// One row in the post-import "skipped (unmatched)" list. These invoices are not
+// persisted (FR-007), so this carries the full invoice payload — the client holds it
+// and passes it back to POST /pwa/import/manual-link to persist + link on demand.
+// `invoice_date` is ISO (ParsedInvoice uses a Date).
+export interface UnmatchedInvoiceDetail {
+  invoice_number: string;
+  seller_name: string;
+  seller_tax_id: string;
+  invoice_date: string;
+  gross_amount: number;
+  allowance: number;
+  net_amount: number;
+  invoice_status: 'active' | 'voided';
+  items: InvoiceItem[];
+}
+
 // POST /pwa/import response body.
 export interface ImportSummary {
   filename: string | null;
+  import_run_id: string;
   matched_exact: number;
   matched_near: number;
   ambiguous: number;
@@ -151,6 +168,7 @@ export interface ImportSummary {
   skipped_voided: number;
   skipped_zero: number;
   matched: MatchedInvoiceDetail[];
+  skipped_unmatched_detail: UnmatchedInvoiceDetail[];
 }
 
 // A candidate transaction shown for an ambiguous invoice.

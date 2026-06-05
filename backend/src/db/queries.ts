@@ -30,7 +30,7 @@ export async function insertTransaction(
 export async function insertTransactionItems(
   supabase: SupabaseClient,
   transactionId: string,
-  items: { name: string; amount?: number | null; tags?: string[]; sort_order?: number; note?: string | null }[]
+  items: { name: string; amount?: number | null; tags?: string[]; sort_order?: number; note?: string | null; source_invoice_id?: string | null }[]
 ): Promise<void> {
   if (items.length === 0) return;
   const rows = items.map((item, i) => {
@@ -44,6 +44,7 @@ export async function insertTransactionItems(
       tags: item.tags ?? [],
       sort_order: item.sort_order ?? i,
       note: item.note ?? null,
+      source_invoice_id: item.source_invoice_id ?? null,
     };
   });
   const { error } = await supabase.from('transaction_items').insert(rows);
@@ -393,6 +394,41 @@ export async function enrichTransaction(
   if (error) throw new Error(`enrichTransaction: ${error.message}`);
 }
 
+// Inverse of enrichTransaction: detach an invoice from a transaction. `isMatched`
+// is passed by the caller so a transaction still linked to a receipt stays matched.
+export async function clearTransactionInvoiceLink(
+  supabase: SupabaseClient,
+  txId: string,
+  isMatched: boolean
+): Promise<void> {
+  const { error } = await supabase
+    .from('transactions')
+    .update({
+      is_matched: isMatched,
+      invoice_number: null,
+      seller_name: null,
+      seller_tax_id: null,
+      matched_invoice_id: null,
+    })
+    .eq('id', txId);
+  if (error) throw new Error(`clearTransactionInvoiceLink: ${error.message}`);
+}
+
+export async function findAllMatchedInvoices(supabase: SupabaseClient): Promise<Invoice[]> {
+  const { data, error } = await supabase
+    .from('invoices')
+    .select('*')
+    .eq('match_status', 'matched')
+    .order('invoice_date', { ascending: false });
+  if (error) throw new Error(`findAllMatchedInvoices: ${error.message}`);
+  return (data ?? []) as Invoice[];
+}
+
+export async function deleteInvoice(supabase: SupabaseClient, invoiceId: string): Promise<void> {
+  const { error } = await supabase.from('invoices').delete().eq('id', invoiceId);
+  if (error) throw new Error(`deleteInvoice: ${error.message}`);
+}
+
 export async function findAllAmbiguousInvoices(supabase: SupabaseClient): Promise<Invoice[]> {
   const { data, error } = await supabase
     .from('invoices')
@@ -541,6 +577,21 @@ export async function replaceTransactionItems(
     .eq('transaction_id', transactionId);
   if (deleteError) throw new Error(`replaceTransactionItems delete: ${deleteError.message}`);
   await insertTransactionItems(supabase, transactionId, items);
+}
+
+// Removes only the items created by linking a given invoice (by provenance), so a
+// transaction's own user-entered items always survive an unlink.
+export async function deleteTransactionItemsBySourceInvoice(
+  supabase: SupabaseClient,
+  transactionId: string,
+  invoiceId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('transaction_items')
+    .delete()
+    .eq('transaction_id', transactionId)
+    .eq('source_invoice_id', invoiceId);
+  if (error) throw new Error(`deleteTransactionItemsBySourceInvoice: ${error.message}`);
 }
 
 export async function mergeTransactionFields(

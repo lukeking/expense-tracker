@@ -235,23 +235,24 @@ describe('runImportPipeline — SC-003 invariant (never creates transactions)', 
 describe('applyInvoiceItems', () => {
   const invItems = [{ name: 'A', quantity: 1, unit_price: 50, amount: 50 }, { name: 'B', quantity: 1, unit_price: 50, amount: 50 }];
 
-  it('fills when the transaction has no items', async () => {
+  it('fills when the transaction has no items, stamping provenance', async () => {
     const fake = makeFakeSupabase({ transaction_items: [] });
-    const outcome = await applyInvoiceItems(fake.client, 'tx-1', invItems, false);
+    const outcome = await applyInvoiceItems(fake.client, 'tx-1', invItems, false, 'inv-1');
     expect(outcome).toBe('filled');
     expect(fake.tables.transaction_items).toHaveLength(2);
+    expect(fake.tables.transaction_items.every((i) => i.source_invoice_id === 'inv-1')).toBe(true);
   });
 
   it('keeps existing items untouched (no replace)', async () => {
     const fake = makeFakeSupabase({ transaction_items: [{ id: 'x', transaction_id: 'tx-1', name: 'keep', amount: 100 }] });
-    const outcome = await applyInvoiceItems(fake.client, 'tx-1', invItems, false);
+    const outcome = await applyInvoiceItems(fake.client, 'tx-1', invItems, false, 'inv-1');
     expect(outcome).toBe('kept');
     expect(fake.tables.transaction_items.map((i) => i.name)).toEqual(['keep']);
   });
 
   it('replaces existing items when replace=true', async () => {
     const fake = makeFakeSupabase({ transaction_items: [{ id: 'x', transaction_id: 'tx-1', name: 'old', amount: 100 }] });
-    const outcome = await applyInvoiceItems(fake.client, 'tx-1', invItems, true);
+    const outcome = await applyInvoiceItems(fake.client, 'tx-1', invItems, true, 'inv-1');
     expect(outcome).toBe('replaced');
   });
 });

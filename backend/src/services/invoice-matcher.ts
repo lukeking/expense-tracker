@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { ParsedInvoice, InvoiceItem, MatchConfidence, ItemsOutcome, MatchedInvoiceDetail } from '../types';
+import type { ParsedInvoice, InvoiceItem, MatchConfidence, ItemsOutcome, MatchedInvoiceDetail, UnmatchedInvoiceDetail } from '../types';
 import {
   findExistingInvoiceNumbers,
   findMatchingExpenseTransaction,
@@ -26,6 +26,7 @@ export interface PipelineCounters {
   skippedZero: number;
   parseFailed: number;
   matched: MatchedInvoiceDetail[];
+  skippedUnmatchedDetail: UnmatchedInvoiceDetail[];
 }
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -53,11 +54,12 @@ export async function applyInvoiceItems(
   supabase: SupabaseClient,
   transactionId: string,
   invoiceLineItems: InvoiceItem[],
-  replace: boolean
+  replace: boolean,
+  invoiceId: string
 ): Promise<ItemsOutcome> {
   const positiveItems = invoiceLineItems.filter((li) => li.amount == null || li.amount > 0);
   const mapItems = () =>
-    positiveItems.map((li, idx) => ({ name: li.name, amount: li.amount, tags: [] as string[], sort_order: idx }));
+    positiveItems.map((li, idx) => ({ name: li.name, amount: li.amount, tags: [] as string[], sort_order: idx, source_invoice_id: invoiceId }));
 
   if (replace) {
     await replaceTransactionItems(supabase, transactionId, mapItems());
@@ -88,6 +90,7 @@ export async function runImportPipeline(
     skippedZero: initialSkipped.zeroCount,
     parseFailed: initialSkipped.parseFailedCount,
     matched: [],
+    skippedUnmatchedDetail: [],
   };
 
   // Dedup by invoice_number before any matching (FR-001).
@@ -115,7 +118,7 @@ export async function runImportPipeline(
           sellerTaxId: invoice.seller_tax_id || null,
           invoiceId: inv.id,
         });
-        const itemsOutcome = await applyInvoiceItems(supabase, tx.id, invoice.items, false);
+        const itemsOutcome = await applyInvoiceItems(supabase, tx.id, invoice.items, false, inv.id);
         if (confidence === 'exact') counters.matchedExact++;
         else counters.matchedNear++;
         counters.matched.push({
@@ -137,8 +140,20 @@ export async function runImportPipeline(
           counters.ambiguous++;
         } else {
           // Zero candidates — counted only; no invoice row persisted (FR-007), so a
-          // later import can retry once a matching transaction exists.
+          // later import can retry once a matching transaction exists. The detail is
+          // surfaced in the response so the user can see which invoices didn't match.
           counters.skippedUnmatched++;
+          counters.skippedUnmatchedDetail.push({
+            invoice_number: invoice.invoice_number,
+            seller_name: invoice.seller_name,
+            seller_tax_id: invoice.seller_tax_id,
+            invoice_date: invoice.invoice_date.toISOString(),
+            gross_amount: invoice.gross_amount,
+            allowance: invoice.allowance,
+            net_amount: invoice.net_amount,
+            invoice_status: invoice.invoice_status,
+            items: invoice.items,
+          });
         }
       }
     }
