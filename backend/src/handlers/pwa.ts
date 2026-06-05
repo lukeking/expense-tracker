@@ -792,6 +792,7 @@ pwaRouter.get('/import/ambiguous', async (c) => {
         transaction_at: tx.transaction_at,
         amount: tx.amount,
         note: tx.note,
+        tags: tx.tags,
         items: items.map((it) => ({ name: it.name, amount: it.amount })),
       });
     }
@@ -974,6 +975,7 @@ pwaRouter.get('/import/link-candidates', async (c) => {
       transaction_at: tx.transaction_at,
       amount: tx.amount,
       note: tx.note,
+      tags: tx.tags,
       items: items.map((it) => ({ name: it.name, amount: it.amount })),
     });
   }

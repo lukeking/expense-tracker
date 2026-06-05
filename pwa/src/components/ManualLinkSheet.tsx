@@ -37,6 +37,7 @@ interface Candidate {
   transaction_at: string;
   amount: number;
   note: string | null;
+  tags: string[];
   items: { name: string; amount: number | null }[];
 }
 
@@ -90,7 +91,7 @@ export function ManualLinkSheet({
 
   const filtered = candidates.filter((c) => {
     if (!filter.trim()) return true;
-    const hay = `${c.note ?? ''} ${c.items.map((i) => i.name).join(' ')}`.toLowerCase();
+    const hay = `${c.note ?? ''} ${c.tags.join(' ')} ${c.items.map((i) => i.name).join(' ')}`.toLowerCase();
     return hay.includes(filter.trim().toLowerCase());
   });
 
@@ -175,6 +176,7 @@ export function ManualLinkSheet({
                   />
                   <span className="text-gray-700 dark:text-gray-200">
                     NT${c.amount.toLocaleString()} · {fmtDate(c.transaction_at)}
+                    {c.tags.length > 0 ? ` · ${c.tags.join('/')}` : ''}
                     {c.note ? ` · ${c.note}` : ''}
                     {c.items.length > 0 && (
                       <span className="block text-xs text-gray-400 dark:text-gray-500">

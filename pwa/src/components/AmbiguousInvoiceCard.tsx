@@ -15,6 +15,7 @@ interface Candidate {
   transaction_at: string;
   amount: number;
   note: string | null;
+  tags: string[];
   items: { name: string; amount: number | null }[];
 }
 
@@ -83,6 +84,7 @@ export function AmbiguousInvoiceCard({ entry, onResolved, onManualLink }: { entr
               />
               <span className="text-gray-700 dark:text-gray-200">
                 NT${cand.amount.toLocaleString()} · {fmtDate(cand.transaction_at)}
+                {cand.tags.length > 0 ? ` · ${cand.tags.join('/')}` : ''}
                 {cand.note ? ` · ${cand.note}` : ''}
                 {cand.items.length > 0 && (
                   <span className="block text-xs text-gray-400 dark:text-gray-500">
