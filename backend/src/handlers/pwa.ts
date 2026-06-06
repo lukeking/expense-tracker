@@ -18,6 +18,7 @@ import {
   findAllMatchedInvoices,
   markInvoicesRead,
   getTransactionsByIds,
+  getTransactionItemsByTransactionIds,
   findExistingInvoiceNumbers,
   findMatchingExpenseTransaction,
   findForexCandidateTransactions,
@@ -885,22 +886,37 @@ pwaRouter.get('/import/matched', async (c) => {
   const supabase = getSupabaseClient(c.env);
   const invoices = await findAllMatchedInvoices(supabase, includeRead);
 
-  // Batched: one query for all linked transactions (no per-invoice N+1).
+  // Batched: one query for all linked transactions and one for their items (no
+  // per-invoice N+1), so the review screen can show enough detail to judge a match.
   const txIds = [...new Set(
     invoices.map((inv) => inv.matched_transaction_id).filter((id): id is string => id != null)
   )];
   const txs = await getTransactionsByIds(supabase, txIds);
   const txById = new Map(txs.map((tx) => [tx.id, tx]));
+  const itemRows = await getTransactionItemsByTransactionIds(supabase, txIds);
+  const itemsByTx = new Map<string, { name: string; amount: number | null; tags: string[] }[]>();
+  for (const it of itemRows) {
+    const arr = itemsByTx.get(it.transaction_id) ?? [];
+    arr.push({ name: it.name, amount: it.amount, tags: it.tags ?? [] });
+    itemsByTx.set(it.transaction_id, arr);
+  }
 
-  const entries = invoices.map((inv) => ({
-    id: inv.id,
-    invoice_number: inv.invoice_number,
-    seller_name: inv.seller_name,
-    invoice_date: inv.invoice_date,
-    net_amount: inv.net_amount,
-    match_confidence: inv.match_confidence,
-    transaction: inv.matched_transaction_id ? txById.get(inv.matched_transaction_id) ?? null : null,
-  }));
+  const entries = invoices.map((inv) => {
+    const tx = inv.matched_transaction_id ? txById.get(inv.matched_transaction_id) ?? null : null;
+    return {
+      id: inv.id,
+      invoice_number: inv.invoice_number,
+      seller_name: inv.seller_name,
+      invoice_date: inv.invoice_date,
+      net_amount: inv.net_amount,
+      allowance: inv.allowance, // discount folded out of the line items; lets the client
+                                // reconcile the displayed items (gross) back to net_amount
+      match_confidence: inv.match_confidence,
+      reviewed_at: inv.reviewed_at,
+      items: inv.items, // invoice line items (name + amount), for at-a-glance verification
+      transaction: tx ? { ...tx, items: itemsByTx.get(tx.id) ?? [] } : null,
+    };
+  });
 
   return c.json({ matched: entries });
 });

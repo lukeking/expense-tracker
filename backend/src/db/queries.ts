@@ -482,14 +482,30 @@ export async function markInvoicesRead(
 export async function getTransactionsByIds(
   supabase: SupabaseClient,
   ids: string[]
-): Promise<Pick<Transaction, 'id' | 'amount' | 'transaction_at' | 'note'>[]> {
+): Promise<Pick<Transaction, 'id' | 'amount' | 'transaction_at' | 'note' | 'tags'>[]> {
   if (ids.length === 0) return [];
   const { data, error } = await supabase
     .from('transactions')
-    .select('id, amount, transaction_at, note')
+    .select('id, amount, transaction_at, note, tags')
     .in('id', ids);
   if (error) throw new Error(`getTransactionsByIds: ${error.message}`);
-  return (data ?? []) as Pick<Transaction, 'id' | 'amount' | 'transaction_at' | 'note'>[];
+  return (data ?? []) as Pick<Transaction, 'id' | 'amount' | 'transaction_at' | 'note' | 'tags'>[];
+}
+
+// Batched fetch of items for a set of transactions (one query for the whole matched
+// list, keeping the review screen free of per-row round-trips).
+export async function getTransactionItemsByTransactionIds(
+  supabase: SupabaseClient,
+  txIds: string[]
+): Promise<Pick<TransactionItemRow, 'transaction_id' | 'name' | 'amount' | 'tags' | 'sort_order'>[]> {
+  if (txIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from('transaction_items')
+    .select('transaction_id, name, amount, tags, sort_order')
+    .in('transaction_id', txIds)
+    .order('sort_order', { ascending: true });
+  if (error) throw new Error(`getTransactionItemsByTransactionIds: ${error.message}`);
+  return (data ?? []) as Pick<TransactionItemRow, 'transaction_id' | 'name' | 'amount' | 'tags' | 'sort_order'>[];
 }
 
 export async function deleteInvoice(supabase: SupabaseClient, invoiceId: string): Promise<void> {

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { findAllMatchedInvoices, markInvoicesRead, getTransactionsByIds } from '../../src/db/queries';
+import { findAllMatchedInvoices, markInvoicesRead, getTransactionsByIds, getTransactionItemsByTransactionIds } from '../../src/db/queries';
 
 // Test the getMonthlySpend reduce logic directly — same formula as the implementation
 function computeMonthlySpend(rows: { amount: number; transaction_type: string }[]): number {
@@ -234,10 +234,11 @@ describe('findExistingInvoiceNumbers dedup logic', () => {
 // are covered against the implementation (not just mirrored).
 
 type Row = Record<string, unknown>;
-function makeFake(seed: { invoices?: Row[]; transactions?: Row[] }) {
+function makeFake(seed: { invoices?: Row[]; transactions?: Row[]; transaction_items?: Row[] }) {
   const tables: Record<string, Row[]> = {
     invoices: seed.invoices ?? [],
     transactions: seed.transactions ?? [],
+    transaction_items: seed.transaction_items ?? [],
   };
   const calls = { select: {} as Record<string, number> };
   function from(table: string) {
@@ -338,5 +339,27 @@ describe('getTransactionsByIds batched fetch (US1)', () => {
     const { client, calls } = makeFake({ transactions: [{ id: 't-1', amount: 1, transaction_at: 'x', note: null }] });
     expect(await getTransactionsByIds(client, [])).toEqual([]);
     expect(calls.select.transactions).toBeUndefined();
+  });
+});
+
+describe('getTransactionItemsByTransactionIds batched fetch (matched detail)', () => {
+  it('fetches items for all transactions in a single query (no N+1)', async () => {
+    const { client, calls } = makeFake({
+      transaction_items: [
+        { transaction_id: 't-1', name: '咖啡', amount: 60, tags: ['食:咖啡'], sort_order: 0 },
+        { transaction_id: 't-1', name: '蛋餅', amount: 35, tags: ['食:早餐'], sort_order: 1 },
+        { transaction_id: 't-2', name: '加油', amount: 259, tags: ['行:加油'], sort_order: 0 },
+      ],
+    });
+    const rows = await getTransactionItemsByTransactionIds(client, ['t-1', 't-2']);
+    expect(rows).toHaveLength(3);
+    expect(rows.filter((r) => r.transaction_id === 't-1').map((r) => r.name)).toEqual(['咖啡', '蛋餅']);
+    expect(calls.select.transaction_items).toBe(1);
+  });
+
+  it('returns [] without querying for an empty id list', async () => {
+    const { client, calls } = makeFake({ transaction_items: [{ transaction_id: 't-1', name: 'x', amount: 1, tags: [], sort_order: 0 }] });
+    expect(await getTransactionItemsByTransactionIds(client, [])).toEqual([]);
+    expect(calls.select.transaction_items).toBeUndefined();
   });
 });

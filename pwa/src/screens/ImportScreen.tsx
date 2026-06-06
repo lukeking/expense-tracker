@@ -9,8 +9,18 @@ interface LinkedInvoice {
   seller_name: string | null;
   invoice_date: string;
   net_amount: number;
+  allowance: number;
   match_confidence: 'exact' | 'near' | null;
-  transaction: { id: string; amount: number; transaction_at: string; note: string | null } | null;
+  reviewed_at: string | null;
+  items: { name: string; amount: number }[] | null;
+  transaction: {
+    id: string;
+    amount: number;
+    transaction_at: string;
+    note: string | null;
+    tags: string[];
+    items: { name: string; amount: number | null; tags: string[] }[];
+  } | null;
 }
 
 interface ImportResult {
@@ -46,6 +56,11 @@ export function ImportScreen() {
   const [showRead, setShowRead] = useState(false);
   const [markingRead, setMarkingRead] = useState<string | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
+  // Per-card detail fold. Read cards collapse by default, unread expand; an explicit
+  // toggle (stored by id) overrides the default.
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const isExpanded = (l: LinkedInvoice) => expanded[l.id] ?? (l.reviewed_at == null);
+  const toggleExpanded = (id: string, open: boolean) => setExpanded((prev) => ({ ...prev, [id]: !open }));
 
   // US1: the review queue shows only unacknowledged matches by default; 顯示已讀
   // refetches with include_read=true to reveal acknowledged (still un-linkable) ones.
@@ -90,6 +105,10 @@ export function ImportScreen() {
     }
   }
 
+  // When 顯示已讀 is on, acknowledged rows stay visible (dimmed + badge) so we flip
+  // reviewed_at in place; otherwise the row leaves the unread-only list.
+  const NOW = () => new Date().toISOString();
+
   async function handleMarkRead(invoiceId: string) {
     setMarkingRead(invoiceId);
     try {
@@ -97,7 +116,11 @@ export function ImportScreen() {
         method: 'POST',
         body: JSON.stringify({ invoice_id: invoiceId }),
       });
-      setLinked((prev) => prev.filter((l) => l.id !== invoiceId));
+      setLinked((prev) =>
+        showRead
+          ? prev.map((l) => (l.id === invoiceId ? { ...l, reviewed_at: NOW() } : l))
+          : prev.filter((l) => l.id !== invoiceId)
+      );
     } catch {
       // Leave the row in place on failure so the user can retry.
     } finally {
@@ -106,7 +129,7 @@ export function ImportScreen() {
   }
 
   async function handleMarkAllRead() {
-    const ids = linked.map((l) => l.id);
+    const ids = linked.filter((l) => !l.reviewed_at).map((l) => l.id);
     if (ids.length === 0) return;
     setMarkingAll(true);
     try {
@@ -114,7 +137,11 @@ export function ImportScreen() {
         method: 'POST',
         body: JSON.stringify({ invoice_ids: ids }),
       });
-      setLinked([]);
+      setLinked((prev) =>
+        showRead
+          ? prev.map((l) => (l.reviewed_at ? l : { ...l, reviewed_at: NOW() }))
+          : []
+      );
     } catch {
       // Leave the rows in place on failure so the user can retry.
     } finally {
@@ -273,7 +300,7 @@ export function ImportScreen() {
             <div className="flex justify-between items-center gap-2">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white">已配對發票（可解除）</h3>
               <div className="flex items-center gap-2 shrink-0">
-                {linked.length > 0 && (
+                {linked.some((l) => !l.reviewed_at) && (
                   <button
                     type="button"
                     onClick={handleMarkAllRead}
@@ -297,40 +324,100 @@ export function ImportScreen() {
               <p className="text-xs text-gray-400 dark:text-gray-500">{showRead ? '沒有已配對的發票。' : '沒有未讀的已配對發票。'}</p>
             ) : (
               <div className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl overflow-hidden">
-                {linked.map((l) => (
-                  <div key={l.id} className="flex justify-between items-center gap-2 px-4 py-3 border-b border-gray-50 dark:border-gray-700 last:border-0">
-                    <div className="min-w-0">
-                      <p className="text-sm text-gray-800 dark:text-gray-100 truncate">{l.seller_name || '未知商家'}</p>
-                      <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
-                        {l.invoice_number} · NT${l.net_amount.toLocaleString()} · {l.invoice_date}
-                      </p>
-                      {l.transaction && (
+                {linked.map((l) => {
+                  const open = isExpanded(l);
+                  const hasInvoiceItems = !!(l.items && l.items.length > 0);
+                  const hasTxItems = !!(l.transaction && l.transaction.items.length > 0);
+                  const foldable = hasInvoiceItems || hasTxItems;
+                  return (
+                    <div key={l.id} className={`flex justify-between items-start gap-2 px-4 py-3 border-b border-gray-50 dark:border-gray-700 last:border-0 ${l.reviewed_at ? 'opacity-60' : ''}`}>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm text-gray-800 dark:text-gray-100 truncate">{l.seller_name || '未知商家'}</p>
                         <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
-                          → 交易 NT${l.transaction.amount.toLocaleString()}
-                          {l.transaction.note ? ` · ${l.transaction.note}` : ''}
+                          {l.invoice_number} · NT${l.net_amount.toLocaleString()} · {l.invoice_date}
                         </p>
-                      )}
+
+                        {open && hasInvoiceItems && (
+                          <div className="mt-1.5">
+                            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">發票品項</p>
+                            {l.items!.map((i, idx) => (
+                              <div key={idx} className="flex justify-between gap-2 text-xs text-gray-400 dark:text-gray-500">
+                                <span className="truncate">{i.name}</span>
+                                <span className="shrink-0">{i.amount != null ? i.amount.toLocaleString() : '—'}</span>
+                              </div>
+                            ))}
+                            {l.allowance > 0 && (
+                              <>
+                                <div className="flex justify-between gap-2 text-xs text-gray-400 dark:text-gray-500">
+                                  <span>折讓</span><span className="shrink-0">−{l.allowance.toLocaleString()}</span>
+                                </div>
+                                <div className="flex justify-between gap-2 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-700 mt-0.5 pt-0.5">
+                                  <span>淨額</span><span className="shrink-0">{l.net_amount.toLocaleString()}</span>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        )}
+
+                        {l.transaction && (
+                          <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+                            → 交易 NT${l.transaction.amount.toLocaleString()}
+                            {l.transaction.tags.length > 0 ? ` · ${l.transaction.tags.join('/')}` : ''}
+                            {l.transaction.note ? ` · ${l.transaction.note}` : ''}
+                          </p>
+                        )}
+
+                        {open && hasTxItems && (
+                          <div className="mt-1">
+                            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">交易品項</p>
+                            {l.transaction!.items.map((i, idx) => {
+                              const cat = i.tags.find((t) => t.includes(':')) ?? i.tags[0];
+                              return (
+                                <div key={idx} className="flex justify-between gap-2 text-xs text-gray-400 dark:text-gray-500">
+                                  <span className="truncate">{i.name}{cat ? ` #${cat}` : ''}</span>
+                                  <span className="shrink-0">{i.amount != null ? i.amount.toLocaleString() : '—'}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {foldable && (
+                          <button
+                            type="button"
+                            onClick={() => toggleExpanded(l.id, open)}
+                            className="text-xs text-blue-600 dark:text-blue-400 mt-1.5"
+                          >
+                            {open ? '收合 ▴' : '展開 ▾'}
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        {l.reviewed_at ? (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">✓ 已讀</span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleMarkRead(l.id)}
+                            disabled={markingRead === l.id}
+                            className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 disabled:opacity-50"
+                          >
+                            {markingRead === l.id ? '處理中…' : '已讀'}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleUnlink(l.id)}
+                          disabled={unlinking === l.id}
+                          className="text-xs px-3 py-1.5 rounded-lg border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 disabled:opacity-50"
+                        >
+                          {unlinking === l.id ? '解除中…' : '解除'}
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex flex-col items-end gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handleMarkRead(l.id)}
-                        disabled={markingRead === l.id}
-                        className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 disabled:opacity-50"
-                      >
-                        {markingRead === l.id ? '處理中…' : '已讀'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleUnlink(l.id)}
-                        disabled={unlinking === l.id}
-                        className="text-xs px-3 py-1.5 rounded-lg border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 disabled:opacity-50"
-                      >
-                        {unlinking === l.id ? '解除中…' : '解除'}
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

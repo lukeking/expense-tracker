@@ -11,8 +11,14 @@ extend feature 022; only deltas are described.
 - **Behavior**: returns matched invoices (unread by default), each with its linked
   transaction. The linked transactions are fetched in **one batched** `.in('id', […])`
   query (replaces the per-invoice N+1).
-- **Response**: unchanged shape — `{ matched: [{ id, invoice_number, seller_name,
-  invoice_date, net_amount, match_confidence, transaction }] }`.
+- **Response**: `{ matched: [{ id, invoice_number, seller_name, invoice_date,
+  net_amount, allowance, match_confidence, reviewed_at, items, transaction }] }`.
+  `reviewed_at` is exposed so the client can visually distinguish acknowledged rows when
+  顯示已讀 is on. `items` is the invoice's line items (which sum to gross — the parser folds
+  negative/discount lines into `allowance`); `allowance` lets the client reconcile the
+  displayed items back to `net_amount` (`Σ items − allowance = net`). `transaction` carries
+  `tags` and its own `items` (name/amount/tags) — all batched (one query each across the
+  list) — so a reviewer can judge a match beyond the bare total. SC-002 preserved.
 
 ### `POST /pwa/import/mark-read` (new)
 - **Body**: `{ invoice_id?: string, invoice_ids?: string[] }` — at least one required.

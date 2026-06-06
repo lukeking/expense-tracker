@@ -35,7 +35,7 @@ Backend CF Worker at `backend/`, PWA at `pwa/`. Paths are repo-relative.
 
 **Purpose**: the one operational schema gate. (Blocks US1 only; US2 and US3 have no schema dependency and can proceed in parallel with this.)
 
-- [ ] T002 Apply migration 022 to the Supabase dev database (operational prerequisite for US1 reads/writes). **PENDING (user step):** run the `ALTER TABLE invoices ADD COLUMN reviewed_at TIMESTAMPTZ;` from `backend/supabase/migrations/022_invoice_reviewed_at.sql` in the Supabase SQL editor (same manual process used for migrations 020/021).
+- [X] T002 Apply migration 022 to the Supabase dev database (operational prerequisite for US1 reads/writes). **Applied to dev DB by user.** Apply to prod at deploy.
 
 ---
 
