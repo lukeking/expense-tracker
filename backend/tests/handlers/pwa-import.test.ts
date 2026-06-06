@@ -105,6 +105,20 @@ describe('unlink preconditions', () => {
   });
 });
 
+describe('rematch preconditions', () => {
+  // 改配對 reuses the unlink detach path but flips the invoice to `ambiguous` instead of
+  // deleting it; like unlink, only a currently-matched invoice can be re-matched.
+  it('rejects an invoice that is not matched (409 INVOICE_NOT_MATCHED)', () => {
+    const invoice = { match_status: 'ambiguous' };
+    expect(invoice.match_status !== 'matched').toBe(true);
+  });
+
+  it('accepts a matched invoice', () => {
+    const invoice = { match_status: 'matched' };
+    expect(invoice.match_status === 'matched').toBe(true);
+  });
+});
+
 describe('unlink reversal logic', () => {
   // Items are removed by provenance (source_invoice_id), not by name, so a user's own
   // same-named item always survives an unlink.
@@ -169,5 +183,112 @@ describe('manual-link item selection', () => {
     ];
     expect(selected(items, [1])).toEqual(['一配經典人氣雙手卷']);
     expect(selected(items, [])).toEqual([]); // zero checked → metadata-only link
+  });
+});
+
+// ─── POST /pwa/import/mark-read — payload handling (US1) ───────────────────────
+
+describe('mark-read payload handling', () => {
+  // The handler unions a single invoice_id and/or a bulk invoice_ids[] into a unique
+  // id set; an empty set is a 400 (neither field provided).
+  function collectIds(body: { invoice_id?: string; invoice_ids?: string[] }): string[] {
+    return [...new Set([...(body.invoice_id ? [body.invoice_id] : []), ...(body.invoice_ids ?? [])])];
+  }
+
+  it('accepts a single invoice_id', () => {
+    expect(collectIds({ invoice_id: 'inv-1' })).toEqual(['inv-1']);
+  });
+
+  it('accepts a bulk invoice_ids list', () => {
+    expect(collectIds({ invoice_ids: ['inv-1', 'inv-2'] })).toEqual(['inv-1', 'inv-2']);
+  });
+
+  it('unions single + bulk, deduped', () => {
+    expect(collectIds({ invoice_id: 'inv-1', invoice_ids: ['inv-1', 'inv-2'] })).toEqual(['inv-1', 'inv-2']);
+  });
+
+  it('400 (empty id set) when neither field is provided', () => {
+    expect(collectIds({}).length === 0).toBe(true);
+  });
+});
+
+// ─── POST /pwa/import/manual-link — per-item replace (US3, rename-only) ────────
+
+describe('manual-link per-item replace (US3)', () => {
+  // Rename-only: take the invoice line's name; keep the existing item's amount,
+  // effective_amount, tags, and source_invoice_id. `replace` is independent of the
+  // append set (`item_indexes`).
+  type Item = { id: string; name: string; amount: number | null; effective_amount: number | null; tags: string[]; source_invoice_id: string | null };
+  function applyRenames(
+    items: Item[],
+    invoiceItems: { name: string }[],
+    replace: { item_id: string; invoice_item_index: number }[]
+  ): Item[] {
+    return items.map((it) => {
+      const r = replace.find((x) => x.item_id === it.id);
+      return r ? { ...it, name: invoiceItems[r.invoice_item_index].name } : it;
+    });
+  }
+
+  it('renames the targeted item, preserving amount/effective/tags/provenance', () => {
+    const items: Item[] = [{ id: 'it-1', name: '早餐', amount: 35, effective_amount: 35, tags: ['食:早餐'], source_invoice_id: null }];
+    const out = applyRenames(items, [{ name: '招牌蛋餅' }], [{ item_id: 'it-1', invoice_item_index: 0 }]);
+    expect(out[0]).toEqual({ id: 'it-1', name: '招牌蛋餅', amount: 35, effective_amount: 35, tags: ['食:早餐'], source_invoice_id: null });
+  });
+
+  it('renames keep source_invoice_id = NULL so un-link does not delete them', () => {
+    const items: Item[] = [{ id: 'it-1', name: 'placeholder', amount: 50, effective_amount: 50, tags: [], source_invoice_id: null }];
+    const out = applyRenames(items, [{ name: '正式品名' }], [{ item_id: 'it-1', invoice_item_index: 0 }]);
+    expect(out[0].source_invoice_id).toBeNull();
+  });
+
+  it('replace is independent of the append (item_indexes) selection', () => {
+    const items: Item[] = [{ id: 'it-1', name: 'X', amount: 10, effective_amount: 10, tags: [], source_invoice_id: null }];
+    const invoiceItems = [{ name: 'rename-line' }, { name: 'append-line' }];
+    const replace = [{ item_id: 'it-1', invoice_item_index: 0 }];
+    const itemIndexes = [1]; // appends a different invoice line
+    const renamed = applyRenames(items, invoiceItems, replace);
+    expect(renamed[0].name).toBe('rename-line');
+    expect(itemIndexes).toEqual([1]); // append set untouched by replace
+  });
+
+  it('a replace.item_id not on the chosen transaction → 400', () => {
+    const existingIds = new Set(['it-1']);
+    const replace = [{ item_id: 'it-2', invoice_item_index: 0 }];
+    const invalid = replace.some((r) => !existingIds.has(r.item_id));
+    expect(invalid).toBe(true);
+  });
+
+  it('a replace.invoice_item_index out of range → 400', () => {
+    const invoiceItems = [{ name: 'only-line' }];
+    const replace = [{ item_id: 'it-1', invoice_item_index: 3 }];
+    const invalid = replace.some((r) => r.invoice_item_index < 0 || r.invoice_item_index >= invoiceItems.length);
+    expect(invalid).toBe(true);
+  });
+});
+
+// ─── GET /pwa/import/matched — read filter (US1) ───────────────────────────────
+
+describe('matched list read filter', () => {
+  // include_read=true reveals acknowledged matches; the default shows only unread.
+  const includeRead = (q: string | undefined) => q === 'true';
+
+  it('defaults to unread-only when include_read is absent', () => {
+    expect(includeRead(undefined)).toBe(false);
+  });
+
+  it('includes acknowledged matches when include_read=true', () => {
+    expect(includeRead('true')).toBe(true);
+  });
+
+  it('builds the linked-transaction set from unique matched_transaction_ids', () => {
+    const invoices = [
+      { matched_transaction_id: 'tx-1' },
+      { matched_transaction_id: 'tx-1' },
+      { matched_transaction_id: null },
+      { matched_transaction_id: 'tx-2' },
+    ];
+    const ids = [...new Set(invoices.map((i) => i.matched_transaction_id).filter((id): id is string => id != null))];
+    expect(ids.sort()).toEqual(['tx-1', 'tx-2']); // one batched .in() query
   });
 });

@@ -105,7 +105,20 @@ export interface Invoice {
   match_status: InvoiceMatchStatus;
   match_confidence: MatchConfidence | null;
   matched_transaction_id: string | null;
+  // US1: acknowledged ("read") state. NULL = unread (shows in the review queue);
+  // set = acknowledged (hidden by default, revealed via 顯示已讀).
+  reviewed_at: string | null;
   created_at: string;
+}
+
+// US1 — POST /pwa/import/mark-read. At least one of the two fields is required.
+export interface MarkReadRequest {
+  invoice_id?: string;
+  invoice_ids?: string[];
+}
+
+export interface MarkReadResponse {
+  marked: number;
 }
 
 export interface ImportRun {

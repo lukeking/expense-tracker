@@ -12,9 +12,11 @@ import {
 } from '../db/queries';
 
 // Invoice Import v2 — enrichment only. The pipeline NEVER creates transactions
-// (FR-005). It auto-links an invoice only when exactly one exact-amount candidate
-// exists within ±2 days; ≥2 exact candidates, or (when no exact candidate exists)
-// any ±5%/±7-day forex candidate, are held `ambiguous` for manual resolution.
+// (FR-005). It auto-links an invoice only when exactly one in-window candidate exists
+// within ±2 days — a candidate being a transaction whose paid amount OR whose gross
+// (paid + recorded discounts, US2) equals the invoice net amount. ≥2 such candidates,
+// or (when none exists) any ±5%/±7-day forex candidate, are held `ambiguous` for manual
+// resolution.
 
 export interface PipelineCounters {
   matchedExact: number;
@@ -106,10 +108,10 @@ export async function runImportPipeline(
   // Batched at 100 to stay within CF Workers wall time.
   for (const batch of chunk(toProcess, 100)) {
     for (const invoice of batch) {
-      const exact = await findMatchingExpenseTransaction(supabase, invoice.net_amount, invoice.invoice_date);
+      const candidates = await findMatchingExpenseTransaction(supabase, invoice.net_amount, invoice.invoice_date);
 
-      if (exact.length === 1) {
-        const tx = exact[0];
+      if (candidates.length === 1) {
+        const tx = candidates[0];
         const confidence = computeConfidence(invoice.invoice_date.toISOString(), tx.transaction_at, tx.amount, invoice.net_amount);
         const inv = await insertInvoice(supabase, invoice, importRunId, 'matched', tx.id, confidence);
         await enrichTransaction(supabase, tx.id, {
@@ -129,11 +131,11 @@ export async function runImportPipeline(
           confidence,
           items_outcome: itemsOutcome,
         });
-      } else if (exact.length >= 2) {
+      } else if (candidates.length >= 2) {
         await insertInvoice(supabase, invoice, importRunId, 'ambiguous');
         counters.ambiguous++;
       } else {
-        // No exact candidate — fall back to ±5%/±7-day forex candidates (never auto-linked).
+        // No in-window candidate — fall back to ±5%/±7-day forex candidates (never auto-linked).
         const forex = await findForexCandidateTransactions(supabase, invoice.net_amount, invoice.invoice_date);
         if (forex.length >= 1) {
           await insertInvoice(supabase, invoice, importRunId, 'ambiguous');

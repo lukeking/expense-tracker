@@ -38,7 +38,7 @@ interface Candidate {
   amount: number;
   note: string | null;
   tags: string[];
-  items: { name: string; amount: number | null }[];
+  items: { id: string; name: string; amount: number | null }[];
 }
 
 function fmtDate(iso: string): string {
@@ -62,8 +62,16 @@ export function ManualLinkSheet({
   const [filter, setFilter] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
   const [checked, setChecked] = useState<Set<number>>(new Set());
+  // US3: map an existing transaction item id → an invoice line index to rename it to.
+  const [renameMap, setRenameMap] = useState<Record<string, number>>({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  // Reset the per-item rename choices whenever the chosen transaction changes (item ids
+  // are specific to that transaction).
+  useEffect(() => {
+    setRenameMap({});
+  }, [selected]);
 
   useEffect(() => {
     (async () => {
@@ -104,6 +112,15 @@ export function ManualLinkSheet({
     });
   }
 
+  function setRename(itemId: string, value: string) {
+    setRenameMap((prev) => {
+      const next = { ...prev };
+      if (value === '') delete next[itemId];
+      else next[itemId] = Number(value);
+      return next;
+    });
+  }
+
   const effectiveChecked = [...checked].filter((idx) => !isDisabled(idx));
   const checkedSum = effectiveChecked.reduce((s, idx) => s + (invoice.items[idx].amount || 0), 0);
   const existingSum = (selectedTx?.items ?? []).reduce((s, i) => s + (i.amount || 0), 0);
@@ -119,10 +136,11 @@ export function ManualLinkSheet({
       source.kind === 'unmatched'
         ? { invoice: source.payload, import_run_id: source.importRunId }
         : { invoice_id: source.invoiceId };
+    const replace = Object.entries(renameMap).map(([item_id, invoice_item_index]) => ({ item_id, invoice_item_index }));
     try {
       const data = await apiFetch<{ resolved: MatchedDetail }>('/pwa/import/manual-link', {
         method: 'POST',
-        body: JSON.stringify({ ...linkFields, transaction_id: selected, item_indexes: effectiveChecked }),
+        body: JSON.stringify({ ...linkFields, transaction_id: selected, item_indexes: effectiveChecked, replace }),
       });
       onLinked(data.resolved);
     } catch (err) {
@@ -224,6 +242,31 @@ export function ManualLinkSheet({
                 品項金額（NT${(existingSum + checkedSum).toLocaleString()}）與付款金額（NT${selectedTx!.amount.toLocaleString()}）不符。
               </p>
             )}
+          </div>
+        )}
+
+        {/* Per-item rename: point an invoice line at an existing item to replace its
+            name only (amount/標籤 unchanged). Distinct from the append checkboxes (US3). */}
+        {selectedTx && selectedTx.items.length > 0 && invoice.items.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-gray-500 dark:text-gray-400">重新命名既有品項（以發票品名取代，金額不變）</label>
+            {selectedTx.items.map((exItem) => (
+              <div key={exItem.id} className="flex items-center justify-between gap-2 text-sm">
+                <span className="text-gray-700 dark:text-gray-200 truncate">
+                  {exItem.name}{exItem.amount != null ? ` · NT$${exItem.amount.toLocaleString()}` : ''}
+                </span>
+                <select
+                  value={exItem.id in renameMap ? String(renameMap[exItem.id]) : ''}
+                  onChange={(e) => setRename(exItem.id, e.target.value)}
+                  className="shrink-0 border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1 text-xs bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                >
+                  <option value="">不取代</option>
+                  {invoice.items.map((li, idx) => (
+                    <option key={idx} value={idx}>{li.name}</option>
+                  ))}
+                </select>
+              </div>
+            ))}
           </div>
         )}
 
