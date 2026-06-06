@@ -536,6 +536,19 @@ export async function linkInvoiceToTransaction(
   if (error) throw new Error(`linkInvoiceToTransaction: ${error.message}`);
 }
 
+// Inverse of linkInvoiceToTransaction: send a matched invoice back to the `ambiguous`
+// backlog (for 改配對) instead of deleting it, so it can be re-linked without re-import.
+export async function resetInvoiceToAmbiguous(
+  supabase: SupabaseClient,
+  invoiceId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('invoices')
+    .update({ match_status: 'ambiguous', matched_transaction_id: null, match_confidence: null, reviewed_at: null })
+    .eq('id', invoiceId);
+  if (error) throw new Error(`resetInvoiceToAmbiguous: ${error.message}`);
+}
+
 export async function findTransactionsWithoutInvoiceInRange(
   supabase: SupabaseClient,
   from: Date,

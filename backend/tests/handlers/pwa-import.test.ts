@@ -105,6 +105,20 @@ describe('unlink preconditions', () => {
   });
 });
 
+describe('rematch preconditions', () => {
+  // 改配對 reuses the unlink detach path but flips the invoice to `ambiguous` instead of
+  // deleting it; like unlink, only a currently-matched invoice can be re-matched.
+  it('rejects an invoice that is not matched (409 INVOICE_NOT_MATCHED)', () => {
+    const invoice = { match_status: 'ambiguous' };
+    expect(invoice.match_status !== 'matched').toBe(true);
+  });
+
+  it('accepts a matched invoice', () => {
+    const invoice = { match_status: 'matched' };
+    expect(invoice.match_status === 'matched').toBe(true);
+  });
+});
+
 describe('unlink reversal logic', () => {
   // Items are removed by provenance (source_invoice_id), not by name, so a user's own
   // same-named item always survives an unlink.

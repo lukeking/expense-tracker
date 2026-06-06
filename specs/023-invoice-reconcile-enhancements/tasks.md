@@ -103,7 +103,7 @@ Backend CF Worker at `backend/`, PWA at `pwa/`. Paths are repo-relative.
 ## Phase 6: Polish & Cross-Cutting Concerns
 
 - [X] T016 [P] Run the full backend suite (`cd backend && pnpm test`) and `tsc --noEmit` for backend and PWA; fix any regressions across invoice-matcher / queries / pwa-import. (272 backend tests pass; backend + PWA `tsc` clean; PWA `vite build` clean. Note: `pnpm lint` is broken project-wide by a pre-existing typed-linting config gap, unrelated to this feature.)
-- [ ] T017 Run `specs/023-invoice-reconcile-enhancements/quickstart.md` end-to-end (US1 review queue + SC-002 load; US2 discount auto-link + ambiguity guard; US3 replace + un-link survival; SC-003 count unchanged throughout). **PENDING (user step):** needs the running app + live dev DB (after T002); manual verification per quickstart.
+- [X] T017 Run `specs/023-invoice-reconcile-enhancements/quickstart.md` end-to-end (US1 review queue + SC-002 load; US2 discount auto-link + ambiguity guard; US3 replace + un-link survival; SC-003 count unchanged throughout). **Verified e2e by user 2026-06-06.**
 
 ---
 

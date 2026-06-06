@@ -53,6 +53,7 @@ export function ImportScreen() {
   const [linkTarget, setLinkTarget] = useState<{ invoice: ManualLinkInvoice; source: ManualLinkSource } | null>(null);
   const [linked, setLinked] = useState<LinkedInvoice[]>([]);
   const [unlinking, setUnlinking] = useState<string | null>(null);
+  const [rematching, setRematching] = useState<string | null>(null);
   const [showRead, setShowRead] = useState(false);
   const [markingRead, setMarkingRead] = useState<string | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
@@ -108,6 +109,24 @@ export function ImportScreen() {
   // When 顯示已讀 is on, acknowledged rows stay visible (dimmed + badge) so we flip
   // reviewed_at in place; otherwise the row leaves the unread-only list.
   const NOW = () => new Date().toISOString();
+
+  // 改配對: detach the (wrong) transaction and send the invoice back to 待手動確認, where
+  // it can be re-linked without re-importing.
+  async function handleRematch(invoiceId: string) {
+    setRematching(invoiceId);
+    try {
+      await apiFetch('/pwa/import/rematch', {
+        method: 'POST',
+        body: JSON.stringify({ invoice_id: invoiceId }),
+      });
+      setLinked((prev) => prev.filter((l) => l.id !== invoiceId));
+      loadAmbiguous();
+    } catch {
+      // Leave the row in place on failure so the user can retry.
+    } finally {
+      setRematching(null);
+    }
+  }
 
   async function handleMarkRead(invoiceId: string) {
     setMarkingRead(invoiceId);
@@ -406,6 +425,14 @@ export function ImportScreen() {
                             {markingRead === l.id ? '處理中…' : '已讀'}
                           </button>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => handleRematch(l.id)}
+                          disabled={rematching === l.id}
+                          className="text-xs px-3 py-1.5 rounded-lg border border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400 disabled:opacity-50"
+                        >
+                          {rematching === l.id ? '處理中…' : '改配對'}
+                        </button>
                         <button
                           type="button"
                           onClick={() => handleUnlink(l.id)}

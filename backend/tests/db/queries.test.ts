@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { findAllMatchedInvoices, markInvoicesRead, getTransactionsByIds, getTransactionItemsByTransactionIds } from '../../src/db/queries';
+import { findAllMatchedInvoices, markInvoicesRead, getTransactionsByIds, getTransactionItemsByTransactionIds, resetInvoiceToAmbiguous } from '../../src/db/queries';
 
 // Test the getMonthlySpend reduce logic directly — same formula as the implementation
 function computeMonthlySpend(rows: { amount: number; transaction_type: string }[]): number {
@@ -339,6 +339,24 @@ describe('getTransactionsByIds batched fetch (US1)', () => {
     const { client, calls } = makeFake({ transactions: [{ id: 't-1', amount: 1, transaction_at: 'x', note: null }] });
     expect(await getTransactionsByIds(client, [])).toEqual([]);
     expect(calls.select.transactions).toBeUndefined();
+  });
+});
+
+describe('resetInvoiceToAmbiguous (改配對)', () => {
+  it('flips a matched invoice back to ambiguous and clears link/confidence/reviewed_at', async () => {
+    const { client, tables } = makeFake({
+      invoices: [{
+        id: 'm-1', match_status: 'matched', matched_transaction_id: 'tx-9',
+        match_confidence: 'near', reviewed_at: '2026-06-06T00:00:00Z',
+      }],
+    });
+    await resetInvoiceToAmbiguous(client, 'm-1');
+    expect(tables.invoices[0]).toMatchObject({
+      match_status: 'ambiguous',
+      matched_transaction_id: null,
+      match_confidence: null,
+      reviewed_at: null,
+    });
   });
 });
 

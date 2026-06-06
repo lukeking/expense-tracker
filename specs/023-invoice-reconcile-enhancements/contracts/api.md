@@ -27,6 +27,17 @@ extend feature 022; only deltas are described.
 - **Response**: `{ marked: number }`.
 - **Errors**: `400 INVALID_PAYLOAD` if neither field provided.
 
+### `POST /pwa/import/rematch` (new)
+- **Body**: `{ invoice_id: string }`.
+- **Behavior**: like `unlink`, detaches the linked transaction (clears the link, removes
+  provenance items, recomputes effective amounts) but — instead of deleting the invoice —
+  sets it back to `ambiguous` (clearing `matched_transaction_id` / `match_confidence` /
+  `reviewed_at`) so it returns to 待手動確認 for re-linking without a re-import. The
+  transaction is never deleted (SC-003).
+- **Response**: `{ rematched: { invoice_number, transaction_id } }`.
+- **Errors**: `409 INVOICE_NOT_MATCHED` if the invoice isn't currently matched; `400`/`404`
+  for bad/absent payload.
+
 ## US2 — Discount-aware matching (no new endpoint)
 
 Affects the auto-match step in `runImportPipeline` and the candidate-deriving queries

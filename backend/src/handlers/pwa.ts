@@ -26,6 +26,7 @@ import {
   enrichTransaction,
   clearTransactionInvoiceLink,
   linkInvoiceToTransaction,
+  resetInvoiceToAmbiguous,
   insertInvoice,
   deleteInvoice,
   deleteTransactionItemsBySourceInvoice,
@@ -946,11 +947,28 @@ pwaRouter.post('/import/mark-read', async (c) => {
   return c.json({ marked });
 });
 
+// Shared by unlink + rematch: detach the linked transaction (keeping it matched only if
+// a receipt is still linked), remove only the items this invoice created (by provenance),
+// and recompute effective amounts over what remains. The transaction is never deleted
+// (SC-003). Differs only in what the caller does to the invoice row afterwards.
+async function detachInvoiceTransaction(
+  supabase: ReturnType<typeof getSupabaseClient>,
+  invoiceId: string,
+  txId: string | null
+): Promise<void> {
+  if (!txId) return;
+  const { data: tx } = await supabase
+    .from('transactions').select('amount, matched_receipt_id').eq('id', txId).single();
+  await clearTransactionInvoiceLink(supabase, txId, tx?.matched_receipt_id != null);
+  await deleteTransactionItemsBySourceInvoice(supabase, txId, invoiceId);
+  if (tx) await computeAndWriteEffectiveAmounts(supabase, txId, tx.amount as number);
+}
+
 // ─── POST /pwa/import/unlink ──────────────────────────────────────────────────
-// Reverses an invoice→transaction link: detach the transaction (keeping it matched
-// if a receipt is still linked), remove only the items this invoice created (by
-// provenance) and recompute effective amounts, then delete the invoice row. The
-// transaction itself is never deleted (SC-003).
+// Reverses an invoice→transaction link: detach the transaction, remove the items this
+// invoice created, recompute effective amounts, then DELETE the invoice row (full
+// discard — re-attempted only on a future import). The transaction itself is never
+// deleted (SC-003).
 
 pwaRouter.post('/import/unlink', async (c) => {
   type Body = { invoice_id: string };
@@ -975,20 +993,47 @@ pwaRouter.post('/import/unlink', async (c) => {
   }
 
   const txId = invoice.matched_transaction_id;
-  if (txId) {
-    const { data: tx } = await supabase
-      .from('transactions').select('amount, matched_receipt_id').eq('id', txId).single();
-    // 1. Detach the transaction (stays matched only if a receipt is still linked).
-    await clearTransactionInvoiceLink(supabase, txId, tx?.matched_receipt_id != null);
-    // 2. Remove only the items this invoice created (by provenance), then recompute
-    //    effective amounts over whatever items remain.
-    await deleteTransactionItemsBySourceInvoice(supabase, txId, invoice_id);
-    if (tx) await computeAndWriteEffectiveAmounts(supabase, txId, tx.amount as number);
-  }
-  // 3. Delete the invoice row last (re-attempted on a future import).
+  await detachInvoiceTransaction(supabase, invoice_id, txId);
+  // Delete the invoice row last (re-attempted on a future import).
   await deleteInvoice(supabase, invoice_id);
 
   return c.json({ unlinked: { invoice_number: invoice.invoice_number, transaction_id: txId } });
+});
+
+// ─── POST /pwa/import/rematch ─────────────────────────────────────────────────
+// Like unlink, but instead of deleting the invoice it sends it back to the `ambiguous`
+// backlog (待手動確認) so the user can re-pick the correct transaction (or 手動連結 to
+// any tx) without re-importing. Detaches the wrong transaction first (SC-003: the
+// transaction is never deleted).
+
+pwaRouter.post('/import/rematch', async (c) => {
+  type Body = { invoice_id: string };
+  let body: Body;
+  try {
+    body = await c.req.json<Body>();
+  } catch {
+    return c.json({ error: 'INVALID_PAYLOAD', message: 'Invalid JSON' }, 400);
+  }
+  const { invoice_id } = body;
+  if (!invoice_id) {
+    return c.json({ error: 'INVALID_PAYLOAD', message: 'invoice_id is required' }, 400);
+  }
+
+  const supabase = getSupabaseClient(c.env);
+
+  const { data: invoice, error: invErr } = await supabase
+    .from('invoices').select('*').eq('id', invoice_id).single();
+  if (invErr || !invoice) return c.json({ error: 'NOT_FOUND', message: 'Invoice not found' }, 404);
+  if (invoice.match_status !== 'matched') {
+    return c.json({ error: 'INVOICE_NOT_MATCHED', message: 'Invoice is not linked to a transaction' }, 409);
+  }
+
+  const txId = invoice.matched_transaction_id;
+  await detachInvoiceTransaction(supabase, invoice_id, txId);
+  // Send the invoice back to the ambiguous backlog instead of deleting it.
+  await resetInvoiceToAmbiguous(supabase, invoice_id);
+
+  return c.json({ rematched: { invoice_number: invoice.invoice_number, transaction_id: txId } });
 });
 
 // ─── GET /pwa/import/link-candidates ──────────────────────────────────────────
