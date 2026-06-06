@@ -20,8 +20,8 @@ import {
   getTransactionsByIds,
   getTransactionItemsByTransactionIds,
   findExistingInvoiceNumbers,
-  findMatchingExpenseTransaction,
-  findForexCandidateTransactions,
+  fetchImportCandidateTransactions,
+  fetchDiscountSumsByTransaction,
   findTransactionsWithoutInvoiceInRange,
   enrichTransaction,
   clearTransactionInvoiceLink,
@@ -35,7 +35,7 @@ import {
   type TransactionForPeriod,
 } from '../db/queries';
 import { getBudgetProgress } from '../services/budget';
-import { runImportPipeline, computeConfidence, applyInvoiceItems } from '../services/invoice-matcher';
+import { runImportPipeline, computeConfidence, applyInvoiceItems, selectExactDiscountCandidates, selectForexCandidates } from '../services/invoice-matcher';
 import { decodeCSVBuffer, parseCSVRows, groupInvoices, RowLimitError } from '../services/csv-parser';
 import { aggregateByCategory, aggregateBySubcategory } from '../services/summary';
 
@@ -774,45 +774,65 @@ pwaRouter.post('/import', async (c) => {
 // ─── GET /pwa/import/ambiguous ────────────────────────────────────────────────
 // Lists invoices held as `ambiguous` with their candidate transactions re-derived
 // live (so candidates linked since import drop out via the matched_invoice_id filter).
+// Feature 024: candidates are pre-fetched once over the union window and matched in
+// memory (same bulk pattern as the import pipeline) to keep the endpoint within the
+// Cloudflare Workers subrequest cap regardless of how many ambiguous invoices exist.
 
 pwaRouter.get('/import/ambiguous', async (c) => {
   const supabase = getSupabaseClient(c.env);
   const invoices = await findAllAmbiguousInvoices(supabase);
+  if (invoices.length === 0) return c.json({ ambiguous: [] });
 
-  const entries = [];
-  for (const inv of invoices) {
-    const invoiceDate = new Date(inv.invoice_date);
+  // One candidate fetch over the union window (earliest − 7d … latest + 7d).
+  const times = invoices.map((inv) => new Date(inv.invoice_date).getTime());
+  const windowStart = new Date(Math.min(...times) - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const windowEndInclusive = new Date(Math.max(...times) + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10) + 'T23:59:59Z';
+  const candidatePool = await fetchImportCandidateTransactions(supabase, windowStart, windowEndInclusive);
+
+  const maxNet = Math.max(...invoices.map((inv) => inv.net_amount));
+  const belowNetIds = candidatePool.filter((t) => t.amount < maxNet).map((t) => t.id);
+  const discountByTx = await fetchDiscountSumsByTransaction(supabase, belowNetIds);
+  const noConsumed = new Set<string>(); // listing is read-only; nothing is consumed
+
+  // Derive each invoice's candidates in memory: exact/discount first, forex fallback.
+  const derived = invoices.map((inv) => {
+    const date = new Date(inv.invoice_date);
     let source: 'exact' | 'forex' = 'exact';
-    let candidates = await findMatchingExpenseTransaction(supabase, inv.net_amount, invoiceDate);
-    if (candidates.length === 0) {
+    let cands = selectExactDiscountCandidates(inv.net_amount, date, candidatePool, discountByTx, noConsumed);
+    if (cands.length === 0) {
       source = 'forex';
-      candidates = await findForexCandidateTransactions(supabase, inv.net_amount, invoiceDate);
+      cands = selectForexCandidates(inv.net_amount, date, candidatePool, noConsumed);
     }
+    return { inv, source, cands };
+  });
 
-    const candidatesWithItems = [];
-    for (const tx of candidates) {
-      const items = await getTransactionItems(supabase, tx.id);
-      candidatesWithItems.push({
-        id: tx.id,
-        transaction_at: tx.transaction_at,
-        amount: tx.amount,
-        note: tx.note,
-        tags: tx.tags,
-        items: items.map((it) => ({ name: it.name, amount: it.amount })),
-      });
-    }
-
-    entries.push({
-      id: inv.id,
-      invoice_number: inv.invoice_number,
-      seller_name: inv.seller_name,
-      invoice_date: inv.invoice_date,
-      net_amount: inv.net_amount,
-      items: inv.items,
-      candidate_source: source,
-      candidates: candidatesWithItems,
-    });
+  // One batched item fetch for every candidate shown.
+  const candidateTxIds = [...new Set(derived.flatMap((d) => d.cands.map((t) => t.id)))];
+  const candidateItems = await getTransactionItemsByTransactionIds(supabase, candidateTxIds);
+  const itemsByTx = new Map<string, { name: string; amount: number | null }[]>();
+  for (const it of candidateItems) {
+    const list = itemsByTx.get(it.transaction_id) ?? [];
+    list.push({ name: it.name, amount: it.amount });
+    itemsByTx.set(it.transaction_id, list);
   }
+
+  const entries = derived.map(({ inv, source, cands }) => ({
+    id: inv.id,
+    invoice_number: inv.invoice_number,
+    seller_name: inv.seller_name,
+    invoice_date: inv.invoice_date,
+    net_amount: inv.net_amount,
+    items: inv.items,
+    candidate_source: source,
+    candidates: cands.map((tx) => ({
+      id: tx.id,
+      transaction_at: tx.transaction_at,
+      amount: tx.amount,
+      note: tx.note,
+      tags: tx.tags,
+      items: itemsByTx.get(tx.id) ?? [],
+    })),
+  }));
 
   return c.json({ ambiguous: entries });
 });

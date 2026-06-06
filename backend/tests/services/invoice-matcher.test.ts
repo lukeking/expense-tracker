@@ -1,13 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ParsedInvoice } from '../../src/types';
-import { runImportPipeline, computeConfidence, applyInvoiceItems } from '../../src/services/invoice-matcher';
+import { runImportPipeline, computeConfidence, applyInvoiceItems, selectExactDiscountCandidates, selectForexCandidates } from '../../src/services/invoice-matcher';
+import { fetchImportCandidateTransactions } from '../../src/db/queries';
 
 // ─── Minimal in-memory fake Supabase ──────────────────────────────────────────
-// Supports the chainable subset the pipeline/queries use (select/insert/update +
+// Supports the chainable subset the pipeline/queries use (select/insert/upsert/update +
 // eq/is/in/gte/lte/order/limit/single). Filters are applied against seeded tables
 // so the REAL pipeline runs end-to-end. `calls.insertTransactions` lets tests
-// assert the SC-003 invariant: the import never creates a transaction.
+// assert the SC-003 invariant: the import never creates a transaction; `calls.roundTrips`
+// lets tests assert the bulk pipeline's constant subrequest shape (US1/FR-002).
 
 type Row = Record<string, unknown>;
 
@@ -18,22 +20,39 @@ function makeFakeSupabase(seed: { transactions?: Row[]; invoices?: Row[]; transa
     transaction_items: seed.transaction_items ?? [],
     transaction_adjustments: seed.transaction_adjustments ?? [],
   };
-  const calls = { insertTransactions: 0 };
+  const calls = { insertTransactions: 0, roundTrips: 0 };
   let idCounter = 1;
 
   function from(table: string) {
     const filters: ((r: Row) => boolean)[] = [];
-    let mode: 'select' | 'insert' | 'update' | 'delete' = 'select';
+    let mode: 'select' | 'insert' | 'upsert' | 'update' | 'delete' = 'select';
     let insertRows: Row[] = [];
     let updatePatch: Row = {};
     let wantSingle = false;
+    let limitN: number | null = null;
 
     function execute() {
+      calls.roundTrips += 1;
       if (mode === 'insert') {
         const created = insertRows.map((r) => ({ id: `gen-${idCounter++}`, ...r }));
         tables[table].push(...created);
         if (table === 'transactions') calls.insertTransactions += created.length;
         return wantSingle ? { data: created[0], error: null } : { data: created, error: null };
+      }
+      if (mode === 'upsert') {
+        // Insert-or-update by `id` (PostgREST onConflict default = PK).
+        const result: Row[] = [];
+        for (const r of insertRows) {
+          const existing = r.id != null ? tables[table].find((x) => x.id === r.id) : undefined;
+          if (existing) { Object.assign(existing, r); result.push(existing); }
+          else {
+            const row = { id: r.id ?? `gen-${idCounter++}`, ...r };
+            tables[table].push(row);
+            if (table === 'transactions') calls.insertTransactions += 1;
+            result.push(row);
+          }
+        }
+        return wantSingle ? { data: result[0], error: null } : { data: result, error: null };
       }
       if (mode === 'update') {
         const matched = tables[table].filter((r) => filters.every((f) => f(r)));
@@ -44,7 +63,8 @@ function makeFakeSupabase(seed: { transactions?: Row[]; invoices?: Row[]; transa
         tables[table] = tables[table].filter((r) => !filters.every((f) => f(r)));
         return { data: null, error: null };
       }
-      const rows = tables[table].filter((r) => filters.every((f) => f(r)));
+      let rows = tables[table].filter((r) => filters.every((f) => f(r)));
+      if (limitN != null) rows = rows.slice(0, limitN);
       if (wantSingle) return { data: rows[0] ?? null, error: rows[0] ? null : { message: 'not found' } };
       return { data: rows, error: null };
     }
@@ -56,6 +76,11 @@ function makeFakeSupabase(seed: { transactions?: Row[]; invoices?: Row[]; transa
         insertRows = Array.isArray(rows) ? rows : [rows];
         return builder;
       },
+      upsert(rows: Row | Row[]) {
+        mode = 'upsert';
+        insertRows = Array.isArray(rows) ? rows : [rows];
+        return builder;
+      },
       update(patch: Row) { mode = 'update'; updatePatch = patch; return builder; },
       delete() { mode = 'delete'; return builder; },
       eq(col: string, val: unknown) { filters.push((r) => r[col] === val); return builder; },
@@ -64,7 +89,7 @@ function makeFakeSupabase(seed: { transactions?: Row[]; invoices?: Row[]; transa
       gte(col: string, val: unknown) { filters.push((r) => (typeof r[col] === 'number' && typeof val === 'number') ? (r[col] as number) >= (val as number) : String(r[col]) >= String(val)); return builder; },
       lte(col: string, val: unknown) { filters.push((r) => (typeof r[col] === 'number' && typeof val === 'number') ? (r[col] as number) <= (val as number) : String(r[col]) <= String(val)); return builder; },
       order() { return builder; },
-      limit() { return builder; },
+      limit(n: number) { limitN = n; return builder; },
       single() { wantSingle = true; return builder; },
       then(resolve: (v: unknown) => void) { resolve(execute()); },
     };
@@ -299,6 +324,104 @@ describe('runImportPipeline — discount-aware matching (US2)', () => {
     );
     expect(fake.tables.transactions.length).toBe(before);
     expect(fake.calls.insertTransactions).toBe(0);
+  });
+});
+
+// ─── consumed-set: no double-link within one run (US1/US2 · SC-005) ───────────
+
+describe('runImportPipeline — consumed transaction not reused (SC-005)', () => {
+  it('two invoices that could match the same single tx → only one links, the other falls through', async () => {
+    const fake = makeFakeSupabase({
+      transactions: [makeTxRow({ id: 'tx-180', amount: 180, transaction_at: '2025-04-18T08:00:00.000Z' })],
+    });
+    const invoices = [
+      makeInvoice({ invoice_number: 'M-1' }),
+      makeInvoice({ invoice_number: 'M-2' }),
+    ];
+    const counters = await runImportPipeline(fake.client, invoices, 'run-1', NO_SKIP);
+
+    // First invoice links tx-180; second sees it consumed → no exact, and forex also
+    // excludes the consumed tx → skipped_unmatched (matches the prior sequential DB behavior).
+    expect(counters.matchedExact).toBe(1);
+    expect(counters.skippedUnmatched).toBe(1);
+    expect(counters.ambiguous).toBe(0);
+    const linked = fake.tables.transactions.filter((t) => t.matched_invoice_id !== null);
+    expect(linked).toHaveLength(1);
+    expect(fake.calls.insertTransactions).toBe(0);
+  });
+});
+
+// ─── US1: subrequest shape is constant in invoice count (FR-002) ──────────────
+
+describe('runImportPipeline — bounded subrequests (US1/FR-002)', () => {
+  function manyMatches(n: number) {
+    // Each invoice has a unique net + a single tx of that amount on the same day → 1:1 match.
+    const transactions = Array.from({ length: n }, (_, i) =>
+      makeTxRow({ id: `tx-${i}`, amount: 100 + i, transaction_at: '2025-04-18T08:00:00.000Z' })
+    );
+    const invoices = Array.from({ length: n }, (_, i) =>
+      makeInvoice({ invoice_number: `M-${i}`, gross_amount: 100 + i, net_amount: 100 + i })
+    );
+    return { transactions, invoices };
+  }
+
+  it('round-trip count does not grow with the number of invoices', async () => {
+    const a = manyMatches(5);
+    const small = makeFakeSupabase({ transactions: a.transactions });
+    await runImportPipeline(small.client, a.invoices, 'run-1', NO_SKIP);
+
+    const b = manyMatches(30);
+    const big = makeFakeSupabase({ transactions: b.transactions });
+    const counters = await runImportPipeline(big.client, b.invoices, 'run-1', NO_SKIP);
+
+    expect(counters.matchedExact).toBe(30);
+    expect(big.calls.roundTrips).toBe(small.calls.roundTrips); // constant in N
+    expect(big.calls.roundTrips).toBeLessThanOrEqual(8);
+    expect(big.calls.insertTransactions).toBe(0); // SC-003
+  });
+});
+
+// ─── US1: truncation guard aborts before matching/writes (FR-012) ─────────────
+
+describe('runImportPipeline — candidate read truncation guard (FR-012)', () => {
+  it('aborts with no writes when the candidate window overflows the page limit', async () => {
+    const transactions = Array.from({ length: 1001 }, (_, i) =>
+      makeTxRow({ id: `tx-${i}`, amount: 1, transaction_at: '2025-04-18T08:00:00.000Z' })
+    );
+    const fake = makeFakeSupabase({ transactions });
+
+    await expect(runImportPipeline(fake.client, [makeInvoice()], 'run-1', NO_SKIP)).rejects.toThrow(/more than 1000|truncated/);
+    expect(fake.tables.invoices).toHaveLength(0);
+    expect(fake.calls.insertTransactions).toBe(0);
+  });
+});
+
+// ─── GET /import/ambiguous matching composition (US1 · research Decision 6) ────
+
+describe('ambiguous-list candidate composition', () => {
+  it('pre-fetched pool excludes already-linked txs; exact-first then forex fallback', async () => {
+    const fake = makeFakeSupabase({
+      transactions: [
+        makeTxRow({ id: 'tx-exact', amount: 180, transaction_at: '2025-04-18T08:00:00.000Z' }),
+        makeTxRow({ id: 'tx-fx', amount: 175, transaction_at: '2025-04-23T08:00:00.000Z' }),
+        makeTxRow({ id: 'tx-linked', amount: 180, matched_invoice_id: 'inv-x', transaction_at: '2025-04-18T09:00:00.000Z' }),
+      ],
+    });
+
+    const pool = await fetchImportCandidateTransactions(fake.client, '2025-04-11', '2025-04-25T23:59:59Z');
+    // A transaction linked since import drops out of the candidate pool.
+    expect(pool.map((t) => t.id).sort()).toEqual(['tx-exact', 'tx-fx']);
+
+    const date = new Date('2025-04-18T00:00:00Z');
+    const noConsumed = new Set<string>();
+
+    // Exact present → that is the candidate source.
+    expect(selectExactDiscountCandidates(180, date, pool, new Map(), noConsumed).map((t) => t.id)).toEqual(['tx-exact']);
+
+    // With no exact candidate, forex fallback surfaces the ±5%/±7-day match.
+    const poolNoExact = pool.filter((t) => t.id !== 'tx-exact');
+    expect(selectExactDiscountCandidates(180, date, poolNoExact, new Map(), noConsumed)).toHaveLength(0);
+    expect(selectForexCandidates(180, date, poolNoExact, noConsumed).map((t) => t.id)).toEqual(['tx-fx']);
   });
 });
 
