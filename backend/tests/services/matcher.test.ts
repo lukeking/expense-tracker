@@ -1,21 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
 describe('Matching algorithm', () => {
-  const makeTransaction = (id: string, amount: number, at: string) => ({
-    id,
-    amount,
-    transaction_at: at,
-    is_matched: false,
-    matched_receipt_id: null,
-    discord_message_id: null,
-    items: null,
-    tags: [],
-    payment_method: 'credit_card' as const,
-    bank_name: null,
-    note: null,
-    created_at: at,
-  });
-
   const makeReceipt = (id: string, amount: number, date: string) => ({
     id,
     invoice_number: `INV-${id}`,

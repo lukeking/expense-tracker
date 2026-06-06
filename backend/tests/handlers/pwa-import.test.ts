@@ -218,7 +218,7 @@ describe('manual-link per-item replace (US3)', () => {
   // Rename-only: take the invoice line's name; keep the existing item's amount,
   // effective_amount, tags, and source_invoice_id. `replace` is independent of the
   // append set (`item_indexes`).
-  type Item = { id: string; name: string; amount: number | null; effective_amount: number | null; tags: string[]; source_invoice_id: string | null };
+  interface Item { id: string; name: string; amount: number | null; effective_amount: number | null; tags: string[]; source_invoice_id: string | null }
   function applyRenames(
     items: Item[],
     invoiceItems: { name: string }[],

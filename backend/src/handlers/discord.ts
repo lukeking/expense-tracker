@@ -20,7 +20,7 @@ import { parseTags, parseItems } from '../services/expense-parser';
 import { periodToDateRange, mergeOverflowCategories, buildCategoryEmbedFields, buildSubcategoryEmbedFields } from '../services/summary';
 import { fetchPieChartUrl, fetchBarChartUrl } from '../services/chart';
 import { getBudgetProgress } from '../services/budget';
-import { patchInteractionMessage, patchTransactionMatchedMessage, sendChannelMessage, sendFollowupMessage } from '../services/discord-notify';
+import { patchInteractionMessage, patchTransactionMatchedMessage } from '../services/discord-notify';
 
 interface DiscordInteraction {
   type: number;
@@ -178,7 +178,7 @@ async function handleExpenseCommand(
         ];
         const tagsDisplay = allTagLabels.length > 0 ? ` · ${allTagLabels.join(' ')}` : '';
         const firstLine = `✅ NT$${amount}${noteStr}${tagsDisplay} [${pmLabel}]`;
-        const itemLines = parsedItems.items.map((i) => `  · ${i.name}${i.amount != null ? ' NT$' + i.amount : ''}`).join('\n');
+        const itemLines = parsedItems.items.map((i) => `  · ${i.name}${i.amount != null ? ` NT$${  i.amount}` : ''}`).join('\n');
         const budgetLine = `📊 本月支出：$${updatedProgress.current_spend.toLocaleString()} / $${updatedProgress.monthly_budget.toLocaleString()} (${updatedProgress.percentage}%)`;
 
         const content = [firstLine, itemLines, budgetLine, ...parsedItems.warnings]
