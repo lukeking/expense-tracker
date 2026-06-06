@@ -23,3 +23,8 @@ export const SUBCATEGORY_REMAP: Record<string, string> = {
 export const TAG_CORRECTIONS: Record<string, string[]> = {
   // example: '行:某App': ['其他:App', '某App'],
 };
+
+// Store names treated as food vendors by the legacy migration heuristic.
+export const FOOD_STORES: Set<string> = new Set([
+  // '某某商店',
+]);

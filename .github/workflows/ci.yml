@@ -23,6 +23,9 @@ jobs:
           cache: pnpm
           cache-dependency-path: backend/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      # The real legacy-csv-config.ts is gitignored (personal data); the committed
+      # example has the same shape, so it satisfies typecheck/lint/tests in CI.
+      - run: cp src/services/legacy-csv-config.example.ts src/services/legacy-csv-config.ts
       - run: pnpm run typecheck
       - run: pnpm run lint
       - run: pnpm run test
