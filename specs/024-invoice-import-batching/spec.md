@@ -5,6 +5,14 @@
 **Status**: Draft
 **Input**: User description: "Invoice import fails in production on Cloudflare Workers with 'Too many subrequests by single Worker invocation'. The import pipeline issues several data-store queries per invoice, so the total round-trips grow with the number of invoices and exceed the platform's per-invocation subrequest cap. Make a single import stay under the cap regardless of CSV size, while preserving the exact current matching behavior. Realizes the performance optimisation deferred in spec 022."
 
+## Clarifications
+
+### Session 2026-06-06
+
+- Q: What subrequest budget should the design target? → A: The strictest tier (~50). The fix must work even on Cloudflare Workers Free, so total subrequests per import stay a small constant for reads plus a bounded write set — never scaling with invoice count.
+- Q: How should the write side be collapsed to stay within ~50? → A: Client-side bulk writes — one multi-row insert for all new invoice rows, one for all filled items, and one upsert for all enriched transactions (built from the already-pre-fetched full transaction rows plus enrichment fields). A small constant number of writes regardless of match count, with no new database objects.
+- Q: How is the single candidate read guarded against silent truncation at the data store's max page size? → A: Assume-under-limit with a loud guard — fetch in one query; if the result comes back at the max page size, abort the import with a clear error rather than match against a possibly-truncated candidate set. No silent wrong matches and no speculative paging code.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Import completes regardless of CSV size (Priority: P1)
@@ -44,7 +52,7 @@ For any given CSV and database state, the set of invoices that auto-link (and at
 ### Edge Cases
 
 - **Same transaction, two invoices, one run**: a transaction consumed (linked) earlier in the run must not be offered as a candidate to a later invoice in the same run — preserving the sequential "already linked → excluded" behavior without re-querying the database per invoice.
-- **Wide date span**: a CSV whose invoices span many months produces a wide candidate-fetch window. The number of unmatched in-window transactions is assumed to stay within the data store's single-response row limit; if a window could exceed it, the fetch must page through results rather than silently truncate (a truncated read would drop real candidates and change matching outcomes).
+- **Wide date span**: a CSV whose invoices span many months produces a wide candidate-fetch window. The number of unmatched in-window transactions is assumed to stay within the data store's single-response row limit. If the candidate read ever comes back at the max page size, the import MUST abort with a clear error (it cannot tell a full-but-complete read from a truncated one), rather than match against a possibly-truncated set — a truncated read would drop real candidates and change matching outcomes.
 - **No candidates to fetch**: when every invoice is a duplicate (or the file is empty), the pipeline performs no candidate reads and still returns a correct summary.
 - **Partial-failure semantics**: if the invocation still fails for an unrelated reason, the existing recoverability characteristics (status flips ordered so a re-import can safely retry) are not made worse by this change.
 
@@ -52,17 +60,18 @@ For any given CSV and database state, the set of invoices that auto-link (and at
 
 ### Functional Requirements
 
-- **FR-001**: A single import invocation MUST keep its total data-store round-trips bounded so that it stays within the hosting platform's per-invocation subrequest limit for any CSV up to the existing 1000-row cap.
+- **FR-001**: A single import invocation MUST keep its total data-store round-trips bounded so that it stays within the strictest hosting-tier per-invocation subrequest limit (~50) for any CSV up to the existing 1000-row cap.
 - **FR-002**: The number of candidate-lookup round-trips MUST NOT scale linearly with the number of invoices. Candidate transactions and their discount adjustments MUST be fetched in a bounded number of queries for the whole import, not one (or more) per invoice.
 - **FR-003**: Matching MUST be performed against the pre-fetched candidate set in memory, producing the same exact / near / ambiguous / forex-ambiguous / skipped_unmatched classifications the per-invoice implementation produced for the same inputs.
 - **FR-004**: The candidate fetch window MUST be wide enough to cover every matching rule in use — at minimum the ±2-day exact/discount window and the ±7-day forex window — computed once across all invoices in the import (earliest invoice date minus the widest look-back through latest invoice date plus the widest look-ahead).
 - **FR-005**: Within a single import run, a transaction that has been linked to one invoice MUST NOT be eligible to match a later invoice in the same run (no double-linking), matching the prior behavior where the database `matched` filter excluded already-linked transactions.
 - **FR-006**: The pipeline MUST remain enrichment-only: it MUST NOT create any new transaction under any circumstance.
 - **FR-007**: Invoices with zero candidates MUST continue to be counted as `skipped_unmatched` with **no** invoice row persisted, so a later import can retry them once a matching transaction exists.
-- **FR-008**: The write side (invoice inserts, transaction enrichment, transaction-item fills) MUST NOT reintroduce per-invoice round-trip growth that would breach the subrequest limit; writes MUST be batched or otherwise bounded so they scale safely within the cap for the linked/ambiguous subset of an import.
+- **FR-008**: The write side MUST be collapsed to a small constant number of round-trips regardless of match count, using client-side bulk operations: one multi-row insert for all new invoice rows, one multi-row insert for all filled transaction items, and one bulk upsert for all enriched transactions (constructed from the pre-fetched full transaction rows merged with the enrichment fields). No per-matched-invoice write loop and no new database objects (stored functions/RPCs).
 - **FR-009**: The post-import summary MUST continue to account for 100% of parsed invoices across all outcome buckets (matched + ambiguous + skipped = total parsed), unchanged in shape from the current response.
 - **FR-010**: The feature MUST require no change to the import API contract and no database schema change — it is an internal change to how matching and writing are performed.
 - **FR-011**: The existing 1000-row hard import cap MUST remain enforced at parse time before any writes.
+- **FR-012**: The candidate-transaction read MUST be performed as a single query. If the result is returned at the data store's maximum page size (indicating a possible truncation), the import MUST abort with a clear error before any matching or writes, rather than match against a possibly-incomplete candidate set.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -78,13 +87,13 @@ For any given CSV and database state, the set of invoices that auto-link (and at
 - **SC-001**: An import of a CSV that previously failed with the subrequest error now completes successfully and returns a full summary.
 - **SC-002**: Candidate-lookup round-trips per import are a small constant (independent of invoice count) rather than growing with the number of invoices.
 - **SC-003**: For every input in the existing matching/pipeline test suite, the matched / ambiguous / skipped outcomes and confidences are identical to the pre-change implementation (zero behavioral diffs).
-- **SC-004**: A real production import at realistic volume completes within the platform's per-invocation subrequest and wall-time limits, with margin to spare at the 1000-row cap.
+- **SC-004**: A real production import at realistic volume completes within the strictest-tier (~50) per-invocation subrequest budget and the wall-time limit, with margin to spare at the 1000-row cap.
 - **SC-005**: No transaction is linked to more than one invoice within a single import run.
 
 ## Assumptions
 
 - The matching rules themselves (±2-day exact/discount window, ±7-day ±5% forex window, exact-vs-near confidence, ambiguous on ≥2 candidates, discounts-only gross adjustment) are correct and stay as-is; this feature only changes *how* the data backing those rules is fetched and written, not the rules.
 - The existing backend test suite is the regression oracle for behavior preservation; "identical outcomes" is verified against it plus a manual real-import spot check.
-- Within a single import's date window, the count of unmatched in-window expense transactions is normally well below the data store's single-response row limit (monthly cadence, small personal dataset); ranged/paged fetching is only needed if that assumption is violated and is called out as an edge case rather than a default.
+- Within a single import's date window, the count of unmatched in-window expense transactions is normally well below the data store's single-response row limit (monthly cadence, small personal dataset). Rather than build speculative paging, the single read is guarded: if it returns at the max page size the import aborts loudly (FR-012). Paging can be added later if that guard ever fires in practice.
 - No API contract change and no database migration are required; this is a backend-only refactor (the deferred "performance optimisation for large CSVs" item from spec 022).
 - The 100-invoice processing chunk that exists today for wall-time safety may be retained, removed, or repurposed as an implementation detail, provided the subrequest and wall-time guarantees in the Success Criteria still hold.
