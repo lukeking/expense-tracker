@@ -398,7 +398,7 @@ export async function bulkEnrichTransactions(
 // carries its `transaction_id` and `source_invoice_id`.
 export async function bulkInsertTransactionItems(
   supabase: SupabaseClient,
-  rows: { transaction_id: string; name: string; amount: number | null; tags: string[]; sort_order: number; source_invoice_id: string | null }[]
+  rows: { transaction_id: string; name: string; amount: number | null; effective_amount?: number | null; tags: string[]; sort_order: number; source_invoice_id: string | null }[]
 ): Promise<void> {
   if (rows.length === 0) return;
   const { error } = await supabase.from('transaction_items').insert(rows);
@@ -617,7 +617,7 @@ export async function getTransactionsForPeriod(
   while (true) {
     const { data, error } = await supabase
       .from('transactions')
-      .select('id, amount, transaction_type, payment_method, tags, transaction_at, parent_transaction_id, transaction_items(amount, tags)')
+      .select('id, amount, transaction_type, payment_method, tags, transaction_at, parent_transaction_id, transaction_items(amount, effective_amount, tags)')
       .in('transaction_type', ['expense', 'fee', 'refund'])
       .gte('transaction_at', start.toISOString())
       .lt('transaction_at', end.toISOString())
@@ -788,6 +788,33 @@ export async function insertAdjustments(
   if (error) throw new Error(`insertAdjustments: ${error.message}`);
 }
 
+// Pure: distribute `paidTotal` across items proportional to each item's face `amount`,
+// flooring each share and adding the rounding remainder to the largest-amount item (ties
+// resolved to the last in the given order — callers pass items in sort_order). Items with
+// `amount == null` get no share (excluded). The returned shares sum exactly to `paidTotal`.
+// Single source of truth for both the per-tx DB writer and the bulk import pipeline.
+export function computeEffectiveShares(
+  items: { id: string; amount: number | null }[],
+  paidTotal: number
+): Map<string, number> {
+  const result = new Map<string, number>();
+  const eligible = items.filter((i) => i.amount != null) as { id: string; amount: number }[];
+  if (eligible.length === 0) return result;
+
+  const itemsTotal = eligible.reduce((s, i) => s + i.amount, 0);
+  if (itemsTotal === 0) return result;
+
+  const shares = eligible.map((i) => ({ id: i.id, amount: i.amount, ea: Math.floor(i.amount * paidTotal / itemsTotal) }));
+  const remainder = paidTotal - shares.reduce((s, x) => s + x.ea, 0);
+
+  const maxAmount = Math.max(...shares.map((s) => s.amount));
+  const largestIdx = shares.reduce((bestIdx, s, idx) => (s.amount >= maxAmount ? idx : bestIdx), 0);
+  shares[largestIdx].ea += remainder;
+
+  for (const s of shares) result.set(s.id, s.ea);
+  return result;
+}
+
 export async function computeAndWriteEffectiveAmounts(
   supabase: SupabaseClient,
   transactionId: string,
@@ -801,25 +828,14 @@ export async function computeAndWriteEffectiveAmounts(
   if (error) throw new Error(`computeAndWriteEffectiveAmounts fetch: ${error.message}`);
 
   const items = (data ?? []) as { id: string; amount: number | null; sort_order: number }[];
-  const eligible = items.filter((i) => i.amount != null);
-  if (eligible.length === 0) return;
+  const shares = computeEffectiveShares(items, paidTotal);
+  if (shares.size === 0) return;
 
-  const itemsTotal = eligible.reduce((s, i) => s + i.amount!, 0);
-  if (itemsTotal === 0) return;
-
-  const shares = eligible.map((i) => ({ id: i.id, amount: i.amount!, ea: Math.floor(i.amount! * paidTotal / itemsTotal) }));
-  const remainder = paidTotal - shares.reduce((s, x) => s + x.ea, 0);
-
-  // Add remainder to item with largest amount; ties go to last by sort_order (already ordered ascending, so last is highest index)
-  const maxAmount = Math.max(...shares.map((s) => s.amount));
-  const largestIdx = shares.reduce((bestIdx, s, idx) => (s.amount >= maxAmount ? idx : bestIdx), 0);
-  shares[largestIdx].ea += remainder;
-
-  for (const s of shares) {
+  for (const [id, ea] of shares) {
     const { error: updateErr } = await supabase
       .from('transaction_items')
-      .update({ effective_amount: s.ea })
-      .eq('id', s.id);
+      .update({ effective_amount: ea })
+      .eq('id', id);
     if (updateErr) throw new Error(`computeAndWriteEffectiveAmounts update: ${updateErr.message}`);
   }
 }
