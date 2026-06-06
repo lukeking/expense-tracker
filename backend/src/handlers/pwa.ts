@@ -880,6 +880,12 @@ pwaRouter.post('/import/resolve', async (c) => {
   });
   // 2. Handle items (replace, or fill-if-empty / keep).
   const itemsOutcome = await applyInvoiceItems(supabase, tx.id, invoice.items ?? [], replace_items, invoice.id);
+  // 2b. Stamp net per-item spend from the paid amount so a discounted invoice's filled
+  // items don't overcount in summaries (the allowance is folded out of the item amounts).
+  // Only when we actually wrote items; 'kept' leaves the user's own items untouched.
+  if (itemsOutcome !== 'kept') {
+    await computeAndWriteEffectiveAmounts(supabase, tx.id, tx.amount);
+  }
   // 3. Flip invoice status last.
   const confidence = computeConfidence(
     new Date(invoice.invoice_date).toISOString(), tx.transaction_at, tx.amount, invoice.net_amount

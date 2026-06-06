@@ -451,3 +451,41 @@ describe('applyInvoiceItems', () => {
     expect(outcome).toBe('replaced');
   });
 });
+
+// ─── runImportPipeline — discount-aware fill (US2, feature 025) ────────────────
+
+describe('runImportPipeline — net effective_amount on fill (US2)', () => {
+  it('discounted invoice fill stamps net effective_amount summing to the paid amount', async () => {
+    const fake = makeFakeSupabase({
+      transactions: [makeTxRow({ id: 'tx-900', amount: 900, transaction_at: '2025-04-18T08:00:00.000Z' })],
+    });
+    const invoice = makeInvoice({
+      gross_amount: 1000,
+      allowance: 100,
+      net_amount: 900,
+      items: [
+        { name: 'A', quantity: 1, unit_price: 600, amount: 600 },
+        { name: 'B', quantity: 1, unit_price: 400, amount: 400 },
+      ],
+    });
+    const counters = await runImportPipeline(fake.client, [invoice], 'run-1', NO_SKIP);
+
+    expect(counters.matchedExact).toBe(1);
+    expect(counters.matched[0].items_outcome).toBe('filled');
+    const items = fake.tables.transaction_items.filter((i) => i.transaction_id === 'tx-900');
+    const a = items.find((i) => i.name === 'A')!;
+    const b = items.find((i) => i.name === 'B')!;
+    expect(a.effective_amount).toBe(540); // 600/1000 × 900
+    expect(b.effective_amount).toBe(360); // 400/1000 × 900
+    expect((a.effective_amount as number) + (b.effective_amount as number)).toBe(900); // sums to paid (SC-001)
+  });
+
+  it('non-discounted invoice fill → effective_amount equals face amount (no regression, SC-003)', async () => {
+    const fake = makeFakeSupabase({
+      transactions: [makeTxRow({ id: 'tx-180', amount: 180, transaction_at: '2025-04-18T08:00:00.000Z' })],
+    });
+    const invoice = makeInvoice({ items: [{ name: '咖啡', quantity: 1, unit_price: 180, amount: 180 }] });
+    await runImportPipeline(fake.client, [invoice], 'run-1', NO_SKIP);
+    expect(fake.tables.transaction_items.find((i) => i.name === '咖啡')!.effective_amount).toBe(180);
+  });
+});

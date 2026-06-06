@@ -25,7 +25,7 @@ Web app: backend Worker at `backend/src`, tests at `backend/tests`, one-off scri
 
 ## Phase 1: Setup
 
-- [ ] T001 Confirm baseline is green before changes: `cd backend && pnpm run typecheck && pnpm run lint && pnpm run test` (expect 275 passing).
+- [X] T001 Confirm baseline is green before changes: `cd backend && pnpm run typecheck && pnpm run lint && pnpm run test` (expect 275 passing).
 
 ---
 
@@ -33,8 +33,8 @@ Web app: backend Worker at `backend/src`, tests at `backend/tests`, one-off scri
 
 **Purpose**: One source of truth for the proportional net-share rule. US1 is independent of this phase and may proceed in parallel.
 
-- [ ] T002 [P] Add unit tests for the pure share helper in `backend/tests/db/queries.test.ts`: proportional split `floor(amount × paid / Σamount)`, remainder added to the largest-amount item, `amount == null` items excluded, and `Σ shares == paidTotal` (SC-005, contract C5).
-- [ ] T003 Extract `computeEffectiveShares(items: {id; amount: number|null}[], paidTotal: number): Map<string, number>` in `backend/src/db/queries.ts`, and refactor `computeAndWriteEffectiveAmounts` to fetch → `computeEffectiveShares` → write (no behaviour change; existing callers and tests stay green).
+- [X] T002 [P] Add unit tests for the pure share helper in `backend/tests/db/queries.test.ts`: proportional split `floor(amount × paid / Σamount)`, remainder added to the largest-amount item, `amount == null` items excluded, and `Σ shares == paidTotal` (SC-005, contract C5).
+- [X] T003 Extract `computeEffectiveShares(items: {id; amount: number|null}[], paidTotal: number): Map<string, number>` in `backend/src/db/queries.ts`, and refactor `computeAndWriteEffectiveAmounts` to fetch → `computeEffectiveShares` → write (no behaviour change; existing callers and tests stay green).
 
 **Checkpoint**: shared share-math available; existing effective_amount behaviour unchanged.
 
@@ -46,8 +46,8 @@ Web app: backend Worker at `backend/src`, tests at `backend/tests`, one-off scri
 
 **Independent Test**: Record an itemized expense whose items' face total exceeds the paid amount (a discount); the period summary's categories sum to the paid amount and category totals sum to the grand total.
 
-- [ ] T004 [P] [US1] In `backend/tests/services/summary.test.ts`: add cases where items carry `effective_amount` below `amount` (discount) → `aggregateByCategory`/`aggregateBySubcategory` count the net value; equal/null `effective_amount` → output unchanged; assert Σ category totals ≤ grand total (SC-001 manual case, SC-002, SC-003, contract C1).
-- [ ] T005 [US1] In `backend/src/db/queries.ts`, add `effective_amount` to the `transaction_items(...)` select in `getTransactionsForPeriod` (FR-001, FR-006). (Aggregators already use `effective_amount ?? amount` — no change there.)
+- [X] T004 [P] [US1] In `backend/tests/services/summary.test.ts`: add cases where items carry `effective_amount` below `amount` (discount) → `aggregateByCategory`/`aggregateBySubcategory` count the net value; equal/null `effective_amount` → output unchanged; assert Σ category totals ≤ grand total (SC-001 manual case, SC-002, SC-003, contract C1).
+- [X] T005 [US1] In `backend/src/db/queries.ts`, add `effective_amount` to the `transaction_items(...)` select in `getTransactionsForPeriod` (FR-001, FR-006). (Aggregators already use `effective_amount ?? amount` — no change there.)
 
 **Checkpoint**: manual discounted transactions summarise at net; non-discounted unchanged.
 
@@ -59,11 +59,11 @@ Web app: backend Worker at `backend/src`, tests at `backend/tests`, one-off scri
 
 **Independent Test**: Import or resolve a discounted invoice onto an item-less transaction; the filled items' categories sum to the paid amount in the summary.
 
-- [ ] T006 [P] [US2] In `backend/tests/handlers/pwa-import.test.ts`: after `POST /import/resolve` fills a discounted invoice, the matched tx's items carry `effective_amount` summing to `tx.amount` (C2); `POST /import/manual-link` regression still stamps it; `PUT /expense` edit keeps `effective_amount` reconciled to the edited amount (FR-008, C7).
-- [ ] T007 [P] [US2] In `backend/tests/services/invoice-matcher.test.ts`: `runImportPipeline` auto-fill of a discounted invoice stamps `effective_amount` summing to the matched tx's paid amount; a non-discounted fill yields `effective_amount == amount`; the per-import subrequest/write-call shape is unchanged vs feature 024 (C3, C4).
-- [ ] T008 [US2] In `backend/src/db/queries.ts`, add optional `effective_amount?: number | null` to the `bulkInsertTransactionItems` row shape (defaults to null → no change for other callers).
-- [ ] T009 [US2] In `backend/src/services/invoice-matcher.ts` `runImportPipeline`, compute fill-item `effective_amount` in memory via `computeEffectiveShares` (keyed by array index) against each matched transaction's paid `amount`, and set it on the rows passed to `bulkInsertTransactionItems` (FR-001/004; no per-match subrequest added — preserves 024).
-- [ ] T010 [US2] In `backend/src/handlers/pwa.ts` `POST /import/resolve`, after `applyInvoiceItems`, call `computeAndWriteEffectiveAmounts(supabase, tx.id, tx.amount)` so the resolved (confirmed-ambiguous) fill carries net values (FR-004).
+- [X] T006 [P] [US2] In `backend/tests/handlers/pwa-import.test.ts`: after `POST /import/resolve` fills a discounted invoice, the matched tx's items carry `effective_amount` summing to `tx.amount` (C2); `POST /import/manual-link` regression still stamps it; `PUT /expense` edit keeps `effective_amount` reconciled to the edited amount (FR-008, C7).
+- [X] T007 [P] [US2] In `backend/tests/services/invoice-matcher.test.ts`: `runImportPipeline` auto-fill of a discounted invoice stamps `effective_amount` summing to the matched tx's paid amount; a non-discounted fill yields `effective_amount == amount`; the per-import subrequest/write-call shape is unchanged vs feature 024 (C3, C4).
+- [X] T008 [US2] In `backend/src/db/queries.ts`, add optional `effective_amount?: number | null` to the `bulkInsertTransactionItems` row shape (defaults to null → no change for other callers).
+- [X] T009 [US2] In `backend/src/services/invoice-matcher.ts` `runImportPipeline`, compute fill-item `effective_amount` in memory via `computeEffectiveShares` (keyed by array index) against each matched transaction's paid `amount`, and set it on the rows passed to `bulkInsertTransactionItems` (FR-001/004; no per-match subrequest added — preserves 024).
+- [X] T010 [US2] In `backend/src/handlers/pwa.ts` `POST /import/resolve`, after `applyInvoiceItems`, call `computeAndWriteEffectiveAmounts(supabase, tx.id, tx.amount)` so the resolved (confirmed-ambiguous) fill carries net values (FR-004).
 
 **Checkpoint**: all forward fill paths (import auto, resolve, manual-link) produce net-correct summaries.
 
@@ -75,8 +75,8 @@ Web app: backend Worker at `backend/src`, tests at `backend/tests`, one-off scri
 
 **Independent Test**: A past invoice-filled discounted transaction that overcounts is corrected after running the backfill; that period reconciles.
 
-- [ ] T011 [P] [US3] In `backend/tests/db/queries.test.ts` (or a new `backend/tests/scripts/backfill.test.ts`): test the pure selection/recompute logic — identifies invoice-sourced items (`source_invoice_id` set) whose face total ≠ `transactions.amount`, recomputes to net via the shared helper, is idempotent on re-run, and skips non-discounted and manual rows (C6).
-- [ ] T012 [US3] Create `backend/scripts/backfill-effective-amounts.ts` with `--dry-run` (default, prints per-tx before→after) and `--apply` (writes). Selects invoice-filled discounted transactions and recomputes `effective_amount` via the per-tx writer; idempotent (FR-006). Mirror the env/Supabase bootstrap of existing scripts (e.g. `migrate-legacy.ts`).
+- [X] T011 [P] [US3] In `backend/tests/db/queries.test.ts` (or a new `backend/tests/scripts/backfill.test.ts`): test the pure selection/recompute logic — identifies invoice-sourced items (`source_invoice_id` set) whose face total ≠ `transactions.amount`, recomputes to net via the shared helper, is idempotent on re-run, and skips non-discounted and manual rows (C6).
+- [X] T012 [US3] Create `backend/scripts/backfill-effective-amounts.ts` with `--dry-run` (default, prints per-tx before→after) and `--apply` (writes). Selects invoice-filled discounted transactions and recomputes `effective_amount` via the per-tx writer; idempotent (FR-006). Mirror the env/Supabase bootstrap of existing scripts (e.g. `migrate-legacy.ts`).
 
 **Checkpoint**: historical data corrected; SC-004 reconciles.
 
@@ -84,7 +84,7 @@ Web app: backend Worker at `backend/src`, tests at `backend/tests`, one-off scri
 
 ## Phase 6: Polish & Validation
 
-- [ ] T013 Run the full backend gate `cd backend && pnpm run typecheck && pnpm run lint && pnpm run test` — all green, including the new US1/US2/US3 cases and the existing 275 (zero regressions, SC-003).
+- [X] T013 Run the full backend gate `cd backend && pnpm run typecheck && pnpm run lint && pnpm run test` — all green, including the new US1/US2/US3 cases and the existing 275 (zero regressions, SC-003).
 - [ ] T014 Execute `quickstart.md` §2 (manual e2e on dev) and §3 (`backfill --dry-run` then `--apply`, then idempotent re-run); tick the SC-001…SC-005 acceptance checklist.
 
 ---

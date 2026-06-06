@@ -11,6 +11,7 @@ import {
   getTransactionItemsByTransactionIds,
   insertTransactionItems,
   replaceTransactionItems,
+  computeEffectiveShares,
   type InvoiceInsertRow,
 } from '../db/queries';
 
@@ -260,7 +261,7 @@ export async function runImportPipeline(
   for (const it of existingItems) existingItemCount.set(it.transaction_id, (existingItemCount.get(it.transaction_id) ?? 0) + 1);
 
   const enrichRows: Transaction[] = [];
-  const itemRows: { transaction_id: string; name: string; amount: number | null; tags: string[]; sort_order: number; source_invoice_id: string | null }[] = [];
+  const itemRows: { transaction_id: string; name: string; amount: number | null; effective_amount: number | null; tags: string[]; sort_order: number; source_invoice_id: string | null }[] = [];
 
   for (const m of matchedEntries) {
     const invoiceId = invoiceIdByNumber.get(m.invoice.invoice_number)!;
@@ -279,11 +280,19 @@ export async function runImportPipeline(
     } else {
       itemsOutcome = 'filled';
       const positiveItems = m.invoice.items.filter((li) => li.amount == null || li.amount > 0);
+      // Net per-item spend = proportional share of the matched tx's paid amount (handles
+      // the invoice discount the parser folded into the allowance). Computed in memory —
+      // no per-tx DB round-trip — keying by index since the items have no id pre-insert.
+      const shares = computeEffectiveShares(
+        positiveItems.map((li, idx) => ({ id: String(idx), amount: li.amount })),
+        m.tx.amount
+      );
       positiveItems.forEach((li, idx) =>
         itemRows.push({
           transaction_id: m.tx.id,
           name: li.name,
           amount: li.amount,
+          effective_amount: shares.get(String(idx)) ?? null,
           tags: [],
           sort_order: idx,
           source_invoice_id: invoiceId,

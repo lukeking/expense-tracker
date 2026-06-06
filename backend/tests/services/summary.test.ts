@@ -261,3 +261,58 @@ describe('buildCategoryEmbedFields', () => {
     expect(fields[1].value).toContain('60%');
   });
 });
+
+// ─── discount-aware aggregation: effective_amount over face amount (feature 025) ──
+
+describe('aggregateByCategory — discount-aware (effective_amount)', () => {
+  it('counts net effective_amount, not gross face amount, for a discounted multi-category tx', () => {
+    const txs = [{
+      amount: 900,
+      tags: [],
+      transaction_items: [
+        { amount: 600, effective_amount: 540, tags: ['日:洗髮精'] },
+        { amount: 400, effective_amount: 360, tags: ['飲:零食'] },
+      ],
+    }];
+    const result = aggregateByCategory(txs);
+    expect(result.find((t) => t.category === '日')?.total).toBe(540);
+    expect(result.find((t) => t.category === '飲')?.total).toBe(360);
+    // categories sum to the paid amount → ≤ grand total (SC-001 / SC-002)
+    expect(result.reduce((s, c) => s + c.total, 0)).toBe(900);
+  });
+
+  it('effective_amount == amount (non-discounted) → unchanged (SC-003)', () => {
+    const txs = [{
+      amount: 500,
+      tags: [],
+      transaction_items: [
+        { amount: 300, effective_amount: 300, tags: ['日:x'] },
+        { amount: 200, effective_amount: 200, tags: ['飲:y'] },
+      ],
+    }];
+    const result = aggregateByCategory(txs);
+    expect(result.find((t) => t.category === '日')?.total).toBe(300);
+    expect(result.find((t) => t.category === '飲')?.total).toBe(200);
+  });
+
+  it('null effective_amount falls back to face amount', () => {
+    const txs = [{ amount: 100, tags: [], transaction_items: [{ amount: 100, effective_amount: null, tags: ['日:x'] }] }];
+    expect(aggregateByCategory(txs).find((t) => t.category === '日')?.total).toBe(100);
+  });
+});
+
+describe('aggregateBySubcategory — discount-aware (effective_amount)', () => {
+  it('drills into net subcategory amounts for a discounted tx', () => {
+    const txs = [{
+      amount: 900,
+      tags: [],
+      transaction_items: [
+        { amount: 600, effective_amount: 540, tags: ['日:洗髮精'] },
+        { amount: 400, effective_amount: 360, tags: ['日:牙膏'] },
+      ],
+    }];
+    const result = aggregateBySubcategory(txs, '日');
+    expect(result.find((t) => t.subcategory === '洗髮精')?.total).toBe(540);
+    expect(result.find((t) => t.subcategory === '牙膏')?.total).toBe(360);
+  });
+});

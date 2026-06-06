@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { findAllMatchedInvoices, markInvoicesRead, getTransactionsByIds, getTransactionItemsByTransactionIds, resetInvoiceToAmbiguous } from '../../src/db/queries';
+import { findAllMatchedInvoices, markInvoicesRead, getTransactionsByIds, getTransactionItemsByTransactionIds, resetInvoiceToAmbiguous, computeEffectiveShares, computeAndWriteEffectiveAmounts } from '../../src/db/queries';
 
 // Test the getMonthlySpend reduce logic directly — same formula as the implementation
 function computeMonthlySpend(rows: { amount: number; transaction_type: string }[]): number {
@@ -302,5 +302,66 @@ describe('getTransactionItemsByTransactionIds batched fetch (matched detail)', (
     const { client, calls } = makeFake({ transaction_items: [{ transaction_id: 't-1', name: 'x', amount: 1, tags: [], sort_order: 0 }] });
     expect(await getTransactionItemsByTransactionIds(client, [])).toEqual([]);
     expect(calls.select.transaction_items).toBeUndefined();
+  });
+});
+
+// ─── effective_amount net-share math (feature 025) ────────────────────────────
+
+describe('computeEffectiveShares (proportional net share)', () => {
+  it('splits the paid amount proportionally to face value (discount)', () => {
+    const shares = computeEffectiveShares([{ id: 'a', amount: 600 }, { id: 'b', amount: 400 }], 900);
+    expect(shares.get('a')).toBe(540); // floor(600*900/1000)
+    expect(shares.get('b')).toBe(360); // floor(400*900/1000)
+    expect([...shares.values()].reduce((s, v) => s + v, 0)).toBe(900); // sums to paid (SC-005)
+  });
+
+  it('adds the rounding remainder to the largest-amount item (ties → last)', () => {
+    const shares = computeEffectiveShares([{ id: 'a', amount: 1 }, { id: 'b', amount: 1 }, { id: 'c', amount: 1 }], 100);
+    expect([...shares.values()].reduce((s, v) => s + v, 0)).toBe(100);
+    expect(shares.get('a')).toBe(33);
+    expect(shares.get('c')).toBe(34); // last of the equal-amount items absorbs the +1
+  });
+
+  it('excludes null-amount items from apportionment', () => {
+    const shares = computeEffectiveShares([{ id: 'a', amount: 300 }, { id: 'b', amount: null }], 270);
+    expect(shares.get('a')).toBe(270);
+    expect(shares.has('b')).toBe(false);
+  });
+
+  it('returns empty when there are no eligible items or zero face total', () => {
+    expect(computeEffectiveShares([], 100).size).toBe(0);
+    expect(computeEffectiveShares([{ id: 'a', amount: null }], 100).size).toBe(0);
+    expect(computeEffectiveShares([{ id: 'a', amount: 0 }], 100).size).toBe(0);
+  });
+
+  it('is deterministic — a backfill re-run produces identical shares (idempotent)', () => {
+    const items = [{ id: 'a', amount: 600 }, { id: 'b', amount: 400 }];
+    expect([...computeEffectiveShares(items, 900).entries()]).toEqual([...computeEffectiveShares(items, 900).entries()]);
+  });
+});
+
+describe('computeAndWriteEffectiveAmounts (recompute shared by resolve / manual-link / edit)', () => {
+  it('writes net effective_amount proportional to the paid amount for a discounted fill', async () => {
+    const { client, tables } = makeFake({
+      transaction_items: [
+        { id: 'i1', transaction_id: 'tx', amount: 600, sort_order: 0, effective_amount: null },
+        { id: 'i2', transaction_id: 'tx', amount: 400, sort_order: 1, effective_amount: null },
+      ],
+    });
+    await computeAndWriteEffectiveAmounts(client, 'tx', 900);
+    expect(tables.transaction_items.find((i) => i.id === 'i1')!.effective_amount).toBe(540);
+    expect(tables.transaction_items.find((i) => i.id === 'i2')!.effective_amount).toBe(360);
+  });
+
+  it('non-discounted (paid == face total) → effective_amount equals amount (no regression)', async () => {
+    const { client, tables } = makeFake({
+      transaction_items: [
+        { id: 'i1', transaction_id: 'tx', amount: 300, sort_order: 0, effective_amount: null },
+        { id: 'i2', transaction_id: 'tx', amount: 200, sort_order: 1, effective_amount: null },
+      ],
+    });
+    await computeAndWriteEffectiveAmounts(client, 'tx', 500);
+    expect(tables.transaction_items.find((i) => i.id === 'i1')!.effective_amount).toBe(300);
+    expect(tables.transaction_items.find((i) => i.id === 'i2')!.effective_amount).toBe(200);
   });
 });
