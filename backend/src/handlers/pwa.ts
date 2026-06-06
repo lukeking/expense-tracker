@@ -39,7 +39,7 @@ import { runImportPipeline, computeConfidence, applyInvoiceItems, selectExactDis
 import { decodeCSVBuffer, parseCSVRows, groupInvoices, RowLimitError } from '../services/csv-parser';
 import { aggregateByCategory, aggregateBySubcategory } from '../services/summary';
 
-type PwaEnv = { Bindings: Env };
+interface PwaEnv { Bindings: Env }
 
 const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'credit_card', 'easy_card', 'prepaid_wallet', 'bank_account'];
 
@@ -115,8 +115,8 @@ pwaRouter.get('/tags', async (c) => {
 // ─── POST /pwa/expense ───────────────────────────────────────────────────────
 
 pwaRouter.post('/expense', async (c) => {
-  type AdjInput = { kind: 'fee' | 'refund' | 'discount'; amount: number; note?: string | null; basis?: 'percentage' | null; basis_value?: number | null };
-  type Body = {
+  interface AdjInput { kind: 'fee' | 'refund' | 'discount'; amount: number; note?: string | null; basis?: 'percentage' | null; basis_value?: number | null }
+  interface Body {
     amount: number;
     payment_method: string;
     category_tag?: string | null;
@@ -124,7 +124,7 @@ pwaRouter.post('/expense', async (c) => {
     note?: string | null;
     items?: { name: string; amount?: number | null; tag?: string | null; note?: string | null }[];
     adjustments?: AdjInput[];
-  };
+  }
   let body: Body;
   try {
     body = await c.req.json<Body>();
@@ -209,7 +209,7 @@ pwaRouter.get('/summary', async (c) => {
   if (!from || !to) return c.json({ error: 'MISSING_PARAMS', message: 'from and to are required' }, 400);
 
   const start = new Date(from);
-  const end = new Date(to + 'T23:59:59.999Z');
+  const end = new Date(`${to}T23:59:59.999Z`);
   if (isNaN(start.getTime()) || isNaN(end.getTime())) {
     return c.json({ error: 'INVALID_DATE', message: 'from and to must be valid ISO dates' }, 400);
   }
@@ -246,7 +246,7 @@ pwaRouter.get('/summary/subcategories', async (c) => {
   const paymentMethod = c.req.query('payment_method') || null;
 
   const start = new Date(from);
-  const end = new Date(to + 'T23:59:59.999Z');
+  const end = new Date(`${to}T23:59:59.999Z`);
   const supabase = getSupabaseClient(c.env);
   let txs = await getTransactionsForPeriod(supabase, start, end);
   if (paymentMethod) txs = txs.filter((tx) => tx.payment_method === paymentMethod);
@@ -256,7 +256,7 @@ pwaRouter.get('/summary/subcategories', async (c) => {
   const total = txs
     .filter((tx) => {
       const allTags = [...tx.tags, ...tx.transaction_items.flatMap((i) => i.tags)];
-      return allTags.some((t) => t === major || t.startsWith(major + ':'));
+      return allTags.some((t) => t === major || t.startsWith(`${major}:`));
     })
     .reduce((s, tx) => s + (tx.transaction_type === 'refund' ? -tx.amount : tx.amount), 0);
   const subcategories = rawTotals.map((t) => ({
@@ -277,7 +277,7 @@ pwaRouter.get('/transaction-periods', async (c) => {
   const supabase = getSupabaseClient(c.env);
   const { data, error } = await supabase.rpc('get_transaction_periods', {
     p_start: from,
-    p_end: to + 'T23:59:59.999Z',
+    p_end: `${to}T23:59:59.999Z`,
   });
 
   if (error) return c.json({ error: 'DB_ERROR', message: error.message }, 500);
@@ -305,7 +305,7 @@ pwaRouter.get('/transactions', async (c) => {
       { count: 'exact' }
     )
     .gte('transaction_at', from)
-    .lte('transaction_at', to + 'T23:59:59.999Z')
+    .lte('transaction_at', `${to}T23:59:59.999Z`)
     .order('transaction_at', { ascending: false });
 
   if (paymentMethod) query = query.eq('payment_method', paymentMethod);
@@ -314,16 +314,16 @@ pwaRouter.get('/transactions', async (c) => {
 
   if (error) return c.json({ error: 'DB_ERROR', message: error.message }, 500);
 
-  type TxRow = {
+  interface TxRow {
     id: string; amount: number; transaction_type: string; payment_method: string;
     tags: string[]; note: string | null; transaction_at: string; created_at: string; parent_transaction_id: string | null;
     transaction_items: { id: string; name: string; amount: number | null; tags: string[] }[];
-  };
+  }
   let transactions = (data ?? []) as TxRow[];
 
   if (category) {
     const matchesCategory = (tags: string[]) =>
-      tags.some((t) => t === category || t.startsWith(category + ':'));
+      tags.some((t) => t === category || t.startsWith(`${category}:`));
     transactions = transactions.filter((tx) =>
       tx.transaction_items.some((item) => matchesCategory(item.tags)) ||
       matchesCategory(tx.tags)
@@ -340,8 +340,8 @@ pwaRouter.get('/transactions', async (c) => {
 
 // ─── Edit-history helpers ─────────────────────────────────────────────────────
 
-type HistoryItem = { name: string; amount: number | null; tags: string[]; note: string | null };
-type HistoryAdj  = { kind: string; amount: number; note: string | null; basis: string | null; basis_value: number | null };
+interface HistoryItem { name: string; amount: number | null; tags: string[]; note: string | null }
+interface HistoryAdj { kind: string; amount: number; note: string | null; basis: string | null; basis_value: number | null }
 
 async function readItemsForDiff(supabase: ReturnType<typeof getSupabaseClient>, txId: string): Promise<HistoryItem[]> {
   const { data, error } = await supabase
@@ -409,7 +409,7 @@ pwaRouter.get('/transactions/:id', async (c) => {
       .then(({ data }) => data ?? []),
   ]);
 
-  type ItemRow = { id: string; name: string; amount: number | null; tags: string[]; note: string | null; sort_order: number };
+  interface ItemRow { id: string; name: string; amount: number | null; tags: string[]; note: string | null; sort_order: number }
   const items = ((tx.transaction_items as ItemRow[]) ?? []).sort((a, b) => a.sort_order - b.sort_order);
 
   return c.json({
@@ -437,8 +437,8 @@ pwaRouter.get('/transactions/:id', async (c) => {
 
 pwaRouter.put('/transactions/:id', async (c) => {
   const txId = c.req.param('id');
-  type AdjInput = { kind: 'fee' | 'refund' | 'discount'; amount: number; note?: string | null; basis?: 'percentage' | null; basis_value?: number | null };
-  type Body = {
+  interface AdjInput { kind: 'fee' | 'refund' | 'discount'; amount: number; note?: string | null; basis?: 'percentage' | null; basis_value?: number | null }
+  interface Body {
     amount: number;
     payment_method: string;
     category_tag?: string | null;
@@ -446,7 +446,7 @@ pwaRouter.put('/transactions/:id', async (c) => {
     note?: string | null;
     items?: { name: string; amount?: number | null; tag?: string | null; note?: string | null }[];
     adjustments?: AdjInput[];
-  };
+  }
 
   let body: Body;
   try {
@@ -572,7 +572,7 @@ pwaRouter.get('/parent-search', async (c) => {
 // ─── POST /pwa/fee ───────────────────────────────────────────────────────────
 
 pwaRouter.post('/fee', async (c) => {
-  type Body = { amount: number; description: string; parent_transaction_id?: string | null };
+  interface Body { amount: number; description: string; parent_transaction_id?: string | null }
   let body: Body;
   try {
     body = await c.req.json<Body>();
@@ -625,7 +625,7 @@ pwaRouter.post('/fee', async (c) => {
 // ─── POST /pwa/refund ────────────────────────────────────────────────────────
 
 pwaRouter.post('/refund', async (c) => {
-  type Body = { amount: number; description: string; payment_method: string; parent_transaction_id?: string | null };
+  interface Body { amount: number; description: string; payment_method: string; parent_transaction_id?: string | null }
   let body: Body;
   try {
     body = await c.req.json<Body>();
@@ -786,7 +786,7 @@ pwaRouter.get('/import/ambiguous', async (c) => {
   // One candidate fetch over the union window (earliest − 7d … latest + 7d).
   const times = invoices.map((inv) => new Date(inv.invoice_date).getTime());
   const windowStart = new Date(Math.min(...times) - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const windowEndInclusive = new Date(Math.max(...times) + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10) + 'T23:59:59Z';
+  const windowEndInclusive = `${new Date(Math.max(...times) + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)}T23:59:59Z`;
   const candidatePool = await fetchImportCandidateTransactions(supabase, windowStart, windowEndInclusive);
 
   const maxNet = Math.max(...invoices.map((inv) => inv.net_amount));
@@ -843,7 +843,7 @@ pwaRouter.get('/import/ambiguous', async (c) => {
 // invoice `ambiguous` and the call can be safely retried.
 
 pwaRouter.post('/import/resolve', async (c) => {
-  type Body = { invoice_id: string; transaction_id: string; replace_items?: boolean };
+  interface Body { invoice_id: string; transaction_id: string; replace_items?: boolean }
   let body: Body;
   try {
     body = await c.req.json<Body>();
@@ -991,7 +991,7 @@ async function detachInvoiceTransaction(
 // deleted (SC-003).
 
 pwaRouter.post('/import/unlink', async (c) => {
-  type Body = { invoice_id: string };
+  interface Body { invoice_id: string }
   let body: Body;
   try {
     body = await c.req.json<Body>();
@@ -1027,7 +1027,7 @@ pwaRouter.post('/import/unlink', async (c) => {
 // transaction is never deleted).
 
 pwaRouter.post('/import/rematch', async (c) => {
-  type Body = { invoice_id: string };
+  interface Body { invoice_id: string }
   let body: Body;
   try {
     body = await c.req.json<Body>();
@@ -1099,14 +1099,14 @@ pwaRouter.get('/import/link-candidates', async (c) => {
 // existing items), recompute effective amounts, and flip to matched LAST.
 
 pwaRouter.post('/import/manual-link', async (c) => {
-  type Body = {
+  interface Body {
     invoice_id?: string;
     invoice?: UnmatchedInvoiceDetail;
     import_run_id?: string;
     transaction_id: string;
     item_indexes?: number[];
     replace?: { item_id: string; invoice_item_index: number }[];
-  };
+  }
   let body: Body;
   try {
     body = await c.req.json<Body>();
@@ -1139,9 +1139,9 @@ pwaRouter.post('/import/manual-link', async (c) => {
     }
     const parsed: ParsedInvoice = { ...invoice!, invoice_date: new Date(invoice!.invoice_date) };
     // Persist in a valid transient state, flipped to `matched` last (ordered writes).
-    // NOT `pending`: that value is the column default but is absent from the
-    // invoices.match_status CHECK constraint, so inserting it raises a 500. `ambiguous`
-    // is allowed and, on a mid-request failure, lands the row in 待手動確認 (recoverable).
+    // `ambiguous` is allowed by the match_status CHECK constraint and, on a mid-request
+    // failure, lands the row in 待手動確認 (recoverable). Migration 023 also aligns the
+    // column DEFAULT (formerly the constraint-invalid 'pending') with this value.
     inv = await insertInvoice(supabase, parsed, import_run_id, 'ambiguous');
   }
 
@@ -1224,8 +1224,8 @@ pwaRouter.get('/transactions/:id/adjustments', async (c) => {
 
 pwaRouter.put('/transactions/:id/adjustments', async (c) => {
   const txId = c.req.param('id');
-  type AdjInput = { kind: 'fee' | 'refund' | 'discount'; amount: number; note?: string | null; basis?: 'percentage' | null; basis_value?: number | null };
-  type Body = { adjustments: AdjInput[] };
+  interface AdjInput { kind: 'fee' | 'refund' | 'discount'; amount: number; note?: string | null; basis?: 'percentage' | null; basis_value?: number | null }
+  interface Body { adjustments: AdjInput[] }
   let body: Body;
   try {
     body = await c.req.json<Body>();

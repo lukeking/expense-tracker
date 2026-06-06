@@ -1,0 +1,12 @@
+{
+  "name": "expense-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Root tooling for the expense-tracker monorepo (backend/ + pwa/). Holds the Husky pre-commit gate only; each package keeps its own dependencies and lockfile.",
+  "scripts": {
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
+  }
+}

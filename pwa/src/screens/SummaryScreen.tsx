@@ -5,9 +5,14 @@ import { PeriodPicker } from '../components/PeriodPicker';
 import { FilterBar } from '../components/FilterBar';
 import { useSummaryData, useSubcategoryData, useTransactions, useTransactionPeriods, useMonthTransactions } from '../hooks/useSummary';
 import type { TimeBase, TxRecord, PeriodData } from '../hooks/useSummary';
+import { useTags } from '../hooks/useTags';
 import { EditExpenseSheet } from '../components/EditExpenseSheet';
 
 const COLOURS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
+
+// 全部 doesn't bulk-load transactions, so its payment-method chips come from this full
+// list rather than being derived from the in-view rows (as week/month/year do).
+const ALL_PAYMENT_METHODS = ['credit_card', 'cash', 'easy_card', 'prepaid_wallet', 'bank_account'];
 
 function formatMoney(val: number) {
   return `NT$${val.toLocaleString()}`;
@@ -208,7 +213,7 @@ export function SummaryScreen() {
     setTimeBase(base);
     setOffset(0);
     setDrilldown(null);
-    // filters preserved per FR-010; filter bar hidden automatically when base==='all'
+    // filters preserved per FR-010
   };
 
   const handleNavigate = (delta: -1 | 1) => {
@@ -231,9 +236,13 @@ export function SummaryScreen() {
   const { data: txData } = useTransactions(timeBase, offset, drilldown, tag, paymentMethod);
   const { data: periods } = useTransactionPeriods(timeBase);
 
-  // Unfiltered tx fetch for filter bar chip population
+  // Filter-bar chips. week/month/year derive them from the period's transactions;
+  // 全部 (which doesn't bulk-load transactions) uses the lightweight /tags endpoint
+  // plus the full payment-method list.
+  const { data: allPlainTags } = useTags();
   const { data: allTxData } = useTransactions(timeBase, offset);
   const availableTags = useMemo(() => {
+    if (timeBase === 'all') return allPlainTags ?? [];
     const txs = allTxData?.transactions ?? [];
     const set = new Set<string>();
     for (const tx of txs) {
@@ -243,12 +252,17 @@ export function SummaryScreen() {
       }
     }
     return Array.from(set).sort();
-  }, [allTxData]);
+  }, [timeBase, allPlainTags, allTxData]);
 
   const availablePaymentMethods = useMemo(() => {
+    if (timeBase === 'all') return ALL_PAYMENT_METHODS;
     const txs = allTxData?.transactions ?? [];
     return Array.from(new Set(txs.map((tx) => tx.payment_method))).sort();
-  }, [allTxData]);
+  }, [timeBase, allTxData]);
+
+  // Under 全部, an active filter/drilldown switches the history from the lazy per-period
+  // list to a single filtered, month-grouped list.
+  const allFiltered = timeBase === 'all' && (!!tag || !!paymentMethod || !!drilldown);
 
   const txs = txData?.transactions ?? [];
   const groups = groupTransactions(txs, timeBase);
@@ -274,16 +288,14 @@ export function SummaryScreen() {
         onPickerOpen={() => setPickerOpen(true)}
       />
 
-      {timeBase !== 'all' && (
-        <FilterBar
-          tags={availableTags}
-          paymentMethods={availablePaymentMethods}
-          activeTag={tag}
-          activePayment={paymentMethod}
-          onTagChange={setTag}
-          onPaymentChange={setPaymentMethod}
-        />
-      )}
+      <FilterBar
+        tags={availableTags}
+        paymentMethods={availablePaymentMethods}
+        activeTag={tag}
+        activePayment={paymentMethod}
+        onTagChange={setTag}
+        onPaymentChange={setPaymentMethod}
+      />
 
       {drilldown ? (
         /* ── Drilldown view ── */
@@ -374,7 +386,7 @@ export function SummaryScreen() {
         <div className="px-4 py-2">
           <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">交易記錄</span>
         </div>
-        {timeBase === 'all' ? (
+        {timeBase === 'all' && !allFiltered ? (
           periods === undefined
             ? <div className="p-4 text-center text-gray-400 dark:text-gray-500 text-sm">載入中…</div>
             : periods.length === 0
@@ -389,7 +401,7 @@ export function SummaryScreen() {
               label={g.label}
               items={g.items}
               parentMap={parentMap}
-              showDateSubs={timeBase === 'year'}
+              showDateSubs={timeBase === 'year' || timeBase === 'all'}
               onEdit={setEditingTxId}
             />
           ))

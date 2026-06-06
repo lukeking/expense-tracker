@@ -137,8 +137,8 @@ export function parseBeiZhuItems(
   if (laundry) {
     const pfx = laundry[1] ? '床單' : '';
     return [
-      { name: pfx + '洗衣', amount: parseInt(laundry[2]) },
-      { name: pfx + '烘衣', amount: parseInt(laundry[3]) },
+      { name: `${pfx}洗衣`, amount: parseInt(laundry[2]) },
+      { name: `${pfx}烘衣`, amount: parseInt(laundry[3]) },
     ];
   }
 

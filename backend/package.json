@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "register-commands": "npx tsx scripts/register-commands.ts",
-    "lint": "eslint src tests --ext .ts",
+    "lint": "eslint src tests",
+    "typecheck": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\""
   },
   "dependencies": {

@@ -1,0 +1,18 @@
+#!/usr/bin/env sh
+# Pre-commit gate for the expense-tracker monorepo.
+# Runs each package's typecheck + lint + tests; any failure aborts the commit.
+set -e
+
+echo "▶ backend: typecheck"
+( cd backend && pnpm run typecheck )
+
+echo "▶ backend: lint"
+( cd backend && pnpm run lint )
+
+echo "▶ backend: tests"
+( cd backend && pnpm run test )
+
+echo "▶ pwa: typecheck"
+( cd pwa && pnpm run typecheck )
+
+echo "✓ pre-commit checks passed"

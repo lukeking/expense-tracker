@@ -295,82 +295,6 @@ export async function findExistingInvoiceNumbers(
   return (data ?? []).map((r) => r.invoice_number as string);
 }
 
-// Auto-match candidate set for an invoice within the ±2-day window. An unlinked expense
-// transaction qualifies when its paid `amount` equals the invoice net amount, OR — US2,
-// discount-aware — its gross (paid amount + Σ recorded `discount` adjustments) equals the
-// net amount. Only `discount`-kind adjustments raise the gross (fee/refund excluded);
-// transactions without discounts behave exactly as the prior paid-amount-only match.
-export async function findMatchingExpenseTransaction(
-  supabase: SupabaseClient,
-  netAmount: number,
-  invoiceDate: Date
-): Promise<Transaction[]> {
-  const windowStart = new Date(invoiceDate.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const windowEnd = new Date(invoiceDate.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  // Paid amount can be at most the net amount (discounts only ever raise the gross above
-  // the paid amount), so bound the fetch with amount <= net.
-  const { data, error } = await supabase
-    .from('transactions')
-    .select('*')
-    .eq('transaction_type', 'expense')
-    .is('matched_invoice_id', null)
-    .lte('amount', netAmount)
-    .gte('transaction_at', windowStart)
-    .lte('transaction_at', windowEnd + 'T23:59:59Z')
-    .order('created_at', { ascending: false });
-  if (error) throw new Error(`findMatchingExpenseTransaction: ${error.message}`);
-  const txs = (data ?? []) as Transaction[];
-
-  const exact = txs.filter((t) => t.amount === netAmount);
-  const belowNet = txs.filter((t) => t.amount < netAmount);
-  if (belowNet.length === 0) return exact;
-
-  // For the below-net candidates, add recorded discounts; a tx qualifies when
-  // paid + Σ(discount) == net.
-  const { data: adjData, error: adjError } = await supabase
-    .from('transaction_adjustments')
-    .select('transaction_id, amount')
-    .in('transaction_id', belowNet.map((t) => t.id))
-    .eq('kind', 'discount');
-  if (adjError) throw new Error(`findMatchingExpenseTransaction discounts: ${adjError.message}`);
-  const discountByTx = new Map<string, number>();
-  for (const a of (adjData ?? []) as { transaction_id: string; amount: number }[]) {
-    discountByTx.set(a.transaction_id, (discountByTx.get(a.transaction_id) ?? 0) + a.amount);
-  }
-  const gross = belowNet.filter((t) => t.amount + (discountByTx.get(t.id) ?? 0) === netAmount);
-
-  // Union + dedup by id (exact has amount==net, gross has amount<net; dedup defensively).
-  const byId = new Map<string, Transaction>();
-  for (const t of [...exact, ...gross]) byId.set(t.id, t);
-  return [...byId.values()];
-}
-
-export async function findForexCandidateTransactions(
-  supabase: SupabaseClient,
-  netAmount: number,
-  invoiceDate: Date
-): Promise<Transaction[]> {
-  // Forex fallback uses a wider ±7-day window than the ±2-day exact match, because
-  // foreign-currency purchases can post several days after the invoice date. Never
-  // auto-linked — these candidates are surfaced for manual resolution only.
-  const windowStart = new Date(invoiceDate.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const windowEnd = new Date(invoiceDate.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const low = Math.floor(netAmount * 0.95);
-  const high = Math.ceil(netAmount * 1.05);
-  const { data, error } = await supabase
-    .from('transactions')
-    .select('*')
-    .eq('transaction_type', 'expense')
-    .is('matched_invoice_id', null)
-    .gte('amount', low)
-    .lte('amount', high)
-    .gte('transaction_at', windowStart)
-    .lte('transaction_at', windowEnd + 'T23:59:59Z')
-    .order('created_at', { ascending: false });
-  if (error) throw new Error(`findForexCandidateTransactions: ${error.message}`);
-  return (data ?? []) as Transaction[];
-}
-
 // ─── Invoice Import — bulk pipeline (feature 024) ─────────────────────────────
 // These collapse the per-invoice query loop into a constant number of round-trips so
 // a single import stays under the Cloudflare Workers subrequest cap. Matching itself
@@ -670,7 +594,7 @@ export async function findTransactionsWithoutInvoiceInRange(
     .eq('transaction_type', 'expense')
     .is('matched_invoice_id', null)
     .gte('transaction_at', from.toISOString().slice(0, 10))
-    .lte('transaction_at', to.toISOString().slice(0, 10) + 'T23:59:59Z')
+    .lte('transaction_at', `${to.toISOString().slice(0, 10)}T23:59:59Z`)
     .order('transaction_at', { ascending: false });
   if (error) throw new Error(`findTransactionsWithoutInvoiceInRange: ${error.message}`);
   return (data ?? []) as Transaction[];

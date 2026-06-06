@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { fetchPieChartUrl, fetchBarChartUrl } from '../../src/services/chart';
 
 const QUICKCHART_URL = 'https://quickchart.io/chart/create';

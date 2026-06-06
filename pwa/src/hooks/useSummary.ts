@@ -126,7 +126,10 @@ const BASE_LIMIT: Record<TimeBase, number> = {
   week: 200,
   month: 300,
   year: 2000,
-  all: 500,
+  // Higher cap for the 全部 (all-time) filtered list: tag/category filtering happens
+  // in memory on the fetched page, so this bounds how far back a filtered all-time
+  // view reaches. Only loaded when a filter/drilldown is active (see `enabled` below).
+  all: 2000,
 };
 
 export interface TransactionsData {
@@ -145,7 +148,9 @@ export function useTransactions(base: TimeBase, offset: number, category?: strin
     queryKey: ['transactions', base, offset, category ?? null, tag ?? null, paymentMethod ?? null],
     queryFn: () =>
       apiFetch<TransactionsData>(`/pwa/transactions?from=${from}&to=${to}&limit=${limit}${categoryParam}${tagParam}${pmParam}`),
-    enabled: base !== 'all',
+    // 全部 normally renders the lazy per-period list; only fetch the flat transaction
+    // list under 全部 when a filter/drilldown is active so it can be shown filtered.
+    enabled: base !== 'all' || !!category || !!tag || !!paymentMethod,
     staleTime: 30_000,
   });
 }

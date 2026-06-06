@@ -12,6 +12,8 @@ export default [
       parserOptions: {
         ecmaVersion: "latest",
         sourceType: "module",
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
       },
       globals: {
         console: "readonly",
@@ -36,7 +38,7 @@ rules: {
 
       // 3. 程式碼邏輯優化
       "no-console": ["warn", { allow: ["warn", "error"] }], // 正式環境禁止 log，但允許 warn/error
-      "eqeqeq": ["error", "always"], // 強制使用 ===
+      "eqeqeq": ["error", "always", { "null": "ignore" }], // 強制使用 ===（保留 == null 慣用法）
       "no-duplicate-imports": "error", // 禁止重複匯入
       "prefer-template": "error", // 強制使用樣板字串（對你的 Prompt 構建很有幫助）
 
