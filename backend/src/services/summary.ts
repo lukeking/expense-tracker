@@ -1,11 +1,11 @@
-import type { SummaryPeriod, CategoryTotal, SubcategoryTotal, TransactionItemRow } from '../types';
+import type { SummaryPeriod, CategoryTotal, SubcategoryTotal } from '../types';
 
-type TxForSummary = {
+interface TxForSummary {
   amount: number;
   transaction_type?: string;
   tags: string[];
   transaction_items: { amount: number | null; effective_amount?: number | null; tags: string[] }[];
-};
+}
 
 export function periodToDateRange(period: SummaryPeriod): { start: Date; end: Date } {
   const now = new Date();
@@ -64,14 +64,16 @@ export function aggregateByCategory(
     }
   }
 
-  const raw = Array.from(map.entries())
+  // Return every category (no overflow merge) so the PWA can show and drill into all
+  // of them. The Discord embed applies `mergeOverflowCategories` itself for its tighter
+  // field budget; the two surfaces intentionally differ.
+  return Array.from(map.entries())
     .filter(([, total]) => total > 0)
     .map(([category, total]) => ({ category, total }))
     .sort((a, b) => b.total - a.total);
-  return mergeOverflowCategories(raw);
 }
 
-// Applies the same top-4 + overflow-into-其他 logic to raw DB totals.
+// Caps to top-4 named + overflow-into-其他. Used by the Discord summary embed.
 export function mergeOverflowCategories(
   rawTotals: { category: string; total: number }[]
 ): CategoryTotal[] {
@@ -95,7 +97,7 @@ export function aggregateBySubcategory(
   category: string
 ): SubcategoryTotal[] {
   const map = new Map<string, number>();
-  const prefix = category + ':';
+  const prefix = `${category}:`;
   for (const tx of transactions) {
     const sign = tx.transaction_type === 'refund' ? -1 : 1;
     const items = tx.transaction_items ?? [];

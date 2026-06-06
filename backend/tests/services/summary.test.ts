@@ -1,21 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { periodToDateRange, aggregateByCategory, aggregateBySubcategory, buildCategoryEmbedFields } from '../../src/services/summary';
-
-// Helper: build a TxForSummary with one item per tag (carrying that item's full amount)
-function tx(amount: number, itemTags: string[][]): { amount: number; tags: string[]; transaction_items: { amount: number; tags: string[] }[] } {
-  if (itemTags.length === 0) {
-    return { amount, tags: [], transaction_items: [] };
-  }
-  const perItem = Math.floor(amount / itemTags.length);
-  return {
-    amount,
-    tags: [],
-    transaction_items: itemTags.map((tags, i) => ({
-      amount: i === itemTags.length - 1 ? amount - perItem * i : perItem,
-      tags,
-    })),
-  };
-}
+import { periodToDateRange, aggregateByCategory, aggregateBySubcategory, mergeOverflowCategories, buildCategoryEmbedFields } from '../../src/services/summary';
 
 // Simple single-item helper
 function txSingle(amount: number, tag: string): { amount: number; tags: string[]; transaction_items: { amount: number; tags: string[] }[] } {
@@ -126,7 +110,7 @@ describe('aggregateByCategory', () => {
     expect(result[2].total).toBe(100);
   });
 
-  it('>5 named categories → caps at 5, merges overflow into 其他', () => {
+  it('>5 named categories → returns all, sorted, no 其他 merge', () => {
     const txs = [
       txSingle(600, 'A:x'),
       txSingle(500, 'B:x'),
@@ -136,16 +120,13 @@ describe('aggregateByCategory', () => {
       txSingle(100, 'F:x'),
     ];
     const result = aggregateByCategory(txs);
-    expect(result).toHaveLength(5);
-    const qita = result.find((t) => t.category === '其他');
-    expect(qita?.total).toBe(300); // E(200) + F(100)
-    expect(result.find((t) => t.category === 'A')?.total).toBe(600);
-    expect(result.find((t) => t.category === 'D')?.total).toBe(300);
-    expect(result.find((t) => t.category === 'E')).toBeUndefined();
-    expect(result.find((t) => t.category === 'F')).toBeUndefined();
+    expect(result).toHaveLength(6);
+    expect(result.find((t) => t.category === 'E')?.total).toBe(200);
+    expect(result.find((t) => t.category === 'F')?.total).toBe(100);
+    expect(result.find((t) => t.category === '其他')).toBeUndefined();
   });
 
-  it('natural 其他 + >4 named → 其他 includes natural total + overflow', () => {
+  it('natural 其他 + >4 named → every category kept separately (no overflow merge)', () => {
     const txs = [
       txSingle(600, 'A:x'),
       txSingle(500, 'B:x'),
@@ -155,10 +136,9 @@ describe('aggregateByCategory', () => {
       { amount: 100, tags: [], transaction_items: [] }, // natural 其他
     ];
     const result = aggregateByCategory(txs);
-    expect(result).toHaveLength(5);
-    const qita = result.find((t) => t.category === '其他');
-    // natural 其他(100) + overflow E(200) = 300
-    expect(qita?.total).toBe(300);
+    expect(result).toHaveLength(6);
+    expect(result.find((t) => t.category === 'E')?.total).toBe(200);
+    expect(result.find((t) => t.category === '其他')?.total).toBe(100);
   });
 
   it('exactly 5 categories → returns all 5', () => {
@@ -172,6 +152,49 @@ describe('aggregateByCategory', () => {
     const result = aggregateByCategory(txs);
     expect(result).toHaveLength(5);
     expect(result.find((t) => t.category === 'E')).toBeDefined();
+  });
+});
+
+// ─── mergeOverflowCategories (Discord embed cap) ──────────────────────────────
+
+describe('mergeOverflowCategories', () => {
+  it('≤5 categories → returned unchanged', () => {
+    const raw = [
+      { category: 'A', total: 500 },
+      { category: 'B', total: 400 },
+      { category: 'C', total: 300 },
+    ];
+    expect(mergeOverflowCategories(raw)).toHaveLength(3);
+  });
+
+  it('>5 categories → caps at top-4 named + 其他 overflow', () => {
+    const raw = [
+      { category: 'A', total: 600 },
+      { category: 'B', total: 500 },
+      { category: 'C', total: 400 },
+      { category: 'D', total: 300 },
+      { category: 'E', total: 200 },
+      { category: 'F', total: 100 },
+    ];
+    const result = mergeOverflowCategories(raw);
+    expect(result).toHaveLength(5);
+    expect(result.find((t) => t.category === '其他')?.total).toBe(300); // E(200)+F(100)
+    expect(result.find((t) => t.category === 'E')).toBeUndefined();
+    expect(result.find((t) => t.category === 'F')).toBeUndefined();
+  });
+
+  it('natural 其他 total folds into the overflow bucket', () => {
+    const raw = [
+      { category: 'A', total: 600 },
+      { category: 'B', total: 500 },
+      { category: 'C', total: 400 },
+      { category: 'D', total: 300 },
+      { category: 'E', total: 200 },
+      { category: '其他', total: 100 },
+    ];
+    const result = mergeOverflowCategories(raw);
+    expect(result).toHaveLength(5);
+    expect(result.find((t) => t.category === '其他')?.total).toBe(300); // natural(100)+E(200)
   });
 });
 
