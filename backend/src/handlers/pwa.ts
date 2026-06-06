@@ -1094,7 +1094,7 @@ pwaRouter.get('/import/link-candidates', async (c) => {
 //   • `invoice_id` — an already-persisted `ambiguous` invoice (its forex candidates
 //     were wrong/empty); reuse the row and flip it to matched.
 //   • `invoice` (+ `import_run_id`) — an unmatched invoice (FR-007: carried by the
-//     client, not stored until now); persist it as pending first.
+//     client, not stored until now); persist it in a held state first.
 // Then: append only the checked invoice line items (provenance-stamped; never deletes
 // existing items), recompute effective amounts, and flip to matched LAST.
 
@@ -1138,7 +1138,11 @@ pwaRouter.post('/import/manual-link', async (c) => {
       return c.json({ error: 'ALREADY_IMPORTED', message: 'Invoice already imported' }, 409);
     }
     const parsed: ParsedInvoice = { ...invoice!, invoice_date: new Date(invoice!.invoice_date) };
-    inv = await insertInvoice(supabase, parsed, import_run_id, 'pending');
+    // Persist in a valid transient state, flipped to `matched` last (ordered writes).
+    // NOT `pending`: that value is the column default but is absent from the
+    // invoices.match_status CHECK constraint, so inserting it raises a 500. `ambiguous`
+    // is allowed and, on a mid-request failure, lands the row in 待手動確認 (recoverable).
+    inv = await insertInvoice(supabase, parsed, import_run_id, 'ambiguous');
   }
 
   const { data: tx, error: txErr } = await supabase
