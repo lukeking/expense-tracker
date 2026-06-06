@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import type { Env, PaymentMethod, ParsedInvoice, UnmatchedInvoiceDetail, Invoice, InvoiceItem } from '../types';
+import type { Env, PaymentMethod, ParsedInvoice, UnmatchedInvoiceDetail, Invoice, InvoiceItem, MarkReadRequest } from '../types';
 import { androidAuth } from '../middleware/android-auth';
 import { getSupabaseClient } from '../db/client';
 import {
@@ -16,6 +16,8 @@ import {
   deleteAdjustmentsForTransaction,
   findAllAmbiguousInvoices,
   findAllMatchedInvoices,
+  markInvoicesRead,
+  getTransactionsByIds,
   findExistingInvoiceNumbers,
   findMatchingExpenseTransaction,
   findForexCandidateTransactions,
@@ -27,6 +29,7 @@ import {
   deleteInvoice,
   deleteTransactionItemsBySourceInvoice,
   getTransactionItems,
+  renameTransactionItem,
   type TransactionForPeriod,
 } from '../db/queries';
 import { getBudgetProgress } from '../services/budget';
@@ -878,32 +881,53 @@ pwaRouter.post('/import/resolve', async (c) => {
 // auto-match (e.g. an amount collision) can be spotted and undone.
 
 pwaRouter.get('/import/matched', async (c) => {
+  const includeRead = c.req.query('include_read') === 'true';
   const supabase = getSupabaseClient(c.env);
-  const invoices = await findAllMatchedInvoices(supabase);
+  const invoices = await findAllMatchedInvoices(supabase, includeRead);
 
-  const entries = [];
-  for (const inv of invoices) {
-    let transaction = null;
-    if (inv.matched_transaction_id) {
-      const { data: tx } = await supabase
-        .from('transactions')
-        .select('id, amount, transaction_at, note')
-        .eq('id', inv.matched_transaction_id)
-        .single();
-      if (tx) transaction = tx;
-    }
-    entries.push({
-      id: inv.id,
-      invoice_number: inv.invoice_number,
-      seller_name: inv.seller_name,
-      invoice_date: inv.invoice_date,
-      net_amount: inv.net_amount,
-      match_confidence: inv.match_confidence,
-      transaction,
-    });
-  }
+  // Batched: one query for all linked transactions (no per-invoice N+1).
+  const txIds = [...new Set(
+    invoices.map((inv) => inv.matched_transaction_id).filter((id): id is string => id != null)
+  )];
+  const txs = await getTransactionsByIds(supabase, txIds);
+  const txById = new Map(txs.map((tx) => [tx.id, tx]));
+
+  const entries = invoices.map((inv) => ({
+    id: inv.id,
+    invoice_number: inv.invoice_number,
+    seller_name: inv.seller_name,
+    invoice_date: inv.invoice_date,
+    net_amount: inv.net_amount,
+    match_confidence: inv.match_confidence,
+    transaction: inv.matched_transaction_id ? txById.get(inv.matched_transaction_id) ?? null : null,
+  }));
 
   return c.json({ matched: entries });
+});
+
+// ─── POST /pwa/import/mark-read ───────────────────────────────────────────────
+// Acknowledge ("mark as read") one or more matched invoices so they drop out of the
+// review queue. Accepts a single invoice_id and/or a bulk invoice_ids[]; only
+// `matched` invoices are acknowledgeable (US1, FR-005).
+
+pwaRouter.post('/import/mark-read', async (c) => {
+  let body: MarkReadRequest;
+  try {
+    body = await c.req.json<MarkReadRequest>();
+  } catch {
+    return c.json({ error: 'INVALID_PAYLOAD', message: 'Invalid JSON' }, 400);
+  }
+  const ids = [...new Set([
+    ...(body.invoice_id ? [body.invoice_id] : []),
+    ...(body.invoice_ids ?? []),
+  ])];
+  if (ids.length === 0) {
+    return c.json({ error: 'INVALID_PAYLOAD', message: 'invoice_id or invoice_ids is required' }, 400);
+  }
+
+  const supabase = getSupabaseClient(c.env);
+  const marked = await markInvoicesRead(supabase, ids);
+  return c.json({ marked });
 });
 
 // ─── POST /pwa/import/unlink ──────────────────────────────────────────────────
@@ -976,7 +1000,9 @@ pwaRouter.get('/import/link-candidates', async (c) => {
       amount: tx.amount,
       note: tx.note,
       tags: tx.tags,
-      items: items.map((it) => ({ name: it.name, amount: it.amount })),
+      // `id` is exposed so the manual-link sheet can target an existing item for a
+      // per-item rename (US3).
+      items: items.map((it) => ({ id: it.id, name: it.name, amount: it.amount })),
     });
   }
   return c.json({ candidates });
@@ -998,6 +1024,7 @@ pwaRouter.post('/import/manual-link', async (c) => {
     import_run_id?: string;
     transaction_id: string;
     item_indexes?: number[];
+    replace?: { item_id: string; invoice_item_index: number }[];
   };
   let body: Body;
   try {
@@ -1005,7 +1032,7 @@ pwaRouter.post('/import/manual-link', async (c) => {
   } catch {
     return c.json({ error: 'INVALID_PAYLOAD', message: 'Invalid JSON' }, 400);
   }
-  const { invoice_id, invoice, import_run_id, transaction_id, item_indexes = [] } = body;
+  const { invoice_id, invoice, import_run_id, transaction_id, item_indexes = [], replace = [] } = body;
   if (!transaction_id || (!invoice_id && !invoice)) {
     return c.json({ error: 'INVALID_PAYLOAD', message: 'transaction_id and one of invoice_id / invoice are required' }, 400);
   }
@@ -1040,6 +1067,22 @@ pwaRouter.post('/import/manual-link', async (c) => {
     return c.json({ error: 'TRANSACTION_ALREADY_LINKED', message: 'Transaction already linked to an invoice' }, 409);
   }
 
+  const invoiceItems: InvoiceItem[] = inv.items ?? [];
+
+  // US3: validate the optional per-item replace (rename) directives before any write —
+  // each item_id must be on the chosen transaction and each invoice line index in range.
+  if (replace.length > 0) {
+    const existingItemIds = new Set((await getTransactionItems(supabase, tx.id)).map((i) => i.id));
+    for (const r of replace) {
+      if (!existingItemIds.has(r.item_id)) {
+        return c.json({ error: 'INVALID_PAYLOAD', message: 'replace.item_id is not on the chosen transaction' }, 400);
+      }
+      if (r.invoice_item_index < 0 || r.invoice_item_index >= invoiceItems.length) {
+        return c.json({ error: 'INVALID_PAYLOAD', message: 'replace.invoice_item_index is out of range' }, 400);
+      }
+    }
+  }
+
   // Enrich the transaction.
   await enrichTransaction(supabase, tx.id, {
     invoiceNumber: inv.invoice_number,
@@ -1047,8 +1090,13 @@ pwaRouter.post('/import/manual-link', async (c) => {
     sellerTaxId: inv.seller_tax_id,
     invoiceId: inv.id,
   });
+  // US3: apply rename-only replaces — take the invoice line's name; the item keeps its
+  // amount, effective_amount, tags, and source_invoice_id (NULL stays NULL, so a later
+  // un-link won't delete a renamed user item).
+  for (const r of replace) {
+    await renameTransactionItem(supabase, r.item_id, invoiceItems[r.invoice_item_index].name);
+  }
   // Append only the checked, positive-amount invoice items (provenance-stamped).
-  const invoiceItems: InvoiceItem[] = inv.items ?? [];
   const positive = invoiceItems
     .filter((_, idx) => item_indexes.includes(idx))
     .filter((li) => li.amount == null || li.amount > 0);
@@ -1072,7 +1120,7 @@ pwaRouter.post('/import/manual-link', async (c) => {
       transaction_at: tx.transaction_at,
       amount: tx.amount,
       confidence,
-      items_outcome: positive.length > 0 ? 'filled' : 'kept',
+      items_outcome: replace.length > 0 ? 'replaced' : positive.length > 0 ? 'filled' : 'kept',
     },
   });
 });

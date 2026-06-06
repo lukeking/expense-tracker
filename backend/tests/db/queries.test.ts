@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { findAllMatchedInvoices, markInvoicesRead, getTransactionsByIds } from '../../src/db/queries';
 
 // Test the getMonthlySpend reduce logic directly — same formula as the implementation
 function computeMonthlySpend(rows: { amount: number; transaction_type: string }[]): number {
@@ -223,5 +225,118 @@ describe('findExistingInvoiceNumbers dedup logic', () => {
     const incoming = ['AB-002', 'AB-003'];
     const dupes = incoming.filter((n) => dbNumbers.includes(n));
     expect(dupes).toHaveLength(0);
+  });
+});
+
+// ─── US1: matched-invoice review queue (reviewed_at) ──────────────────────────
+// A compact in-memory fake exercises the REAL query functions so the reviewed-at
+// filter, the matched-only mark-as-read, and the single batched transaction fetch
+// are covered against the implementation (not just mirrored).
+
+type Row = Record<string, unknown>;
+function makeFake(seed: { invoices?: Row[]; transactions?: Row[] }) {
+  const tables: Record<string, Row[]> = {
+    invoices: seed.invoices ?? [],
+    transactions: seed.transactions ?? [],
+  };
+  const calls = { select: {} as Record<string, number> };
+  function from(table: string) {
+    const filters: ((r: Row) => boolean)[] = [];
+    let mode: 'select' | 'update' = 'select';
+    let updatePatch: Row = {};
+    function execute() {
+      const matched = tables[table].filter((r) => filters.every((f) => f(r)));
+      if (mode === 'update') {
+        for (const r of matched) Object.assign(r, updatePatch);
+        return { data: matched, error: null };
+      }
+      calls.select[table] = (calls.select[table] ?? 0) + 1;
+      return { data: matched, error: null };
+    }
+    const builder: Record<string, unknown> = {
+      select() { return builder; },
+      update(patch: Row) { mode = 'update'; updatePatch = patch; return builder; },
+      eq(col: string, val: unknown) { filters.push((r) => r[col] === val); return builder; },
+      is(col: string, val: unknown) { filters.push((r) => (val === null ? r[col] == null : r[col] === val)); return builder; },
+      in(col: string, arr: unknown[]) { filters.push((r) => arr.includes(r[col])); return builder; },
+      order() { return builder; },
+      then(resolve: (v: unknown) => void) { resolve(execute()); },
+    };
+    return builder;
+  }
+  return { client: { from } as unknown as SupabaseClient, tables, calls };
+}
+
+describe('findAllMatchedInvoices reviewed filter (US1)', () => {
+  const seed = () => ({
+    invoices: [
+      { id: 'm-unread', match_status: 'matched', reviewed_at: null, invoice_date: '2026-04-18' },
+      { id: 'm-read', match_status: 'matched', reviewed_at: '2026-04-19T00:00:00Z', invoice_date: '2026-04-17' },
+      { id: 'amb', match_status: 'ambiguous', reviewed_at: null, invoice_date: '2026-04-16' },
+    ],
+  });
+
+  it('returns only unacknowledged matched invoices by default', async () => {
+    const { client } = makeFake(seed());
+    const rows = await findAllMatchedInvoices(client);
+    expect(rows.map((r) => r.id)).toEqual(['m-unread']);
+  });
+
+  it('returns read + unread matched invoices when includeRead=true', async () => {
+    const { client } = makeFake(seed());
+    const rows = await findAllMatchedInvoices(client, true);
+    expect(rows.map((r) => r.id).sort()).toEqual(['m-read', 'm-unread']);
+  });
+});
+
+describe('markInvoicesRead (US1)', () => {
+  it('sets reviewed_at on the given matched invoices and returns the count', async () => {
+    const { client, tables } = makeFake({
+      invoices: [
+        { id: 'm-1', match_status: 'matched', reviewed_at: null },
+        { id: 'm-2', match_status: 'matched', reviewed_at: null },
+      ],
+    });
+    const marked = await markInvoicesRead(client, ['m-1', 'm-2']);
+    expect(marked).toBe(2);
+    expect(tables.invoices.every((r) => r.reviewed_at != null)).toBe(true);
+  });
+
+  it('only affects matched invoices (ambiguous untouched)', async () => {
+    const { client, tables } = makeFake({
+      invoices: [
+        { id: 'm-1', match_status: 'matched', reviewed_at: null },
+        { id: 'amb-1', match_status: 'ambiguous', reviewed_at: null },
+      ],
+    });
+    const marked = await markInvoicesRead(client, ['m-1', 'amb-1']);
+    expect(marked).toBe(1);
+    expect(tables.invoices.find((r) => r.id === 'amb-1')!.reviewed_at).toBeNull();
+  });
+
+  it('no-ops on an empty id list', async () => {
+    const { client } = makeFake({ invoices: [{ id: 'm-1', match_status: 'matched', reviewed_at: null }] });
+    expect(await markInvoicesRead(client, [])).toBe(0);
+  });
+});
+
+describe('getTransactionsByIds batched fetch (US1)', () => {
+  it('fetches all requested transactions in a single query (no N+1)', async () => {
+    const { client, calls } = makeFake({
+      transactions: [
+        { id: 't-1', amount: 100, transaction_at: '2026-04-18T00:00:00Z', note: 'a' },
+        { id: 't-2', amount: 200, transaction_at: '2026-04-18T00:00:00Z', note: 'b' },
+        { id: 't-3', amount: 300, transaction_at: '2026-04-18T00:00:00Z', note: 'c' },
+      ],
+    });
+    const rows = await getTransactionsByIds(client, ['t-1', 't-2', 't-3']);
+    expect(rows.map((r) => r.id).sort()).toEqual(['t-1', 't-2', 't-3']);
+    expect(calls.select.transactions).toBe(1);
+  });
+
+  it('returns [] without querying for an empty id list', async () => {
+    const { client, calls } = makeFake({ transactions: [{ id: 't-1', amount: 1, transaction_at: 'x', note: null }] });
+    expect(await getTransactionsByIds(client, [])).toEqual([]);
+    expect(calls.select.transactions).toBeUndefined();
   });
 });

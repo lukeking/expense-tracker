@@ -11,11 +11,12 @@ import { runImportPipeline, computeConfidence, applyInvoiceItems } from '../../s
 
 type Row = Record<string, unknown>;
 
-function makeFakeSupabase(seed: { transactions?: Row[]; invoices?: Row[]; transaction_items?: Row[] }) {
+function makeFakeSupabase(seed: { transactions?: Row[]; invoices?: Row[]; transaction_items?: Row[]; transaction_adjustments?: Row[] }) {
   const tables: Record<string, Row[]> = {
     transactions: seed.transactions ?? [],
     invoices: seed.invoices ?? [],
     transaction_items: seed.transaction_items ?? [],
+    transaction_adjustments: seed.transaction_adjustments ?? [],
   };
   const calls = { insertTransactions: 0 };
   let idCounter = 1;
@@ -60,8 +61,8 @@ function makeFakeSupabase(seed: { transactions?: Row[]; invoices?: Row[]; transa
       eq(col: string, val: unknown) { filters.push((r) => r[col] === val); return builder; },
       is(col: string, val: unknown) { filters.push((r) => (val === null ? r[col] == null : r[col] === val)); return builder; },
       in(col: string, arr: unknown[]) { filters.push((r) => arr.includes(r[col])); return builder; },
-      gte(col: string, val: unknown) { filters.push((r) => String(r[col]) >= String(val)); return builder; },
-      lte(col: string, val: unknown) { filters.push((r) => String(r[col]) <= String(val)); return builder; },
+      gte(col: string, val: unknown) { filters.push((r) => (typeof r[col] === 'number' && typeof val === 'number') ? (r[col] as number) >= (val as number) : String(r[col]) >= String(val)); return builder; },
+      lte(col: string, val: unknown) { filters.push((r) => (typeof r[col] === 'number' && typeof val === 'number') ? (r[col] as number) <= (val as number) : String(r[col]) <= String(val)); return builder; },
       order() { return builder; },
       limit() { return builder; },
       single() { wantSingle = true; return builder; },
@@ -227,6 +228,77 @@ describe('runImportPipeline — SC-003 invariant (never creates transactions)', 
     expect(counters.matchedExact + counters.matchedNear).toBe(1);
     expect(counters.ambiguous).toBe(1);
     expect(counters.skippedUnmatched).toBe(1);
+  });
+});
+
+// ─── runImportPipeline — discount-aware matching (US2) ────────────────────────
+
+describe('runImportPipeline — discount-aware matching (US2)', () => {
+  it('auto-links a discounted expense (paid + discount = net) as near', async () => {
+    const fake = makeFakeSupabase({
+      transactions: [makeTxRow({ id: 'tx-35', amount: 35, transaction_at: '2026-04-19T08:00:00.000Z' })],
+      transaction_adjustments: [{ id: 'adj-1', transaction_id: 'tx-35', kind: 'discount', amount: 5 }],
+    });
+    const invoice = makeInvoice({ invoice_number: 'D-1', net_amount: 40, invoice_date: new Date('2026-04-19T00:00:00Z') });
+    const counters = await runImportPipeline(fake.client, [invoice], 'run-1', NO_SKIP);
+
+    expect(counters.matchedNear).toBe(1);
+    expect(counters.matched[0]).toMatchObject({ confidence: 'near', invoice_number: 'D-1' });
+    expect(fake.tables.transactions[0].matched_invoice_id).not.toBeNull();
+    expect(fake.calls.insertTransactions).toBe(0); // SC-003
+  });
+
+  it('a tx with no discount still matches on paid amount exactly (regression)', async () => {
+    const fake = makeFakeSupabase({
+      transactions: [makeTxRow({ id: 'tx-180', amount: 180, transaction_at: '2025-04-18T08:00:00.000Z' })],
+    });
+    const counters = await runImportPipeline(fake.client, [makeInvoice()], 'run-1', NO_SKIP);
+    expect(counters.matchedExact).toBe(1);
+    expect(counters.matched[0].confidence).toBe('exact');
+  });
+
+  it('a below-net tx with NO discount is not a candidate (paid-only behavior intact)', async () => {
+    const fake = makeFakeSupabase({
+      transactions: [makeTxRow({ id: 'tx-35', amount: 35, transaction_at: '2026-04-19T08:00:00.000Z' })],
+    });
+    const invoice = makeInvoice({ invoice_number: 'N-1', net_amount: 40, invoice_date: new Date('2026-04-19T00:00:00Z') });
+    const counters = await runImportPipeline(fake.client, [invoice], 'run-1', NO_SKIP);
+    // 35 ≠ 40, no discount; 35 also outside ±5% forex of 40 → skipped, never matched.
+    expect(counters.matchedExact + counters.matchedNear).toBe(0);
+    expect(counters.ambiguous).toBe(0);
+    expect(counters.skippedUnmatched).toBe(1);
+  });
+
+  it('two candidates (one paid-exact, one discount-gross) → ambiguous, none linked', async () => {
+    const fake = makeFakeSupabase({
+      transactions: [
+        makeTxRow({ id: 'tx-exact', amount: 40, transaction_at: '2026-04-19T08:00:00.000Z' }),
+        makeTxRow({ id: 'tx-gross', amount: 35, transaction_at: '2026-04-19T09:00:00.000Z' }),
+      ],
+      transaction_adjustments: [{ id: 'adj-1', transaction_id: 'tx-gross', kind: 'discount', amount: 5 }],
+    });
+    const invoice = makeInvoice({ invoice_number: 'A-1', net_amount: 40, invoice_date: new Date('2026-04-19T00:00:00Z') });
+    const counters = await runImportPipeline(fake.client, [invoice], 'run-1', NO_SKIP);
+
+    expect(counters.ambiguous).toBe(1);
+    expect(fake.tables.transactions.every((t) => t.matched_invoice_id === null)).toBe(true);
+    expect(fake.calls.insertTransactions).toBe(0); // SC-003
+  });
+
+  it('discount-aware import never changes the transaction count (SC-003)', async () => {
+    const fake = makeFakeSupabase({
+      transactions: [makeTxRow({ id: 'tx-35', amount: 35, transaction_at: '2026-04-19T08:00:00.000Z' })],
+      transaction_adjustments: [{ id: 'adj-1', transaction_id: 'tx-35', kind: 'discount', amount: 5 }],
+    });
+    const before = fake.tables.transactions.length;
+    await runImportPipeline(
+      fake.client,
+      [makeInvoice({ invoice_number: 'D-2', net_amount: 40, invoice_date: new Date('2026-04-19T00:00:00Z') })],
+      'run-1',
+      NO_SKIP
+    );
+    expect(fake.tables.transactions.length).toBe(before);
+    expect(fake.calls.insertTransactions).toBe(0);
   });
 });
 

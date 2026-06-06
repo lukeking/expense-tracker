@@ -43,10 +43,16 @@ export function ImportScreen() {
   const [linkTarget, setLinkTarget] = useState<{ invoice: ManualLinkInvoice; source: ManualLinkSource } | null>(null);
   const [linked, setLinked] = useState<LinkedInvoice[]>([]);
   const [unlinking, setUnlinking] = useState<string | null>(null);
+  const [showRead, setShowRead] = useState(false);
+  const [markingRead, setMarkingRead] = useState<string | null>(null);
+  const [markingAll, setMarkingAll] = useState(false);
 
-  async function loadLinked() {
+  // US1: the review queue shows only unacknowledged matches by default; 顯示已讀
+  // refetches with include_read=true to reveal acknowledged (still un-linkable) ones.
+  async function loadLinked(includeRead = showRead) {
     try {
-      const data = await apiFetch<{ matched: LinkedInvoice[] }>('/pwa/import/matched');
+      const qs = includeRead ? '?include_read=true' : '';
+      const data = await apiFetch<{ matched: LinkedInvoice[] }>(`/pwa/import/matched${qs}`);
       setLinked(data.matched);
     } catch {
       // Non-critical: the management list just stays empty if it fails to load.
@@ -82,6 +88,44 @@ export function ImportScreen() {
     } finally {
       setUnlinking(null);
     }
+  }
+
+  async function handleMarkRead(invoiceId: string) {
+    setMarkingRead(invoiceId);
+    try {
+      await apiFetch('/pwa/import/mark-read', {
+        method: 'POST',
+        body: JSON.stringify({ invoice_id: invoiceId }),
+      });
+      setLinked((prev) => prev.filter((l) => l.id !== invoiceId));
+    } catch {
+      // Leave the row in place on failure so the user can retry.
+    } finally {
+      setMarkingRead(null);
+    }
+  }
+
+  async function handleMarkAllRead() {
+    const ids = linked.map((l) => l.id);
+    if (ids.length === 0) return;
+    setMarkingAll(true);
+    try {
+      await apiFetch('/pwa/import/mark-read', {
+        method: 'POST',
+        body: JSON.stringify({ invoice_ids: ids }),
+      });
+      setLinked([]);
+    } catch {
+      // Leave the rows in place on failure so the user can retry.
+    } finally {
+      setMarkingAll(false);
+    }
+  }
+
+  function toggleShowRead() {
+    const next = !showRead;
+    setShowRead(next);
+    loadLinked(next);
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -225,10 +269,33 @@ export function ImportScreen() {
             </div>
           )}
 
-          {linked.length > 0 && (
-            <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2">
+            <div className="flex justify-between items-center gap-2">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white">已配對發票（可解除）</h3>
-              <p className="text-xs text-gray-400 dark:text-gray-500">若發票配對到錯誤的交易，可在此解除連結。</p>
+              <div className="flex items-center gap-2 shrink-0">
+                {linked.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleMarkAllRead}
+                    disabled={markingAll}
+                    className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 disabled:opacity-50"
+                  >
+                    {markingAll ? '處理中…' : '全部標為已讀'}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={toggleShowRead}
+                  className={`text-xs px-2 py-1 rounded-lg border ${showRead ? 'border-blue-400 text-blue-600 dark:text-blue-400' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300'}`}
+                >
+                  顯示已讀
+                </button>
+              </div>
+            </div>
+            <p className="text-xs text-gray-400 dark:text-gray-500">若發票配對到錯誤的交易，可在此解除連結。已確認的可標為已讀以收起。</p>
+            {linked.length === 0 ? (
+              <p className="text-xs text-gray-400 dark:text-gray-500">{showRead ? '沒有已配對的發票。' : '沒有未讀的已配對發票。'}</p>
+            ) : (
               <div className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl overflow-hidden">
                 {linked.map((l) => (
                   <div key={l.id} className="flex justify-between items-center gap-2 px-4 py-3 border-b border-gray-50 dark:border-gray-700 last:border-0">
@@ -244,19 +311,29 @@ export function ImportScreen() {
                         </p>
                       )}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleUnlink(l.id)}
-                      disabled={unlinking === l.id}
-                      className="shrink-0 text-xs px-3 py-1.5 rounded-lg border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 disabled:opacity-50"
-                    >
-                      {unlinking === l.id ? '解除中…' : '解除'}
-                    </button>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleMarkRead(l.id)}
+                        disabled={markingRead === l.id}
+                        className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 disabled:opacity-50"
+                      >
+                        {markingRead === l.id ? '處理中…' : '已讀'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleUnlink(l.id)}
+                        disabled={unlinking === l.id}
+                        className="text-xs px-3 py-1.5 rounded-lg border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 disabled:opacity-50"
+                      >
+                        {unlinking === l.id ? '解除中…' : '解除'}
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </>
       ) : (
         <>

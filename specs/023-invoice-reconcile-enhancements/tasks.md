@@ -27,7 +27,7 @@ Backend CF Worker at `backend/`, PWA at `pwa/`. Paths are repo-relative.
 
 ## Phase 1: Setup
 
-- [ ] T001 Create migration `backend/supabase/migrations/022_invoice_reviewed_at.sql` from `specs/023-invoice-reconcile-enhancements/contracts/schema-ddl.sql` (adds `invoices.reviewed_at timestamptz NULL`).
+- [X] T001 Create migration `backend/supabase/migrations/022_invoice_reviewed_at.sql` from `specs/023-invoice-reconcile-enhancements/contracts/schema-ddl.sql` (adds `invoices.reviewed_at timestamptz NULL`).
 
 ---
 
@@ -35,7 +35,7 @@ Backend CF Worker at `backend/`, PWA at `pwa/`. Paths are repo-relative.
 
 **Purpose**: the one operational schema gate. (Blocks US1 only; US2 and US3 have no schema dependency and can proceed in parallel with this.)
 
-- [ ] T002 Apply migration 022 to the Supabase dev database (operational prerequisite for US1 reads/writes).
+- [ ] T002 Apply migration 022 to the Supabase dev database (operational prerequisite for US1 reads/writes). **PENDING (user step):** run the `ALTER TABLE invoices ADD COLUMN reviewed_at TIMESTAMPTZ;` from `backend/supabase/migrations/022_invoice_reviewed_at.sql` in the Supabase SQL editor (same manual process used for migrations 020/021).
 
 ---
 
@@ -47,15 +47,15 @@ Backend CF Worker at `backend/`, PWA at `pwa/`. Paths are repo-relative.
 
 ### Tests for User Story 1 ⚠️ (write first, ensure they fail)
 
-- [ ] T003 [P] [US1] Add cases to `backend/tests/handlers/pwa-import.test.ts`: `mark-read` accepts single id and bulk id list, sets read state, only affects `matched` invoices, `400` when neither field provided; `GET /import/matched` returns unread by default and all when `include_read=true`.
-- [ ] T004 [P] [US1] Add cases to `backend/tests/db/queries.test.ts`: `findAllMatchedInvoices` filters `reviewed_at IS NULL` by default + returns read rows when `includeRead`; `markInvoicesRead` sets `reviewed_at`; matched transaction fetch issues one batched query (logic-level assertion).
+- [X] T003 [P] [US1] Add cases to `backend/tests/handlers/pwa-import.test.ts`: `mark-read` accepts single id and bulk id list, sets read state, only affects `matched` invoices, `400` when neither field provided; `GET /import/matched` returns unread by default and all when `include_read=true`.
+- [X] T004 [P] [US1] Add cases to `backend/tests/db/queries.test.ts`: `findAllMatchedInvoices` filters `reviewed_at IS NULL` by default + returns read rows when `includeRead`; `markInvoicesRead` sets `reviewed_at`; matched transaction fetch issues one batched query (logic-level assertion).
 
 ### Implementation for User Story 1
 
-- [ ] T005 [US1] Add `reviewed_at: string | null` to `Invoice` in `backend/src/types.ts`; add the mark-read request/response types.
-- [ ] T006 [US1] In `backend/src/db/queries.ts`: filter `findAllMatchedInvoices` by `reviewed_at IS NULL` with an `includeRead` option; add `markInvoicesRead(supabase, ids[])` setting `reviewed_at = now()`; replace the per-invoice transaction fetch in the matched path with one `.in('id', [...])` batched query.
-- [ ] T007 [US1] In `backend/src/handlers/pwa.ts`: have `GET /pwa/import/matched` honor `include_read`; add `POST /pwa/import/mark-read` accepting `{ invoice_id }` and/or `{ invoice_ids[] }` (matched-only; `400` on empty). (depends on T006)
-- [ ] T008 [US1] In `pwa/src/screens/ImportScreen.tsx`: add a per-card **已讀** action and a **全部標為已讀** bulk action on 已配對發票 (remove acknowledged from local state on success); add a **顯示已讀** toggle that refetches with `include_read=true`; default view shows only unread. (depends on T007)
+- [X] T005 [US1] Add `reviewed_at: string | null` to `Invoice` in `backend/src/types.ts`; add the mark-read request/response types.
+- [X] T006 [US1] In `backend/src/db/queries.ts`: filter `findAllMatchedInvoices` by `reviewed_at IS NULL` with an `includeRead` option; add `markInvoicesRead(supabase, ids[])` setting `reviewed_at = now()`; replace the per-invoice transaction fetch in the matched path with one `.in('id', [...])` batched query.
+- [X] T007 [US1] In `backend/src/handlers/pwa.ts`: have `GET /pwa/import/matched` honor `include_read`; add `POST /pwa/import/mark-read` accepting `{ invoice_id }` and/or `{ invoice_ids[] }` (matched-only; `400` on empty). (depends on T006)
+- [X] T008 [US1] In `pwa/src/screens/ImportScreen.tsx`: add a per-card **已讀** action and a **全部標為已讀** bulk action on 已配對發票 (remove acknowledged from local state on success); add a **顯示已讀** toggle that refetches with `include_read=true`; default view shows only unread. (depends on T007)
 
 **Checkpoint**: The review queue is bounded and fast; acknowledged matches reachable + un-linkable via the toggle. MVP deployable.
 
@@ -69,12 +69,12 @@ Backend CF Worker at `backend/`, PWA at `pwa/`. Paths are repo-relative.
 
 ### Tests for User Story 2 ⚠️ (write first, ensure they fail)
 
-- [ ] T009 [P] [US2] Add cases to `backend/tests/services/invoice-matcher.test.ts`: a tx with `amount + Σ discount = net` auto-links as `near`; a tx with no discount matches exactly as before (regression); ≥2 candidates (by paid OR gross) → `ambiguous`; transaction count identical before/after (SC-003).
+- [X] T009 [P] [US2] Add cases to `backend/tests/services/invoice-matcher.test.ts`: a tx with `amount + Σ discount = net` auto-links as `near`; a tx with no discount matches exactly as before (regression); ≥2 candidates (by paid OR gross) → `ambiguous`; transaction count identical before/after (SC-003).
 
 ### Implementation for User Story 2
 
-- [ ] T010 [US2] In `backend/src/db/queries.ts`: provide the auto-match candidate set within the ±2-day window where `amount == net_amount` OR `amount + Σ(discount-kind adjustment values) == net_amount` (fetch/aggregate discount adjustments for window candidates); dedup by transaction id. Leave the paid-amount-only behavior intact for transactions without discounts.
-- [ ] T011 [US2] In `backend/src/services/invoice-matcher.ts` (`runImportPipeline`): use the gross-aware candidate set for the auto-match step — exactly one ⇒ auto-link (confidence via existing `computeConfidence` → `near` when paid ≠ net), else `ambiguous`. No change to dedup/forex/skip branches. (depends on T010)
+- [X] T010 [US2] In `backend/src/db/queries.ts`: provide the auto-match candidate set within the ±2-day window where `amount == net_amount` OR `amount + Σ(discount-kind adjustment values) == net_amount` (fetch/aggregate discount adjustments for window candidates); dedup by transaction id. Leave the paid-amount-only behavior intact for transactions without discounts.
+- [X] T011 [US2] In `backend/src/services/invoice-matcher.ts` (`runImportPipeline`): use the gross-aware candidate set for the auto-match step — exactly one ⇒ auto-link (confidence via existing `computeConfidence` → `near` when paid ≠ net), else `ambiguous`. No change to dedup/forex/skip branches. (depends on T010)
 
 **Checkpoint**: Discounted expenses auto-link; existing matching unchanged for everything else.
 
@@ -88,13 +88,13 @@ Backend CF Worker at `backend/`, PWA at `pwa/`. Paths are repo-relative.
 
 ### Tests for User Story 3 ⚠️ (write first, ensure they fail)
 
-- [ ] T012 [P] [US3] Add cases to `backend/tests/handlers/pwa-import.test.ts`: manual-link `replace` renames the targeted item (name changed; amount, effective_amount, tags, `source_invoice_id` unchanged); `replace` is independent of `item_indexes`; a `replace.item_id` not on the chosen transaction → `400`.
+- [X] T012 [P] [US3] Add cases to `backend/tests/handlers/pwa-import.test.ts`: manual-link `replace` renames the targeted item (name changed; amount, effective_amount, tags, `source_invoice_id` unchanged); `replace` is independent of `item_indexes`; a `replace.item_id` not on the chosen transaction → `400`.
 
 ### Implementation for User Story 3
 
-- [ ] T013 [US3] In `backend/src/db/queries.ts`: add `renameTransactionItem(supabase, itemId, name)` updating only the `name` column.
-- [ ] T014 [US3] In `backend/src/handlers/pwa.ts`: extend `POST /pwa/import/manual-link` to accept `replace: { item_id, invoice_item_index }[]`; validate each `item_id` belongs to the chosen transaction; apply name-only renames; keep append (`item_indexes`) independent. (depends on T013)
-- [ ] T015 [US3] In `pwa/src/components/ManualLinkSheet.tsx`: add a per-item replace control — let the user point an invoice line at an existing item to rename it (distinct from the append checkboxes); include `replace` in the manual-link request. (depends on T014 contract)
+- [X] T013 [US3] In `backend/src/db/queries.ts`: add `renameTransactionItem(supabase, itemId, name)` updating only the `name` column.
+- [X] T014 [US3] In `backend/src/handlers/pwa.ts`: extend `POST /pwa/import/manual-link` to accept `replace: { item_id, invoice_item_index }[]`; validate each `item_id` belongs to the chosen transaction; apply name-only renames; keep append (`item_indexes`) independent. (depends on T013)
+- [X] T015 [US3] In `pwa/src/components/ManualLinkSheet.tsx`: add a per-item replace control — let the user point an invoice line at an existing item to rename it (distinct from the append checkboxes); include `replace` in the manual-link request. (depends on T014 contract)
 
 **Checkpoint**: Placeholder items can be renamed from the invoice during manual link; append path unchanged.
 
@@ -102,8 +102,8 @@ Backend CF Worker at `backend/`, PWA at `pwa/`. Paths are repo-relative.
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T016 [P] Run the full backend suite (`cd backend && pnpm test`) and `tsc --noEmit` for backend and PWA; fix any regressions across invoice-matcher / queries / pwa-import.
-- [ ] T017 Run `specs/023-invoice-reconcile-enhancements/quickstart.md` end-to-end (US1 review queue + SC-002 load; US2 discount auto-link + ambiguity guard; US3 replace + un-link survival; SC-003 count unchanged throughout).
+- [X] T016 [P] Run the full backend suite (`cd backend && pnpm test`) and `tsc --noEmit` for backend and PWA; fix any regressions across invoice-matcher / queries / pwa-import. (272 backend tests pass; backend + PWA `tsc` clean; PWA `vite build` clean. Note: `pnpm lint` is broken project-wide by a pre-existing typed-linting config gap, unrelated to this feature.)
+- [ ] T017 Run `specs/023-invoice-reconcile-enhancements/quickstart.md` end-to-end (US1 review queue + SC-002 load; US2 discount auto-link + ambiguity guard; US3 replace + un-link survival; SC-003 count unchanged throughout). **PENDING (user step):** needs the running app + live dev DB (after T002); manual verification per quickstart.
 
 ---
 

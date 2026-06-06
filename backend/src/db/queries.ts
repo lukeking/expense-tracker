@@ -295,6 +295,11 @@ export async function findExistingInvoiceNumbers(
   return (data ?? []).map((r) => r.invoice_number as string);
 }
 
+// Auto-match candidate set for an invoice within the ±2-day window. An unlinked expense
+// transaction qualifies when its paid `amount` equals the invoice net amount, OR — US2,
+// discount-aware — its gross (paid amount + Σ recorded `discount` adjustments) equals the
+// net amount. Only `discount`-kind adjustments raise the gross (fee/refund excluded);
+// transactions without discounts behave exactly as the prior paid-amount-only match.
 export async function findMatchingExpenseTransaction(
   supabase: SupabaseClient,
   netAmount: number,
@@ -302,17 +307,42 @@ export async function findMatchingExpenseTransaction(
 ): Promise<Transaction[]> {
   const windowStart = new Date(invoiceDate.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const windowEnd = new Date(invoiceDate.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  // Paid amount can be at most the net amount (discounts only ever raise the gross above
+  // the paid amount), so bound the fetch with amount <= net.
   const { data, error } = await supabase
     .from('transactions')
     .select('*')
     .eq('transaction_type', 'expense')
-    .eq('amount', netAmount)
     .is('matched_invoice_id', null)
+    .lte('amount', netAmount)
     .gte('transaction_at', windowStart)
     .lte('transaction_at', windowEnd + 'T23:59:59Z')
     .order('created_at', { ascending: false });
   if (error) throw new Error(`findMatchingExpenseTransaction: ${error.message}`);
-  return (data ?? []) as Transaction[];
+  const txs = (data ?? []) as Transaction[];
+
+  const exact = txs.filter((t) => t.amount === netAmount);
+  const belowNet = txs.filter((t) => t.amount < netAmount);
+  if (belowNet.length === 0) return exact;
+
+  // For the below-net candidates, add recorded discounts; a tx qualifies when
+  // paid + Σ(discount) == net.
+  const { data: adjData, error: adjError } = await supabase
+    .from('transaction_adjustments')
+    .select('transaction_id, amount')
+    .in('transaction_id', belowNet.map((t) => t.id))
+    .eq('kind', 'discount');
+  if (adjError) throw new Error(`findMatchingExpenseTransaction discounts: ${adjError.message}`);
+  const discountByTx = new Map<string, number>();
+  for (const a of (adjData ?? []) as { transaction_id: string; amount: number }[]) {
+    discountByTx.set(a.transaction_id, (discountByTx.get(a.transaction_id) ?? 0) + a.amount);
+  }
+  const gross = belowNet.filter((t) => t.amount + (discountByTx.get(t.id) ?? 0) === netAmount);
+
+  // Union + dedup by id (exact has amount==net, gross has amount<net; dedup defensively).
+  const byId = new Map<string, Transaction>();
+  for (const t of [...exact, ...gross]) byId.set(t.id, t);
+  return [...byId.values()];
 }
 
 export async function findForexCandidateTransactions(
@@ -414,14 +444,52 @@ export async function clearTransactionInvoiceLink(
   if (error) throw new Error(`clearTransactionInvoiceLink: ${error.message}`);
 }
 
-export async function findAllMatchedInvoices(supabase: SupabaseClient): Promise<Invoice[]> {
-  const { data, error } = await supabase
+// US1: the review queue shows unacknowledged matches by default; `includeRead` reveals
+// acknowledged ones for the 顯示已讀 toggle.
+export async function findAllMatchedInvoices(
+  supabase: SupabaseClient,
+  includeRead = false
+): Promise<Invoice[]> {
+  let query = supabase
     .from('invoices')
     .select('*')
-    .eq('match_status', 'matched')
-    .order('invoice_date', { ascending: false });
+    .eq('match_status', 'matched');
+  if (!includeRead) query = query.is('reviewed_at', null);
+  const { data, error } = await query.order('invoice_date', { ascending: false });
   if (error) throw new Error(`findAllMatchedInvoices: ${error.message}`);
   return (data ?? []) as Invoice[];
+}
+
+// US1: acknowledge ("mark as read") matched invoices. Only `matched` rows are
+// acknowledgeable; returns how many rows were affected.
+export async function markInvoicesRead(
+  supabase: SupabaseClient,
+  invoiceIds: string[]
+): Promise<number> {
+  if (invoiceIds.length === 0) return 0;
+  const { data, error } = await supabase
+    .from('invoices')
+    .update({ reviewed_at: new Date().toISOString() })
+    .eq('match_status', 'matched')
+    .in('id', invoiceIds)
+    .select('id');
+  if (error) throw new Error(`markInvoicesRead: ${error.message}`);
+  return (data ?? []).length;
+}
+
+// US1: batched fetch of linked transactions for the matched-invoice list (replaces
+// the per-invoice N+1).
+export async function getTransactionsByIds(
+  supabase: SupabaseClient,
+  ids: string[]
+): Promise<Pick<Transaction, 'id' | 'amount' | 'transaction_at' | 'note'>[]> {
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('id, amount, transaction_at, note')
+    .in('id', ids);
+  if (error) throw new Error(`getTransactionsByIds: ${error.message}`);
+  return (data ?? []) as Pick<Transaction, 'id' | 'amount' | 'transaction_at' | 'note'>[];
 }
 
 export async function deleteInvoice(supabase: SupabaseClient, invoiceId: string): Promise<void> {
@@ -551,6 +619,20 @@ export async function updateTransactionItemAmount(
     .update({ amount: newAmount })
     .eq('id', itemId);
   if (error) throw new Error(`updateTransactionItemAmount: ${error.message}`);
+}
+
+// US3: rename-only per-item replace — update just the item's display name; amount,
+// effective_amount, tags, and source_invoice_id are left untouched.
+export async function renameTransactionItem(
+  supabase: SupabaseClient,
+  itemId: string,
+  name: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('transaction_items')
+    .update({ name })
+    .eq('id', itemId);
+  if (error) throw new Error(`renameTransactionItem: ${error.message}`);
 }
 
 export async function getTransactionItems(
