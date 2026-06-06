@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Transaction, Receipt, BudgetSettings, TransactionItem, PaymentMethod, MobileWallet, TransactionType, Invoice, ImportRun, ParsedInvoice, InvoiceMatchStatus, MatchConfidence, TransactionItemRow, TransactionAdjustment } from '../types';
+import type { Transaction, Receipt, BudgetSettings, TransactionItem, PaymentMethod, MobileWallet, TransactionType, Invoice, ImportRun, ParsedInvoice, InvoiceMatchStatus, MatchConfidence, TransactionItemRow, TransactionAdjustment, InvoiceItem } from '../types';
 
 export async function insertTransaction(
   supabase: SupabaseClient,
@@ -369,6 +369,116 @@ export async function findForexCandidateTransactions(
     .order('created_at', { ascending: false });
   if (error) throw new Error(`findForexCandidateTransactions: ${error.message}`);
   return (data ?? []) as Transaction[];
+}
+
+// ─── Invoice Import — bulk pipeline (feature 024) ─────────────────────────────
+// These collapse the per-invoice query loop into a constant number of round-trips so
+// a single import stays under the Cloudflare Workers subrequest cap. Matching itself
+// runs in memory (see invoice-matcher.ts) against the rows fetched here.
+
+// Supabase/PostgREST returns at most this many rows in one response. The candidate
+// fetch requests one more than this and aborts on overflow rather than silently
+// matching a truncated set (FR-012).
+export const IMPORT_CANDIDATE_PAGE_LIMIT = 1000;
+
+// One query for every unmatched expense transaction in the import's union date window.
+// Amount is NOT bounded here (each invoice has a different net) — amount filtering happens
+// in memory. `windowEndInclusiveISO` should already carry the end-of-day suffix.
+export async function fetchImportCandidateTransactions(
+  supabase: SupabaseClient,
+  windowStartISO: string,
+  windowEndInclusiveISO: string
+): Promise<Transaction[]> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('transaction_type', 'expense')
+    .is('matched_invoice_id', null)
+    .gte('transaction_at', windowStartISO)
+    .lte('transaction_at', windowEndInclusiveISO)
+    .order('created_at', { ascending: false })
+    .limit(IMPORT_CANDIDATE_PAGE_LIMIT + 1);
+  if (error) throw new Error(`fetchImportCandidateTransactions: ${error.message}`);
+  const rows = (data ?? []) as Transaction[];
+  if (rows.length > IMPORT_CANDIDATE_PAGE_LIMIT) {
+    throw new Error(
+      `fetchImportCandidateTransactions: candidate window returned more than ${IMPORT_CANDIDATE_PAGE_LIMIT} ` +
+        `transactions; import aborted to avoid matching against a truncated set. Split the import by date range.`
+    );
+  }
+  return rows;
+}
+
+// One query summing `discount`-kind adjustments per transaction (fees/refunds excluded,
+// matching US2). Returns an empty map for an empty id list (no round-trip).
+export async function fetchDiscountSumsByTransaction(
+  supabase: SupabaseClient,
+  txIds: string[]
+): Promise<Map<string, number>> {
+  const sums = new Map<string, number>();
+  if (txIds.length === 0) return sums;
+  const { data, error } = await supabase
+    .from('transaction_adjustments')
+    .select('transaction_id, amount')
+    .in('transaction_id', txIds)
+    .eq('kind', 'discount');
+  if (error) throw new Error(`fetchDiscountSumsByTransaction: ${error.message}`);
+  for (const a of (data ?? []) as { transaction_id: string; amount: number }[]) {
+    sums.set(a.transaction_id, (sums.get(a.transaction_id) ?? 0) + a.amount);
+  }
+  return sums;
+}
+
+// Row shape for a bulk invoice insert (mirrors insertInvoice's column set; `net_amount`
+// is a generated column and is intentionally omitted).
+export interface InvoiceInsertRow {
+  import_run_id: string;
+  invoice_number: string;
+  seller_name: string | null;
+  seller_tax_id: string | null;
+  invoice_date: string;
+  gross_amount: number;
+  allowance: number;
+  items: InvoiceItem[] | null;
+  invoice_status: 'active' | 'voided';
+  match_status: InvoiceMatchStatus;
+  match_confidence: MatchConfidence | null;
+  matched_transaction_id: string | null;
+}
+
+// One multi-row insert; returns the inserted rows (with ids) so the caller can map each
+// invoice's new id back to its matched transaction / filled items.
+export async function bulkInsertInvoices(
+  supabase: SupabaseClient,
+  rows: InvoiceInsertRow[]
+): Promise<Invoice[]> {
+  if (rows.length === 0) return [];
+  const { data, error } = await supabase.from('invoices').insert(rows).select();
+  if (error) throw new Error(`bulkInsertInvoices: ${error.message}`);
+  return (data ?? []) as Invoice[];
+}
+
+// One upsert (onConflict `id`) that enriches every matched transaction at once. Rows are
+// the full pre-fetched transaction rows merged with the enrichment fields, so the ON
+// CONFLICT path updates existing rows without inserting anything new (SC-003).
+export async function bulkEnrichTransactions(
+  supabase: SupabaseClient,
+  rows: Transaction[]
+): Promise<void> {
+  if (rows.length === 0) return;
+  const { error } = await supabase.from('transactions').upsert(rows, { onConflict: 'id' });
+  if (error) throw new Error(`bulkEnrichTransactions: ${error.message}`);
+}
+
+// One multi-row insert for all filled items across the whole import. Each row already
+// carries its `transaction_id` and `source_invoice_id`.
+export async function bulkInsertTransactionItems(
+  supabase: SupabaseClient,
+  rows: { transaction_id: string; name: string; amount: number | null; tags: string[]; sort_order: number; source_invoice_id: string | null }[]
+): Promise<void> {
+  if (rows.length === 0) return;
+  const { error } = await supabase.from('transaction_items').insert(rows);
+  if (error) throw new Error(`bulkInsertTransactionItems: ${error.message}`);
 }
 
 export async function insertInvoice(
