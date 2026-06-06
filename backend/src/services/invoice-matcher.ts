@@ -11,8 +11,8 @@ import {
   getTransactionItemsByTransactionIds,
   insertTransactionItems,
   replaceTransactionItems,
+  type InvoiceInsertRow,
 } from '../db/queries';
-import type { InvoiceInsertRow } from '../db/queries';
 
 // Invoice Import v2 — enrichment only. The pipeline NEVER creates transactions
 // (FR-005). It auto-links an invoice only when exactly one in-window candidate exists
@@ -52,8 +52,8 @@ export function computeConfidence(
 }
 
 // ─── In-memory matchers (pure) ────────────────────────────────────────────────
-// These run against the pre-fetched candidate pool and reproduce, exactly, what the
-// `findMatchingExpenseTransaction` / `findForexCandidateTransactions` DB queries returned.
+// These run against the pre-fetched candidate pool and apply the exact match rules
+// (±2-day discount-aware exact, ±7-day ±5% forex) with no further DB round-trips.
 
 function dayOffsetDateISO(date: Date, days: number): string {
   return new Date(date.getTime() + days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -75,7 +75,7 @@ export function selectExactDiscountCandidates(
   consumedTxIds: Set<string>
 ): Transaction[] {
   const start = dayOffsetDateISO(invoiceDate, -2);
-  const endInclusive = dayOffsetDateISO(invoiceDate, 2) + 'T23:59:59Z';
+  const endInclusive = `${dayOffsetDateISO(invoiceDate, 2)}T23:59:59Z`;
   return candidates.filter(
     (t) =>
       !consumedTxIds.has(t.id) &&
@@ -94,7 +94,7 @@ export function selectForexCandidates(
   consumedTxIds: Set<string>
 ): Transaction[] {
   const start = dayOffsetDateISO(invoiceDate, -7);
-  const endInclusive = dayOffsetDateISO(invoiceDate, 7) + 'T23:59:59Z';
+  const endInclusive = `${dayOffsetDateISO(invoiceDate, 7)}T23:59:59Z`;
   const low = Math.floor(netAmount * 0.95);
   const high = Math.ceil(netAmount * 1.05);
   return candidates.filter(
@@ -197,7 +197,7 @@ export async function runImportPipeline(
     if (t > maxTime) maxTime = t;
   }
   const windowStart = dayOffsetDateISO(new Date(minTime), -7);
-  const windowEndInclusive = dayOffsetDateISO(new Date(maxTime), 7) + 'T23:59:59Z';
+  const windowEndInclusive = `${dayOffsetDateISO(new Date(maxTime), 7)}T23:59:59Z`;
   const candidates = await fetchImportCandidateTransactions(supabase, windowStart, windowEndInclusive);
 
   // Discounts can only matter for candidates paid below the largest net in the batch.

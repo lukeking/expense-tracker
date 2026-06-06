@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { findAllMatchedInvoices, markInvoicesRead, getTransactionsByIds, getTransactionItemsByTransactionIds, resetInvoiceToAmbiguous } from '../../src/db/queries';
 
@@ -124,83 +124,6 @@ describe('amendTransactionAmount', () => {
 });
 
 // ─── Invoice query logic (unit tests) ───────────────────────────────────────
-
-describe('findMatchingExpenseTransaction date window', () => {
-  it('±2 day window — invoiceDate on same day as transaction', () => {
-    const invoiceDate = new Date('2025-04-18T00:00:00Z');
-    const txDate = '2025-04-18T10:00:00Z';
-    const windowStart = new Date(invoiceDate.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const windowEnd = new Date(invoiceDate.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const txDay = txDate.slice(0, 10);
-    expect(txDay >= windowStart && txDay <= windowEnd).toBe(true);
-  });
-
-  it('±2 day window — transaction exactly 2 days before invoice', () => {
-    const invoiceDate = new Date('2025-04-18T00:00:00Z');
-    const txDate = '2025-04-16T00:00:00Z';
-    const windowStart = new Date(invoiceDate.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const windowEnd = new Date(invoiceDate.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const txDay = txDate.slice(0, 10);
-    expect(txDay >= windowStart && txDay <= windowEnd).toBe(true);
-  });
-
-  it('±2 day window — transaction 3 days before invoice is out of range', () => {
-    const invoiceDate = new Date('2025-04-18T00:00:00Z');
-    const txDate = '2025-04-15T00:00:00Z';
-    const windowStart = new Date(invoiceDate.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const txDay = txDate.slice(0, 10);
-    expect(txDay >= windowStart).toBe(false);
-  });
-});
-
-describe('findForexCandidateTransaction ±5% range', () => {
-  it('amount within ±5% qualifies as forex candidate', () => {
-    const netAmount = 1523;
-    const txAmount = 1500;
-    const low = Math.floor(netAmount * 0.95);
-    const high = Math.ceil(netAmount * 1.05);
-    expect(txAmount >= low && txAmount <= high).toBe(true);
-  });
-
-  it('amount exactly at lower boundary (5% below) qualifies', () => {
-    const netAmount = 1000;
-    const txAmount = 950; // exactly 5% below
-    const low = Math.floor(netAmount * 0.95);
-    const high = Math.ceil(netAmount * 1.05);
-    expect(txAmount >= low && txAmount <= high).toBe(true);
-  });
-
-  it('amount 6% below does not qualify as forex candidate', () => {
-    const netAmount = 1000;
-    const txAmount = 940; // 6% below
-    const low = Math.floor(netAmount * 0.95);
-    expect(txAmount >= low).toBe(false);
-  });
-});
-
-describe('findForexCandidateTransactions ±7-day window (v2)', () => {
-  // v2 widens the forex fallback to ±7 days (vs ±2 for exact) for foreign-currency
-  // posting lag. Candidates are returned as an array (manual resolution only).
-  function inForexWindow(invoiceDate: string, txDate: string): boolean {
-    const d = new Date(invoiceDate);
-    const start = new Date(d.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const end = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const day = txDate.slice(0, 10);
-    return day >= start && day <= end;
-  }
-
-  it('transaction 5 days after invoice is inside the ±7-day forex window', () => {
-    expect(inForexWindow('2025-04-18T00:00:00Z', '2025-04-23T00:00:00Z')).toBe(true);
-  });
-
-  it('transaction 7 days after invoice is the boundary (inside)', () => {
-    expect(inForexWindow('2025-04-18T00:00:00Z', '2025-04-25T00:00:00Z')).toBe(true);
-  });
-
-  it('transaction 8 days after invoice is outside the forex window', () => {
-    expect(inForexWindow('2025-04-18T00:00:00Z', '2025-04-26T00:00:00Z')).toBe(false);
-  });
-});
 
 describe('linkInvoiceToTransaction update payload', () => {
   it('sets match_status=matched, match_confidence, and matched_transaction_id', () => {
