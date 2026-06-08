@@ -250,14 +250,37 @@ export async function findParentCandidates(
   return matches.slice(0, 5) as (Pick<Transaction, 'id' | 'amount' | 'note' | 'tags' | 'transaction_at'> & { transaction_items: { name: string }[] })[];
 }
 
+/**
+ * Merge a parent transaction's tags into a child's, de-duplicated and
+ * preserving the child's own tags. Pure so it can be unit-tested without a DB.
+ */
+export function mergeParentTags(childTags: string[] | null, parentTags: string[] | null): string[] {
+  return Array.from(new Set([...(childTags ?? []), ...(parentTags ?? [])]));
+}
+
 export async function updateParentTransactionId(
   supabase: SupabaseClient,
   transactionId: string,
   parentTransactionId: string
 ): Promise<void> {
+  // Inherit the parent's transaction-level tags onto the linked fee/refund so the
+  // whole group (e.g. an iherb purchase + its 國外交易服務費 + a partial refund) is
+  // findable by the same tag — not just by the child's note/description. Merge into
+  // any tags the child already carries; never drop the child's own.
+  const [parentRes, childRes] = await Promise.all([
+    supabase.from('transactions').select('tags').eq('id', parentTransactionId).single(),
+    supabase.from('transactions').select('tags').eq('id', transactionId).single(),
+  ]);
+  if (parentRes.error) throw new Error(`updateParentTransactionId(parent): ${parentRes.error.message}`);
+  if (childRes.error) throw new Error(`updateParentTransactionId(child): ${childRes.error.message}`);
+  const mergedTags = mergeParentTags(
+    (childRes.data?.tags as string[] | null) ?? null,
+    (parentRes.data?.tags as string[] | null) ?? null
+  );
+
   const { error } = await supabase
     .from('transactions')
-    .update({ parent_transaction_id: parentTransactionId })
+    .update({ parent_transaction_id: parentTransactionId, tags: mergedTags })
     .eq('id', transactionId);
   if (error) throw new Error(`updateParentTransactionId: ${error.message}`);
 }

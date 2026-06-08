@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { findAllMatchedInvoices, markInvoicesRead, getTransactionsByIds, getTransactionItemsByTransactionIds, resetInvoiceToAmbiguous, computeEffectiveShares, computeAndWriteEffectiveAmounts, findParentCandidates, transactionMatchesParentSearch } from '../../src/db/queries';
+import { findAllMatchedInvoices, markInvoicesRead, getTransactionsByIds, getTransactionItemsByTransactionIds, resetInvoiceToAmbiguous, computeEffectiveShares, computeAndWriteEffectiveAmounts, findParentCandidates, transactionMatchesParentSearch, updateParentTransactionId, mergeParentTags } from '../../src/db/queries';
 
 // Test the getMonthlySpend reduce logic directly — same formula as the implementation
 function computeMonthlySpend(rows: { amount: number; transaction_type: string }[]): number {
@@ -185,6 +185,7 @@ function makeFake(seed: { invoices?: Row[]; transactions?: Row[]; transaction_it
       in(col: string, arr: unknown[]) { filters.push((r) => arr.includes(r[col])); return builder; },
       gte(col: string, val: unknown) { filters.push((r) => (r[col] as string) >= (val as string)); return builder; },
       order() { return builder; },
+      single() { const r = execute() as { data: Row[]; error: unknown }; return { data: r.data[0] ?? null, error: r.error }; },
       then(resolve: (v: unknown) => void) { resolve(execute()); },
     };
     return builder;
@@ -435,5 +436,49 @@ describe('findParentCandidates (fee linkable + self-exclude)', () => {
     const { client } = makeFake(seed());
     const rows = await findParentCandidates(client, '國外交易服務費', 90);
     expect(rows.map((r) => r.id)).toEqual(['fee-iherb']);
+  });
+});
+
+// ─── tag inheritance on link (fee/refund → parent) ────────────────────────────
+
+describe('mergeParentTags', () => {
+  it('unions parent tags into the child, de-duplicated', () => {
+    expect(mergeParentTags(['沖帳'], ['iherb', '保健']).sort()).toEqual(['iherb', '保健', '沖帳']);
+  });
+  it('does not duplicate a tag the child already has', () => {
+    expect(mergeParentTags(['iherb'], ['iherb'])).toEqual(['iherb']);
+  });
+  it('tolerates null on either side', () => {
+    expect(mergeParentTags(null, ['iherb'])).toEqual(['iherb']);
+    expect(mergeParentTags(['iherb'], null)).toEqual(['iherb']);
+    expect(mergeParentTags(null, null)).toEqual([]);
+  });
+});
+
+describe('updateParentTransactionId (links + inherits parent tags)', () => {
+  it('sets parent_transaction_id and inherits the parent plain tags onto the child', async () => {
+    const { client, tables } = makeFake({
+      transactions: [
+        { id: 'expense-iherb', tags: ['iherb', '保健'] },
+        { id: 'refund-1', tags: [], parent_transaction_id: null },
+      ],
+    });
+    await updateParentTransactionId(client, 'refund-1', 'expense-iherb');
+    const child = tables.transactions.find((r) => r.id === 'refund-1')!;
+    expect(child.parent_transaction_id).toBe('expense-iherb');
+    expect((child.tags as string[]).sort()).toEqual(['iherb', '保健']);
+    // parent is untouched
+    expect(tables.transactions.find((r) => r.id === 'expense-iherb')!.tags).toEqual(['iherb', '保健']);
+  });
+
+  it('preserves the child existing tags and de-dups', async () => {
+    const { client, tables } = makeFake({
+      transactions: [
+        { id: 'parent', tags: ['iherb'] },
+        { id: 'fee-1', tags: ['沖帳', 'iherb'], parent_transaction_id: null },
+      ],
+    });
+    await updateParentTransactionId(client, 'fee-1', 'parent');
+    expect((tables.transactions.find((r) => r.id === 'fee-1')!.tags as string[]).sort()).toEqual(['iherb', '沖帳']);
   });
 });
