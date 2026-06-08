@@ -319,7 +319,7 @@ async function handleFeeOrRefundCommand(
         await insertTransactionItems(supabase, transaction.id, [{ name: description, amount, tags: [] }]);
 
         if (parent) {
-          const candidates = await findParentCandidates(supabase, parent, 90);
+          const candidates = await findParentCandidates(supabase, parent, 90, transaction.id);
           if (candidates.length > 0) {
             const content = `💳 記錄暫存，請選擇母交易：\nNT$${amount.toLocaleString()} · ${description}`;
             const candidateButtons = candidates.map((row) => ({
@@ -587,7 +587,7 @@ async function handleModalSubmit(
     c.executionCtx.waitUntil(
       (async () => {
         try {
-          const candidates = await findParentCandidates(supabase, searchTerm, 90);
+          const candidates = await findParentCandidates(supabase, searchTerm, 90, txId);
           if (candidates.length > 0) {
             const content = `💳 請選擇母交易：`;
             const candidateButtons = candidates.map((row) => ({
