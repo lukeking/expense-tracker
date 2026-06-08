@@ -54,6 +54,7 @@ jobs:
     needs: backend # only deploy once typecheck · lint · test pass
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
+    environment: production # CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID live as this environment's secrets
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
