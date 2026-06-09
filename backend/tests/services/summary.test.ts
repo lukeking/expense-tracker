@@ -358,3 +358,25 @@ describe('aggregateByCategory — item categorization (feature 026)', () => {
     expect(result.find((t) => t.category === '其他')?.total).toBe(40);
   });
 });
+
+// ─── Feature 026 (B1): itemless tx carries its category at tx-level ────────────
+
+describe('aggregateByCategory — tx-level category for itemless transactions (B1)', () => {
+  it('itemless tx with a tx-level category counts under that category, not 其他', () => {
+    // Shape B1 writes: category first (tags[0]), plain tag after, no items.
+    const tx = { amount: 120, tags: ['食:早餐', '愛滿滿早餐坊'], transaction_items: [] };
+    const result = aggregateByCategory([tx]);
+    expect(result.find((t) => t.category === '食')?.total).toBe(120);
+    expect(result.find((t) => t.category === '其他')).toBeUndefined();
+  });
+
+  it('order-independent: category last in tags still resolves (read uses find)', () => {
+    const tx = { amount: 120, tags: ['愛滿滿早餐坊', '食:早餐'], transaction_items: [] };
+    expect(aggregateByCategory([tx]).find((t) => t.category === '食')?.total).toBe(120);
+  });
+
+  it('itemless tx with only a plain tag stays in 其他', () => {
+    const tx = { amount: 120, tags: ['愛滿滿早餐坊'], transaction_items: [] };
+    expect(aggregateByCategory([tx])).toEqual([{ category: '其他', total: 120 }]);
+  });
+});

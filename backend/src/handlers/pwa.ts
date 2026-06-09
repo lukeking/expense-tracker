@@ -171,7 +171,10 @@ pwaRouter.post('/expense', async (c) => {
   const tx = await insertTransaction(supabase, {
     amount,
     payment_method: payment_method as PaymentMethod,
-    tags: free_tags,
+    // B1: store the chosen category at tx-level too, so a transaction with no items
+    // still carries its category (items keep their own copy for per-item granularity).
+    // Category goes first (tags[0]), matching the legacy convention; plain tags follow.
+    tags: category_tag != null ? [category_tag, ...free_tags] : free_tags,
     note: note ?? null,
     transaction_type: 'expense',
     transaction_at: txAt,
@@ -498,9 +501,13 @@ pwaRouter.put('/transactions/:id', async (c) => {
     getAdjustmentsForTransaction(supabase, txId),
   ]);
 
+  // B1: keep the category at tx-level (alongside plain tags) so itemless transactions
+  // retain it; with items, the summary's remainder logic dedupes (no double-count).
+  // Category first (tags[0]) per the legacy convention; plain tags follow.
+  const txTags = category_tag != null ? [category_tag, ...free_tags] : free_tags;
   const { error: updateErr } = await supabase
     .from('transactions')
-    .update({ amount, payment_method, tags: free_tags, note: note ?? null })
+    .update({ amount, payment_method, tags: txTags, note: note ?? null })
     .eq('id', txId);
   if (updateErr) return c.json({ error: 'DB_ERROR', message: updateErr.message }, 500);
 
@@ -540,7 +547,7 @@ pwaRouter.put('/transactions/:id', async (c) => {
 
   const diff = computeEditDiff(
     { amount: tx.amount as number, payment_method: tx.payment_method as string, tags: (tx.tags as string[]) ?? [], note: (tx.note as string | null) ?? null, items: beforeItems, adjustments: beforeAdjs.map((a) => ({ kind: a.kind, amount: a.amount, note: a.note, basis: a.basis, basis_value: a.basis_value })) },
-    { amount, payment_method, free_tags, note: note ?? null, items: afterItems, adjustments: afterAdjs }
+    { amount, payment_method, free_tags: txTags, note: note ?? null, items: afterItems, adjustments: afterAdjs }
   );
   if (diff !== null) {
     await supabase.from('transaction_edit_history').insert({ transaction_id: txId, diff });
