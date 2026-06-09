@@ -5,6 +5,13 @@
 **Status**: Draft
 **Input**: User description: "(1) The per-item category picker shown beside each item is hard to use — it lists every category value flat, ungrouped by major, with no search. Example: bought a popsicle and a pudding at FamilyMart, tagged the transaction only with the plain store tag `全家`; when adding items there was no fast way to pick each item's category. It needs search (with type-ahead) and/or filter by major category. (2) Edge case: bought four differently-categorized things at FamilyMart, again tagged only `全家`, didn't write items, and let month-end invoice import auto-match and auto-generate the items. Those auto-generated items carry no `major:sub` category, so in category statistics their spend disappears into 其他 / uncategorized."
 
+## Clarifications
+
+### Session 2026-06-09
+
+- Q: Should User Story 3 (name-based category suggestion) be in scope? → A: No — defer it. Deliver only the deterministic improvements: the searchable/filterable picker (Story 1) and import-review visibility + assignment for uncategorized invoice items (Story 2). No auto-suggestion, no LLM.
+- Q: How should uncategorized invoice items be assigned a category? → A: Inline during import. The import review must show each matched transaction's item categories, visibly flag uncategorized auto-filled items, and let the user tap one to assign a category (via the Story 1 picker) without leaving the import screen or re-importing. (Assigning later through the normal transaction editor remains possible but is not the primary flow.)
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Quickly pick the right category for an item (Priority: P1)
@@ -27,34 +34,19 @@ When adding or editing the items of a transaction, the user opens the small cate
 
 ### User Story 2 - Invoice-auto-generated items don't vanish from category statistics (Priority: P2)
 
-The user buys several differently-categorized things at one store, tags the transaction only with a plain store tag (e.g. `全家`), and deliberately skips writing items. At month-end they import the e-invoice; because amount and date are well-calibrated, the import auto-matches the transaction and auto-generates one item per invoice line. Those generated items carry no `major:sub` category and the transaction has no category tag to inherit, so in category statistics all of that spend collapses into 其他 / uncategorized instead of the real categories. The user needs to notice these uncategorized items and assign each a category after the fact, so the spend lands in the correct category — without re-importing or re-creating the transaction.
+The user buys several differently-categorized things at one store, tags the transaction only with a plain store tag (e.g. `全家`), and deliberately skips writing items. At month-end they import the e-invoice; because amount and date are well-calibrated, the import auto-matches the transaction and auto-generates one item per invoice line. Those generated items carry no `major:sub` category and the transaction has no category tag to inherit, so in category statistics all of that spend collapses into 其他 / uncategorized instead of the real categories. Today the import review doesn't even show item categories clearly, so the user can't tell which items lack one. The fix lives in that same import review: it must show each matched transaction's item categories, visibly flag the uncategorized auto-filled items, and let the user assign a category to each one **inline, during import**, without re-importing or leaving the import screen.
 
 **Why this priority**: This is a correctness problem (real spend is mis-attributed to 其他), but it builds on Story 1's picker to be usable, so it follows it. It is independently valuable: even alone it stops invoice-derived spend from silently disappearing from category breakdowns.
 
-**Independent Test**: Import an invoice that auto-matches a transaction tagged only `全家` with no items, producing several auto-generated items. Confirm those items are identifiable as uncategorized, assign each a category, and confirm the category summary moves their spend out of 其他 into the assigned categories.
+**Independent Test**: Import an invoice that auto-matches a transaction tagged only `全家` with no items, producing several auto-generated items. In the import review, confirm each item's category is shown and the uncategorized ones are flagged; assign each a category inline; then confirm the category summary moves their spend out of 其他 into the assigned categories.
 
 **Acceptance Scenarios**:
 
-1. **Given** an invoice import auto-generated items for a transaction whose tags contain no category, **When** the user reviews that transaction, **Then** the items are visibly flagged as needing a category.
-2. **Given** such uncategorized items exist, **When** the user opens the transaction's item editor, **Then** they can assign a category to each item using the Story 1 picker and save without re-importing.
+1. **Given** an invoice import auto-generated items for a transaction whose tags contain no category, **When** the user looks at that transaction in the import review, **Then** each item's category (`major:sub`) is shown and the items lacking one are visibly flagged as needing a category.
+2. **Given** such flagged items in the import review, **When** the user taps one and picks a category with the Story 1 picker, **Then** the category is saved to that item inline — without re-importing or leaving the import screen — and the flag clears.
 3. **Given** an uncategorized auto-generated item, **When** the user assigns it a category and the period summary is viewed, **Then** that item's spend is counted under the assigned category/subcategory and no longer under 其他.
 4. **Given** an auto-generated item the user has not yet categorized, **When** the period summary is viewed, **Then** its spend is still represented (under 其他) and never dropped from totals.
 5. **Given** the user assigns different categories to several items of the same transaction, **When** the summary is viewed, **Then** each item's net spend is attributed to its own assigned category.
-
----
-
-### User Story 3 - Suggest a category from the item's name (Priority: P3, optional)
-
-To reduce the manual tagging the user is trying to avoid (they import invoices precisely because they're "too lazy to write items"), when an item is created or edited the system offers a suggested category based on the item's name and the user's previously categorized items with the same name. The user can accept, change, or ignore the suggestion.
-
-**Why this priority**: This is a convenience enhancement layered on Stories 1 and 2, not required for the MVP. It is explicitly optional and may be deferred or dropped; the core value is delivered without it.
-
-**Independent Test**: Create or import an item whose name exactly matches a previously categorized item, and confirm the system pre-fills or offers that category as a non-binding suggestion that the user can override.
-
-**Acceptance Scenarios**:
-
-1. **Given** a previously saved item named "布丁" categorized as `飲食:零食`, **When** a new item named "布丁" is created or imported, **Then** the system suggests `飲食:零食` without overwriting any choice the user makes.
-2. **Given** an item whose name matches nothing in the user's history, **When** it is created, **Then** no category is forced and the user categorizes it manually via Story 1.
 
 ---
 
@@ -84,16 +76,12 @@ To reduce the manual tagging the user is trying to avoid (they import invoices p
 **Categorizing invoice-auto-generated items (Story 2)**
 
 - **FR-007**: The system MUST identify an item as "uncategorized" when the item has no `major:sub` category and its transaction has no category tag for it to inherit.
-- **FR-008**: When reviewing a transaction, the user MUST be able to see which of its items are uncategorized (including items created by invoice auto-fill).
-- **FR-009**: The user MUST be able to assign a category to an auto-generated item after import, editing the existing transaction without re-importing or re-creating it.
+- **FR-008**: The import review MUST display each matched transaction's item categories (`major:sub`) and visibly flag items that are uncategorized (including items created by invoice auto-fill), without requiring the user to expand or hunt for them.
+- **FR-009**: The user MUST be able to assign a category to a flagged uncategorized item directly from the import review (inline, using the Story 1 picker), persisting it to that item without re-importing or navigating away from the import screen.
+- **FR-009a**: The same per-item categorization MUST also remain possible later through the existing transaction editor (covered by FR-006), so items not handled during import can still be fixed.
 - **FR-010**: After an item is assigned a category, its net spend MUST be attributed to that category/subcategory in period summaries instead of 其他.
 - **FR-011**: Spend for an item that remains uncategorized MUST continue to be represented in summary totals (under 其他) and MUST never be dropped.
 - **FR-012**: Assigning categories MUST NOT change item amounts or the transaction's net total — only which category the spend is counted under.
-
-**Category suggestion (Story 3, optional)**
-
-- **FR-013**: When an item is created or edited, the system MAY suggest a category derived from the item's name and previously categorized items of the same name.
-- **FR-014**: Any suggestion MUST be non-binding — the user can accept, change, or ignore it, and it MUST NOT overwrite a category the user has already chosen.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -109,10 +97,9 @@ To reduce the manual tagging the user is trying to avoid (they import invoices p
 
 - **SC-001**: For any category in the catalog, a user can locate and select it for an item within the first screen of results after typing or after picking its major — without scrolling the full flat list.
 - **SC-002**: A user can assign a category to an item in at most a few interactions (type-and-pick, or major-then-sub), measured as faster than scanning the previous flat list for the same target.
-- **SC-003**: After importing an invoice that auto-generates items onto a transaction with no category tag, 100% of those items are identifiable as uncategorized and can be assigned a real category.
+- **SC-003**: After importing an invoice that auto-generates items onto a transaction with no category tag, 100% of those items are visible and flagged as uncategorized in the import review, and each can be assigned a category inline there — without re-importing or leaving the import screen.
 - **SC-004**: After the user assigns categories to previously-uncategorized invoice-generated items, those items' spend appears under the assigned categories in the period summary and no longer under 其他.
 - **SC-005**: No spend ever disappears: the sum of all categories (including 其他) in a period equals the period's total net spend before and after categorizing items.
-- **SC-006** (Story 3, if built): For items whose name exactly matches a previously categorized item, the system suggests the correct category in the large majority of cases, and never blocks or overrides the user's own choice.
 
 ## Assumptions
 
@@ -121,7 +108,7 @@ To reduce the manual tagging the user is trying to avoid (they import invoices p
 - The improved item category control follows the same major-then-subcategory + search pattern the app already uses for transaction-level category selection, applied at the item level for consistency.
 - This feature changes only which category spend is attributed to; it does not change how amounts or net (discount-adjusted) amounts are computed.
 - "Uncategorized" for statistics means an item has no `major:sub` category and no transaction-level category to inherit.
-- Story 3 (name-based suggestion) is optional and may be deferred or dropped without affecting the value of Stories 1 and 2. Whether it is in scope is confirmed during planning/clarification.
+- Name-based category suggestion is **out of scope** for this feature (deferred per clarification 2026-06-09); the solution is deterministic UI only, with no auto-suggestion engine or LLM call.
 - Surfacing and assigning categories for auto-generated items reuses the existing transaction/item editing flow (no separate re-import step is required).
 
 ## Dependencies
