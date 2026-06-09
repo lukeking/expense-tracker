@@ -16,7 +16,7 @@ interface Props {
   extraTags?: string[];
   onMax: (() => void) | null;
   onChange: (item: ItemRowData) => void;
-  onRemove: () => void;
+  onRemove?: () => void;
 }
 
 export function ItemRow({ item, inheritedTag, extraTags = [], onMax, onChange, onRemove }: Props) {
@@ -106,14 +106,16 @@ export function ItemRow({ item, inheritedTag, extraTags = [], onMax, onChange, o
           </button>
         </div>
 
-        <button
-          type="button"
-          onClick={onRemove}
-          className="flex-shrink-0 text-gray-400 dark:text-gray-500 text-lg leading-none ml-1"
-          aria-label="移除"
-        >
-          ✕
-        </button>
+        {onRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="flex-shrink-0 text-gray-400 dark:text-gray-500 text-lg leading-none ml-1"
+            aria-label="移除"
+          >
+            ✕
+          </button>
+        )}
       </div>
 
       {/* Line 2: note input + Max button */}
