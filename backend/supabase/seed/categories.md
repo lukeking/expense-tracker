@@ -4,11 +4,11 @@ Snapshot of the live `categories` table — the source of truth for the catalog.
 only the initial seed; scripts/migrate-legacy.ts upserted the rest, plus manual curation.)
 
 Pulled 2026-06-09 via:  GET /pwa/categories  (auth: Bearer $ANDROID_API_KEY).
-Regenerate after changing the catalog by re-running that fetch and overwriting this file.
+Regenerate after changing the catalog by re-running that fetch and overwriting the rows below.
 -->
 
-Major|Sub|Order
--|-|-
+Major | Sub | Order
+--- | --- | ---
 住 | NULL | 0
 住 | 仲介費 | 9999
 住 | 住宿 | 50
@@ -20,6 +20,7 @@ Major|Sub|Order
 住 | 租金 | 10
 住 | 電費 | 30
 其他 | 3C周邊 | 70
+其他 | AI | 80
 其他 | App | 60
 其他 | Google Play | 9999
 其他 | NULL | 0
@@ -42,6 +43,7 @@ Major|Sub|Order
 其他 | 贊助 | 9999
 其他 | 運費 | 9999
 其他 | 雜支 | 9999
+其他 | 雲端 | 90
 其他 | 電信費 | 40
 其他 | 電池 | 9999
 樂 | FFXIV | 50
@@ -82,9 +84,11 @@ Major|Sub|Order
 行 | 捷運 | 10
 行 | 收計程車費 | 9999
 行 | 機票 | 9999
+行 | 機車小幫手 | 140
 行 | 機車部品 | 90
 行 | 油費 | 40
 行 | 火車 | 60
+行 | 神盾 | 150
 行 | 租車 | 120
 行 | 罰單 | 9999
 行 | 船票 | 9999
