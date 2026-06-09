@@ -78,7 +78,7 @@ export function ItemRow({ item, inheritedTag, extraTags = [], onMax, onChange, o
           value={item.name}
           onChange={(e) => onChange({ ...item, name: e.target.value })}
           placeholder="品項名稱"
-          className="flex-1 text-sm border-0 outline-none bg-transparent text-gray-900 dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-600"
+          className="flex-1 min-w-0 text-sm border-0 outline-none bg-transparent text-gray-900 dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-600"
         />
 
         <div className="flex items-center gap-1 flex-shrink-0">
