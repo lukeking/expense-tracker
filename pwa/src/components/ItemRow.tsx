@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { BottomSheet } from './BottomSheet';
-import { useCategories, useMajors } from '../hooks/useCategories';
+import { ItemCategorySheet } from './ItemCategorySheet';
 
 export interface ItemRowData {
   id: string;
@@ -22,8 +21,6 @@ interface Props {
 
 export function ItemRow({ item, inheritedTag, extraTags = [], onMax, onChange, onRemove }: Props) {
   const [tagSheetOpen, setTagSheetOpen] = useState(false);
-  const { data: categories } = useCategories();
-  const majors = useMajors(categories);
 
   const displayTag = item.tagOverride ?? inheritedTag;
 
@@ -58,14 +55,6 @@ export function ItemRow({ item, inheritedTag, extraTags = [], onMax, onChange, o
     onChange({ ...item, tagOverride: tag });
     setTagSheetOpen(false);
   }
-
-  const dbOptions: string[] = [
-    ...(majors ?? []),
-    ...((categories ?? [])
-      .filter((c) => c.subcategory !== null)
-      .map((c) => `${c.major}:${c.subcategory}`)),
-  ];
-  const allTagOptions = [...new Set([...dbOptions, ...extraTags.filter((t) => t.includes(':'))])];
 
   return (
     <div className="flex flex-col gap-1 py-2 border-b border-gray-100 dark:border-gray-700 last:border-0">
@@ -147,28 +136,15 @@ export function ItemRow({ item, inheritedTag, extraTags = [], onMax, onChange, o
         </button>
       </div>
 
-      {/* Tag override sheet */}
-      <BottomSheet open={tagSheetOpen} onClose={() => setTagSheetOpen(false)} title="選擇品項分類">
-        <div className="px-4 py-3 space-y-1">
-          <button
-            type="button"
-            onClick={() => selectTag(null)}
-            className={`w-full text-left px-3 py-2 rounded text-sm ${!item.tagOverride ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-          >
-            繼承主分類{inheritedTag ? `（${inheritedTag}）` : ''}
-          </button>
-          {allTagOptions.map((tag) => (
-            <button
-              key={tag}
-              type="button"
-              onClick={() => selectTag(tag)}
-              className={`w-full text-left px-3 py-2 rounded text-sm ${item.tagOverride === tag ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-            >
-              {tag}
-            </button>
-          ))}
-        </div>
-      </BottomSheet>
+      {/* Tag override sheet (searchable + major-filterable) */}
+      <ItemCategorySheet
+        open={tagSheetOpen}
+        onClose={() => setTagSheetOpen(false)}
+        value={item.tagOverride}
+        inheritedTag={inheritedTag}
+        extraTags={extraTags}
+        onSelect={selectTag}
+      />
     </div>
   );
 }

@@ -531,15 +531,15 @@ export async function getTransactionsByIds(
 export async function getTransactionItemsByTransactionIds(
   supabase: SupabaseClient,
   txIds: string[]
-): Promise<Pick<TransactionItemRow, 'transaction_id' | 'name' | 'amount' | 'tags' | 'sort_order'>[]> {
+): Promise<Pick<TransactionItemRow, 'id' | 'transaction_id' | 'name' | 'amount' | 'tags' | 'sort_order'>[]> {
   if (txIds.length === 0) return [];
   const { data, error } = await supabase
     .from('transaction_items')
-    .select('transaction_id, name, amount, tags, sort_order')
+    .select('id, transaction_id, name, amount, tags, sort_order')
     .in('transaction_id', txIds)
     .order('sort_order', { ascending: true });
   if (error) throw new Error(`getTransactionItemsByTransactionIds: ${error.message}`);
-  return (data ?? []) as Pick<TransactionItemRow, 'transaction_id' | 'name' | 'amount' | 'tags' | 'sort_order'>[];
+  return (data ?? []) as Pick<TransactionItemRow, 'id' | 'transaction_id' | 'name' | 'amount' | 'tags' | 'sort_order'>[];
 }
 
 export async function deleteInvoice(supabase: SupabaseClient, invoiceId: string): Promise<void> {
@@ -696,6 +696,20 @@ export async function renameTransactionItem(
     .update({ name })
     .eq('id', itemId);
   if (error) throw new Error(`renameTransactionItem: ${error.message}`);
+}
+
+// Feature 026: assign/clear a single item's category — update just the item's
+// `tags` array; amount, effective_amount, name, and source_invoice_id are untouched.
+export async function updateTransactionItemTags(
+  supabase: SupabaseClient,
+  itemId: string,
+  tags: string[]
+): Promise<void> {
+  const { error } = await supabase
+    .from('transaction_items')
+    .update({ tags })
+    .eq('id', itemId);
+  if (error) throw new Error(`updateTransactionItemTags: ${error.message}`);
 }
 
 export async function getTransactionItems(

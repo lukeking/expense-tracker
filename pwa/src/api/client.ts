@@ -47,6 +47,14 @@ export async function apiFetch<T = unknown>(path: string, init?: RequestInit): P
   return res.json() as Promise<T>;
 }
 
+// Feature 026: assign / reassign (categoryTag) or clear (null) a single item's category.
+export function assignItemCategory(txId: string, itemId: string, categoryTag: string | null) {
+  return apiFetch<{ ok: true }>(`/pwa/transactions/${txId}/items/${itemId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ category_tag: categoryTag }),
+  });
+}
+
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

@@ -316,3 +316,45 @@ describe('aggregateBySubcategory — discount-aware (effective_amount)', () => {
     expect(result.find((t) => t.subcategory === '牙膏')?.total).toBe(360);
   });
 });
+
+// ─── Feature 026: assigning a category moves item spend out of 其他 ────────────
+
+describe('aggregateByCategory — item categorization (feature 026)', () => {
+  // An invoice-filled item starts with tags:[] on a transaction whose only tag is a
+  // plain store tag (全家); its spend lands in 其他. Assigning a category moves it.
+  const txWith = (itemTags: string[]) => ({
+    amount: 100,
+    tags: ['全家'],
+    transaction_items: [{ amount: 100, effective_amount: null, tags: itemTags }],
+  });
+
+  it('uncategorized invoice item → 其他', () => {
+    expect(aggregateByCategory([txWith([])])).toEqual([{ category: '其他', total: 100 }]);
+  });
+
+  it('after assigning 飲食:零食 → counted under 飲食, not 其他', () => {
+    const result = aggregateByCategory([txWith(['飲食:零食'])]);
+    expect(result.find((t) => t.category === '飲食')?.total).toBe(100);
+    expect(result.find((t) => t.category === '其他')).toBeUndefined();
+  });
+
+  it('grand total is unchanged by categorization (SC-005)', () => {
+    const sum = (txs: Parameters<typeof aggregateByCategory>[0]) =>
+      aggregateByCategory(txs).reduce((s, e) => s + e.total, 0);
+    expect(sum([txWith(['飲食:零食'])])).toBe(sum([txWith([])]));
+  });
+
+  it('partial: one of two items categorized → remainder stays in 其他', () => {
+    const tx = {
+      amount: 100,
+      tags: ['全家'],
+      transaction_items: [
+        { amount: 60, effective_amount: null, tags: ['飲食:零食'] },
+        { amount: 40, effective_amount: null, tags: [] },
+      ],
+    };
+    const result = aggregateByCategory([tx]);
+    expect(result.find((t) => t.category === '飲食')?.total).toBe(60);
+    expect(result.find((t) => t.category === '其他')?.total).toBe(40);
+  });
+});

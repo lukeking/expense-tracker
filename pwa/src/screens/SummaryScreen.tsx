@@ -7,6 +7,10 @@ import { useSummaryData, useSubcategoryData, useTransactions, useTransactionPeri
 import type { TimeBase, TxRecord, PeriodData } from '../hooks/useSummary';
 import { useTags } from '../hooks/useTags';
 import { EditExpenseSheet } from '../components/EditExpenseSheet';
+import { useQueryClient } from '@tanstack/react-query';
+import { ItemCategorySheet } from '../components/ItemCategorySheet';
+import { assignItemCategory } from '../api/client';
+import { isItemUncategorized, itemCategoryTag } from '../lib/itemCategory';
 
 const COLOURS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
 
@@ -59,6 +63,25 @@ function txLabel(tx: TxRecord): string {
 }
 
 function TxEntry({ tx, parentMap, onEdit }: { tx: TxRecord; parentMap: Map<string, TxRecord>; onEdit?: (id: string) => void }) {
+  const qc = useQueryClient();
+  // Feature 026: the item being categorized inline from the Summary list.
+  const [catItem, setCatItem] = useState<{ itemId: string; value: string | null } | null>(null);
+  const canCategorize = tx.transaction_type === 'expense';
+  const inheritedTag = tx.tags.find((t) => t.includes(':')) ?? null;
+
+  async function assignCategory(catTag: string | null) {
+    if (!catItem) return;
+    try {
+      await assignItemCategory(tx.id, catItem.itemId, catTag);
+      // Re-aggregate: the item's spend moves between 其他 and its category.
+      for (const key of ['summary', 'subcategories', 'transactions', 'tx-month']) {
+        qc.invalidateQueries({ queryKey: [key] });
+      }
+    } catch {
+      // Leave as-is on failure; the user can retry.
+    }
+  }
+
   return (
     <div className="px-4 py-1.5">
       <div className="flex justify-between text-sm">
@@ -92,13 +115,47 @@ function TxEntry({ tx, parentMap, onEdit }: { tx: TxRecord; parentMap: Map<strin
       )}
       {tx.items.length > 0 && (
         <div className="mt-1 space-y-0.5 pl-2">
-          {tx.items.map((item) => (
-            <div key={item.id} className="flex justify-between text-xs text-gray-400 dark:text-gray-500">
-              <span>{item.name}</span>
-              {item.amount !== null && <span>NT${item.amount}</span>}
-            </div>
-          ))}
+          {tx.items.map((item) => {
+            const cat = itemCategoryTag(item);
+            const uncategorized = canCategorize && isItemUncategorized(item, tx);
+            const inner = (
+              <>
+                <span className="text-gray-400 dark:text-gray-500">
+                  {item.name}
+                  {cat ? (
+                    <span className="text-blue-500 dark:text-blue-400"> #{cat}</span>
+                  ) : uncategorized ? (
+                    <span className="text-amber-600 dark:text-amber-400"> ⚠ 未分類</span>
+                  ) : null}
+                </span>
+                {item.amount !== null && <span className="text-gray-400 dark:text-gray-500">NT${item.amount}</span>}
+              </>
+            );
+            return canCategorize ? (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setCatItem({ itemId: item.id, value: cat })}
+                className="w-full flex justify-between text-xs text-left"
+              >
+                {inner}
+              </button>
+            ) : (
+              <div key={item.id} className="flex justify-between text-xs text-gray-400 dark:text-gray-500">
+                {inner}
+              </div>
+            );
+          })}
         </div>
+      )}
+      {catItem && (
+        <ItemCategorySheet
+          open
+          onClose={() => setCatItem(null)}
+          value={catItem.value}
+          inheritedTag={inheritedTag}
+          onSelect={assignCategory}
+        />
       )}
     </div>
   );
