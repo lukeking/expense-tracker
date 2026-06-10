@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ItemCategorySheet } from './ItemCategorySheet';
+import { EXPLICIT_UNCATEGORIZED } from '../lib/itemCategory';
 
 export interface ItemRowData {
   id: string;
@@ -22,7 +23,9 @@ interface Props {
 export function ItemRow({ item, inheritedTag, extraTags = [], onMax, onChange, onRemove }: Props) {
   const [tagSheetOpen, setTagSheetOpen] = useState(false);
 
-  const displayTag = item.tagOverride ?? inheritedTag;
+  // B2: the sentinel is a deliberate decision — rendered like an override, as 其他.
+  const isSentinel = item.tagOverride === EXPLICIT_UNCATEGORIZED;
+  const displayTag = isSentinel ? '其他' : item.tagOverride ?? inheritedTag;
 
   function setAmount(val: number | null) {
     onChange({ ...item, amount: val, approxFlag: false });
@@ -70,7 +73,7 @@ export function ItemRow({ item, inheritedTag, extraTags = [], onMax, onChange, o
           }`}
           title={displayTag ?? '繼承分類'}
         >
-          {item.tagOverride ?? (inheritedTag ? <span className="text-gray-300 dark:text-gray-600">{inheritedTag}</span> : '—')}
+          {isSentinel ? '其他' : item.tagOverride ?? (inheritedTag ? <span className="text-gray-300 dark:text-gray-600">{inheritedTag}</span> : '—')}
         </button>
 
         <input

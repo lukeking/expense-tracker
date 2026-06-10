@@ -3,7 +3,7 @@ import { apiFetch, ApiError, assignItemCategory } from '../api/client';
 import { AmbiguousInvoiceCard, type AmbiguousEntry, type MatchedDetail } from '../components/AmbiguousInvoiceCard';
 import { ManualLinkSheet, type UnmatchedInvoice, type ManualLinkInvoice, type ManualLinkSource } from '../components/ManualLinkSheet';
 import { ItemCategorySheet } from '../components/ItemCategorySheet';
-import { isItemUncategorized, itemCategoryTag } from '../lib/itemCategory';
+import { itemCategoryTag, effectiveItemCategory } from '../lib/itemCategory';
 
 interface LinkedInvoice {
   id: string;
@@ -258,9 +258,12 @@ export function ImportScreen() {
 
   // Feature 026: assign the chosen category to catTarget's item, then reflect the new
   // tags locally so the ⚠ 未分類 flag updates without a refetch.
+  // Feature 027 (B2): mirror the server's collapse rule — picking the tx's own
+  // category stores nothing (inherit), so the local state must do the same.
   async function handleAssignCategory(tag: string | null) {
     if (!catTarget) return;
     const { txId, itemId } = catTarget;
+    const effective = tag !== null && tag === catTarget.inheritedTag ? null : tag;
     try {
       await assignItemCategory(txId, itemId, tag);
       setLinked((prev) =>
@@ -272,7 +275,7 @@ export function ImportScreen() {
                   ...l.transaction,
                   items: l.transaction.items.map((it) =>
                     it.id === itemId
-                      ? { ...it, tags: tag ? [...it.tags.filter((t) => !t.includes(':')), tag] : it.tags.filter((t) => !t.includes(':')) }
+                      ? { ...it, tags: effective ? [...it.tags.filter((t) => !t.includes(':')), effective] : it.tags.filter((t) => !t.includes(':')) }
                       : it
                   ),
                 },
@@ -424,7 +427,9 @@ export function ImportScreen() {
                             <p className="text-xs font-medium text-gray-500 dark:text-gray-400">交易品項</p>
                             {l.transaction!.items.map((i) => {
                               const cat = itemCategoryTag(i);
-                              const uncategorized = isItemUncategorized(i, l.transaction!);
+                              // B2 (FR-011): blue = own decision (override / sentinel-as-其他),
+                              // pale gray = inherited live from the tx, amber ⚠ = no decision.
+                              const eff = effectiveItemCategory(i, l.transaction!);
                               return (
                                 <button
                                   key={i.id}
@@ -439,11 +444,13 @@ export function ImportScreen() {
                                 >
                                   <span className="truncate text-gray-400 dark:text-gray-500">
                                     {i.name}
-                                    {cat ? (
-                                      <span className="text-blue-500 dark:text-blue-400"> #{cat}</span>
-                                    ) : uncategorized ? (
+                                    {eff.source === 'override' || eff.source === 'explicit-uncategorized' ? (
+                                      <span className="text-blue-500 dark:text-blue-400"> #{eff.tag}</span>
+                                    ) : eff.source === 'inherited' ? (
+                                      <span className="text-gray-300 dark:text-gray-600"> #{eff.tag}</span>
+                                    ) : (
                                       <span className="text-amber-600 dark:text-amber-400"> ⚠ 未分類</span>
-                                    ) : null}
+                                    )}
                                   </span>
                                   <span className="shrink-0 text-gray-400 dark:text-gray-500">{i.amount != null ? i.amount.toLocaleString() : '—'}</span>
                                 </button>
