@@ -48,30 +48,15 @@ Dry-run report must show: per-period per-category totals **identical** before/af
 
 ## 4. FR-014 picker mockup — ⚠ REQUIRES SIGN-OFF BEFORE IMPLEMENTING
 
-Replaces the single `✕ 繼承主分類（…）/清除分類` row in `ItemCategorySheet`:
+Replaces the single `✕ 繼承主分類（…）/清除分類` row in `ItemCategorySheet`.
 
-```
-╭─────────────────────────────────────────╮
-│  選擇品項分類                        ✕  │
-├─────────────────────────────────────────┤
-│  ┌───────────────────────────────────┐  │
-│  │ 🔍 搜尋分類…                      │  │
-│  └───────────────────────────────────┘  │
-│                                         │
-│  ┌───────────────────────────────────┐  │
-│  │ ↩  繼承主分類（食:雜貨）          │  │   ← onSelect(null); highlighted when
-│  └───────────────────────────────────┘  │     the item has no stored :-tag
-│  ┌───────────────────────────────────┐  │
-│  │ ⊘  設為「其他」（不歸入任何分類） │  │   ← onSelect('其他:未分類'); highlighted
-│  └───────────────────────────────────┘  │     when item tag == sentinel
-│                                         │
-│  ‹ 食 › ‹ 衣 › ‹ 住 › ‹ 行 › ‹ 樂 › …   │   ← major chips (unchanged)
-│                                         │
-│  ‹ 食（整體）› ‹ 早餐 › ‹ 午餐 › …      │   ← sub chips (unchanged)
-╰─────────────────────────────────────────╯
-```
+**Rendered mockup** (pixel-accurate; built from the component's exact Tailwind values):
+[`mockups/fr-014-picker.png`](mockups/fr-014-picker.png) · source [`mockups/fr-014-picker.html`](mockups/fr-014-picker.html)
 
-- Tx has no category → inherit row reads `↩ 不分類（跟隨主分類）`, same `null` semantics.
+Four states — **A** inherit active (tx = `食:雜貨`), **B** 設為「其他」 active (sentinel stored), **C** tx without category (inherit row reads `不分類（跟隨主分類）`, same `null` semantics), **D** dark mode.
+
+- Inherit row → `onSelect(null)`; highlighted when the item has no stored `:`-tag.
+- 設為「其他」 row → `onSelect('其他:未分類')`; highlighted when the item tag equals the sentinel.
 - Sentinel never appears in search results, major/sub chips, or `extraTags`.
 - Everything below the two action rows is unchanged from 026.
 

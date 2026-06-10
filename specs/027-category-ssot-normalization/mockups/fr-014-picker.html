@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>FR-014 picker mockup — ItemCategorySheet</title>
+<style>
+  /* CSS mirrors the Tailwind utilities used by BottomSheet.tsx + ItemCategorySheet.tsx
+     (v4 palette ≈ classic hex; spacing/radii identical). One class here = the utility
+     stack on the corresponding JSX node. */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Noto Sans TC", system-ui, sans-serif;
+    background: #e5e7eb; padding: 24px;
+    display: flex; gap: 24px; align-items: flex-start;
+  }
+  .frame-wrap { width: 390px; flex-shrink: 0; }
+  .caption { font-size: 13px; color: #374151; margin-bottom: 8px; line-height: 1.4; }
+  .caption b { color: #111827; }
+
+  /* phone frame: fixed inset-0 flex flex-col justify-end + bg-black/40 overlay */
+  .frame {
+    width: 390px; height: 620px; position: relative; overflow: hidden;
+    border-radius: 12px; background: #f9fafb;
+  }
+  .frame.dark { background: #111827; }
+  .overlay { position: absolute; inset: 0; background: rgba(0,0,0,.4); }
+
+  /* sheet: relative bg-white dark:bg-gray-800 rounded-t-2xl flex flex-col */
+  .sheet {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    background: #fff; border-radius: 16px 16px 0 0;
+    display: flex; flex-direction: column;
+  }
+  .dark .sheet { background: #1f2937; }
+
+  /* header: flex items-center justify-between px-4 py-3 border-b border-gray-100 */
+  .sheet-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; border-bottom: 1px solid #f3f4f6;
+  }
+  .dark .sheet-header { border-bottom-color: #374151; }
+  .sheet-title { font-weight: 600; color: #111827; font-size: 16px; }
+  .dark .sheet-title { color: #fff; }
+  .sheet-close { margin-left: auto; color: #6b7280; font-size: 20px; line-height: 1; padding: 4px; background: none; border: none; }
+  .dark .sheet-close { color: #9ca3af; }
+
+  /* content: px-4 py-3 space-y-3 */
+  .sheet-body { padding: 12px 16px 28px; }
+  .sheet-body > * + * { margin-top: 12px; }
+
+  /* search: w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-900 */
+  .search {
+    width: 100%; border: 1px solid #d1d5db; border-radius: 8px;
+    padding: 8px 12px; font-size: 14px; line-height: 20px;
+    background: #fff; color: #9ca3af; font-family: inherit;
+  }
+  .dark .search { border-color: #4b5563; background: #374151; color: #6b7280; }
+
+  /* action rows: w-full flex items-center gap-2 px-3 py-2 rounded text-sm border
+     active:   bg-blue-50 text-blue-700 border-blue-300
+     inactive: text-gray-600 border-gray-200 */
+  .action-rows > * + * { margin-top: 8px; }
+  .action {
+    width: 100%; display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; border-radius: 4px; font-size: 14px; line-height: 20px;
+    border: 1px solid #e5e7eb; color: #4b5563; background: none; text-align: left;
+    font-family: inherit;
+  }
+  .action .ico { font-size: 16px; line-height: 1; }
+  .action.active { background: #eff6ff; color: #1d4ed8; border-color: #93c5fd; }
+  .dark .action { color: #d1d5db; border-color: #4b5563; }
+  .dark .action.active { background: rgba(30,58,138,.3); color: #93c5fd; border-color: #1d4ed8; }
+
+  /* major chips: flex gap-2 overflow-x-auto; chip: px-3 py-1.5 rounded-full text-sm font-medium border
+     active: bg-blue-600 text-white border-blue-600 / inactive: bg-white text-gray-700 border-gray-300 */
+  .majors { display: flex; gap: 8px; overflow: hidden; padding-bottom: 4px; }
+  .major {
+    flex-shrink: 0; padding: 6px 12px; border-radius: 9999px; font-size: 14px; line-height: 20px;
+    font-weight: 500; border: 1px solid #d1d5db; background: #fff; color: #374151;
+  }
+  .major.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+  .dark .major { background: #1f2937; color: #e5e7eb; border-color: #4b5563; }
+  .dark .major.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+
+  /* sub chips: flex flex-wrap gap-2; chip: px-3 py-1.5 rounded-full text-sm border
+     active: bg-blue-100 text-blue-700 border-blue-400 / inactive: bg-white text-gray-600 border-gray-200 */
+  .subs { display: flex; flex-wrap: wrap; gap: 8px; }
+  .sub {
+    flex-shrink: 0; padding: 6px 12px; border-radius: 9999px; font-size: 14px; line-height: 20px;
+    border: 1px solid #e5e7eb; background: #fff; color: #4b5563;
+  }
+  .sub.active { background: #dbeafe; color: #1d4ed8; border-color: #60a5fa; }
+  .dark .sub { background: #1f2937; color: #d1d5db; border-color: #4b5563; }
+</style>
+</head>
+<body>
+
+  <!-- A: tx categorized, item inheriting -->
+  <div class="frame-wrap">
+    <div class="caption"><b>A · 繼承中</b>（tx = 食:雜貨，item 無自己的分類）<br>→ 繼承列 highlighted；major 食 展開</div>
+    <div class="frame">
+      <div class="overlay"></div>
+      <div class="sheet">
+        <div class="sheet-header"><span class="sheet-title">選擇品項分類</span><button class="sheet-close">✕</button></div>
+        <div class="sheet-body">
+          <input class="search" value="" placeholder="搜尋分類…">
+          <div class="action-rows">
+            <button class="action active"><span class="ico">↩</span><span>繼承主分類（食:雜貨）</span></button>
+            <button class="action"><span class="ico">⊘</span><span>設為「其他」（不歸入任何分類）</span></button>
+          </div>
+          <div class="majors">
+            <span class="major active">食</span><span class="major">衣</span><span class="major">住</span><span class="major">行</span><span class="major">育</span><span class="major">樂</span><span class="major">其他</span>
+          </div>
+          <div class="subs">
+            <span class="sub">食（整體）</span><span class="sub">早餐</span><span class="sub">午餐</span><span class="sub">晚餐</span><span class="sub">零食</span><span class="sub">飲料</span><span class="sub">雜貨</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- B: explicit-uncategorized selected -->
+  <div class="frame-wrap">
+    <div class="caption"><b>B · 設為「其他」</b>（item = 其他:未分類 sentinel）<br>→ 其他列 highlighted；sentinel 不出現在 chips/搜尋</div>
+    <div class="frame">
+      <div class="overlay"></div>
+      <div class="sheet">
+        <div class="sheet-header"><span class="sheet-title">選擇品項分類</span><button class="sheet-close">✕</button></div>
+        <div class="sheet-body">
+          <input class="search" value="" placeholder="搜尋分類…">
+          <div class="action-rows">
+            <button class="action"><span class="ico">↩</span><span>繼承主分類（食:雜貨）</span></button>
+            <button class="action active"><span class="ico">⊘</span><span>設為「其他」（不歸入任何分類）</span></button>
+          </div>
+          <div class="majors">
+            <span class="major">食</span><span class="major">衣</span><span class="major">住</span><span class="major">行</span><span class="major">育</span><span class="major">樂</span><span class="major">其他</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- C: tx has no category -->
+  <div class="frame-wrap">
+    <div class="caption"><b>C · 主分類不存在</b>（tx 無分類，item 繼承）<br>→ 繼承列改寫為「不分類（跟隨主分類）」，語意同 null</div>
+    <div class="frame">
+      <div class="overlay"></div>
+      <div class="sheet">
+        <div class="sheet-header"><span class="sheet-title">選擇品項分類</span><button class="sheet-close">✕</button></div>
+        <div class="sheet-body">
+          <input class="search" value="" placeholder="搜尋分類…">
+          <div class="action-rows">
+            <button class="action active"><span class="ico">↩</span><span>不分類（跟隨主分類）</span></button>
+            <button class="action"><span class="ico">⊘</span><span>設為「其他」（不歸入任何分類）</span></button>
+          </div>
+          <div class="majors">
+            <span class="major">食</span><span class="major">衣</span><span class="major">住</span><span class="major">行</span><span class="major">育</span><span class="major">樂</span><span class="major">其他</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- D: dark mode, state A -->
+  <div class="frame-wrap">
+    <div class="caption"><b>D · Dark mode</b>（狀態同 A）<br>→ 既有 dark: variant 規則直接套用</div>
+    <div class="frame dark">
+      <div class="overlay"></div>
+      <div class="sheet">
+        <div class="sheet-header"><span class="sheet-title">選擇品項分類</span><button class="sheet-close">✕</button></div>
+        <div class="sheet-body">
+          <input class="search" value="" placeholder="搜尋分類…">
+          <div class="action-rows">
+            <button class="action active"><span class="ico">↩</span><span>繼承主分類（食:雜貨）</span></button>
+            <button class="action"><span class="ico">⊘</span><span>設為「其他」（不歸入任何分類）</span></button>
+          </div>
+          <div class="majors">
+            <span class="major active">食</span><span class="major">衣</span><span class="major">住</span><span class="major">行</span><span class="major">育</span><span class="major">樂</span><span class="major">其他</span>
+          </div>
+          <div class="subs">
+            <span class="sub">食（整體）</span><span class="sub">早餐</span><span class="sub">午餐</span><span class="sub">晚餐</span><span class="sub">零食</span><span class="sub">飲料</span><span class="sub">雜貨</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
