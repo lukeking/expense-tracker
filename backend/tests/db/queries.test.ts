@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { findAllMatchedInvoices, markInvoicesRead, getTransactionsByIds, getTransactionItemsByTransactionIds, resetInvoiceToAmbiguous, computeEffectiveShares, computeAndWriteEffectiveAmounts } from '../../src/db/queries';
+import { findAllMatchedInvoices, markInvoicesRead, getTransactionsByIds, getTransactionItemsByTransactionIds, resetInvoiceToAmbiguous, computeEffectiveShares, computeAndWriteEffectiveAmounts, findParentCandidates, transactionMatchesParentSearch, updateParentTransactionId, mergeParentTags } from '../../src/db/queries';
 
 // Test the getMonthlySpend reduce logic directly — same formula as the implementation
 function computeMonthlySpend(rows: { amount: number; transaction_type: string }[]): number {
@@ -183,7 +183,9 @@ function makeFake(seed: { invoices?: Row[]; transactions?: Row[]; transaction_it
       eq(col: string, val: unknown) { filters.push((r) => r[col] === val); return builder; },
       is(col: string, val: unknown) { filters.push((r) => (val === null ? r[col] == null : r[col] === val)); return builder; },
       in(col: string, arr: unknown[]) { filters.push((r) => arr.includes(r[col])); return builder; },
+      gte(col: string, val: unknown) { filters.push((r) => (r[col] as string) >= (val as string)); return builder; },
       order() { return builder; },
+      single() { const r = execute() as { data: Row[]; error: unknown }; return { data: r.data[0] ?? null, error: r.error }; },
       then(resolve: (v: unknown) => void) { resolve(execute()); },
     };
     return builder;
@@ -363,5 +365,120 @@ describe('computeAndWriteEffectiveAmounts (recompute shared by resolve / manual-
     await computeAndWriteEffectiveAmounts(client, 'tx', 500);
     expect(tables.transaction_items.find((i) => i.id === 'i1')!.effective_amount).toBe(300);
     expect(tables.transaction_items.find((i) => i.id === 'i2')!.effective_amount).toBe(200);
+  });
+});
+
+// ─── parent search matching (iherb refund/fee search) ─────────────────────────
+
+describe('transactionMatchesParentSearch', () => {
+  const row = (over: Partial<{ note: string | null; tags: string[] | null; transaction_items: { name: string; tags?: string[] | null }[] | null }>) => ({
+    note: null,
+    tags: null,
+    transaction_items: null,
+    ...over,
+  });
+
+  it('matches an item name (regression)', () => {
+    expect(transactionMatchesParentSearch(row({ transaction_items: [{ name: '魚油', tags: [] }] }), '魚油')).toBe(true);
+  });
+
+  it('matches the transaction note (regression)', () => {
+    expect(transactionMatchesParentSearch(row({ note: '國外交易服務費' }), '國外交易服務費')).toBe(true);
+  });
+
+  it('matches a transaction-level plain tag (regression)', () => {
+    expect(transactionMatchesParentSearch(row({ tags: ['iherb'] }), 'iherb')).toBe(true);
+  });
+
+  it('matches an item-level shared-category tag — the iherb-as-#x:iherb case', () => {
+    // parseItems stores a `#category:iherb` shared tag on each item, not on transactions.tags;
+    // the search previously never looked there, so `iherb` returned nothing.
+    expect(transactionMatchesParentSearch(row({ transaction_items: [{ name: '魚油', tags: ['網購:iherb'] }] }), 'iherb')).toBe(true);
+  });
+
+  it('is case-insensitive and substring-based', () => {
+    expect(transactionMatchesParentSearch(row({ tags: ['iHerb'] }), 'HERB')).toBe(true);
+  });
+
+  it('returns false when nothing matches', () => {
+    expect(transactionMatchesParentSearch(row({ note: 'Airbnb', tags: ['旅遊'], transaction_items: [{ name: '住宿', tags: [] }] }), 'iherb')).toBe(false);
+  });
+
+  it('tolerates null tags / items', () => {
+    expect(transactionMatchesParentSearch(row({}), 'anything')).toBe(false);
+  });
+});
+
+describe('findParentCandidates (fee linkable + self-exclude)', () => {
+  const now = new Date().toISOString();
+  const seed = () => ({
+    transactions: [
+      { id: 'expense-iherb', transaction_type: 'expense', amount: 1200, note: '保健', tags: [], transaction_at: now, transaction_items: [{ name: '魚油', tags: ['網購:iherb'] }] },
+      { id: 'fee-iherb', transaction_type: 'fee', amount: 47, note: '國外交易服務費', tags: [], transaction_at: now, transaction_items: [{ name: '國外交易服務費', tags: [] }] },
+      { id: 'refund-new', transaction_type: 'refund', amount: 12, note: '國外交易服務費', tags: [], transaction_at: now, transaction_items: [{ name: '國外交易服務費', tags: [] }] },
+    ],
+  });
+
+  it('finds a fee row as a parent so a refund can reverse part of it', async () => {
+    const { client } = makeFake(seed());
+    const rows = await findParentCandidates(client, '國外交易服務費', 90, 'refund-new');
+    // the fee is found; the freshly-inserted refund (excludeId) is not offered as its own parent
+    expect(rows.map((r) => r.id)).toEqual(['fee-iherb']);
+  });
+
+  it('finds the iherb purchase via its item-level shared-category tag', async () => {
+    const { client } = makeFake(seed());
+    const rows = await findParentCandidates(client, 'iherb', 90);
+    expect(rows.map((r) => r.id)).toEqual(['expense-iherb']);
+  });
+
+  it('never returns a refund row (refunds are not parents)', async () => {
+    const { client } = makeFake(seed());
+    const rows = await findParentCandidates(client, '國外交易服務費', 90);
+    expect(rows.map((r) => r.id)).toEqual(['fee-iherb']);
+  });
+});
+
+// ─── tag inheritance on link (fee/refund → parent) ────────────────────────────
+
+describe('mergeParentTags', () => {
+  it('unions parent tags into the child, de-duplicated', () => {
+    expect(mergeParentTags(['沖帳'], ['iherb', '保健']).sort()).toEqual(['iherb', '保健', '沖帳']);
+  });
+  it('does not duplicate a tag the child already has', () => {
+    expect(mergeParentTags(['iherb'], ['iherb'])).toEqual(['iherb']);
+  });
+  it('tolerates null on either side', () => {
+    expect(mergeParentTags(null, ['iherb'])).toEqual(['iherb']);
+    expect(mergeParentTags(['iherb'], null)).toEqual(['iherb']);
+    expect(mergeParentTags(null, null)).toEqual([]);
+  });
+});
+
+describe('updateParentTransactionId (links + inherits parent tags)', () => {
+  it('sets parent_transaction_id and inherits the parent plain tags onto the child', async () => {
+    const { client, tables } = makeFake({
+      transactions: [
+        { id: 'expense-iherb', tags: ['iherb', '保健'] },
+        { id: 'refund-1', tags: [], parent_transaction_id: null },
+      ],
+    });
+    await updateParentTransactionId(client, 'refund-1', 'expense-iherb');
+    const child = tables.transactions.find((r) => r.id === 'refund-1')!;
+    expect(child.parent_transaction_id).toBe('expense-iherb');
+    expect((child.tags as string[]).sort()).toEqual(['iherb', '保健']);
+    // parent is untouched
+    expect(tables.transactions.find((r) => r.id === 'expense-iherb')!.tags).toEqual(['iherb', '保健']);
+  });
+
+  it('preserves the child existing tags and de-dups', async () => {
+    const { client, tables } = makeFake({
+      transactions: [
+        { id: 'parent', tags: ['iherb'] },
+        { id: 'fee-1', tags: ['沖帳', 'iherb'], parent_transaction_id: null },
+      ],
+    });
+    await updateParentTransactionId(client, 'fee-1', 'parent');
+    expect((tables.transactions.find((r) => r.id === 'fee-1')!.tags as string[]).sort()).toEqual(['iherb', '沖帳']);
   });
 });
