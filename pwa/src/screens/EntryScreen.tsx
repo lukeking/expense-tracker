@@ -234,7 +234,7 @@ function ExpenseForm() {
             extraTags={freeTags}
             onMax={makeOnMax(item.id)}
             onChange={(updated) => updateItem(item.id, updated)}
-            onRemove={() => setItems((prev) => prev.filter((i) => i.id !== item.id))}
+            onRemove={items.length > 1 ? () => setItems((prev) => prev.filter((i) => i.id !== item.id)) : undefined}
           />
         ))}
         {items.length === 0 && (

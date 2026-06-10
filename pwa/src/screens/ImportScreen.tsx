@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { apiFetch, ApiError } from '../api/client';
+import { apiFetch, ApiError, assignItemCategory } from '../api/client';
 import { AmbiguousInvoiceCard, type AmbiguousEntry, type MatchedDetail } from '../components/AmbiguousInvoiceCard';
 import { ManualLinkSheet, type UnmatchedInvoice, type ManualLinkInvoice, type ManualLinkSource } from '../components/ManualLinkSheet';
+import { ItemCategorySheet } from '../components/ItemCategorySheet';
+import { isItemUncategorized, itemCategoryTag } from '../lib/itemCategory';
 
 interface LinkedInvoice {
   id: string;
@@ -19,7 +21,7 @@ interface LinkedInvoice {
     transaction_at: string;
     note: string | null;
     tags: string[];
-    items: { name: string; amount: number | null; tags: string[] }[];
+    items: { id: string; name: string; amount: number | null; tags: string[] }[];
   } | null;
 }
 
@@ -51,6 +53,8 @@ export function ImportScreen() {
   const [nearCount, setNearCount] = useState(0);
   const [unmatched, setUnmatched] = useState<UnmatchedInvoice[]>([]);
   const [linkTarget, setLinkTarget] = useState<{ invoice: ManualLinkInvoice; source: ManualLinkSource } | null>(null);
+  // Feature 026: the item whose category is being assigned inline from the review list.
+  const [catTarget, setCatTarget] = useState<{ txId: string; itemId: string; value: string | null; inheritedTag: string | null } | null>(null);
   const [linked, setLinked] = useState<LinkedInvoice[]>([]);
   const [unlinking, setUnlinking] = useState<string | null>(null);
   const [rematching, setRematching] = useState<string | null>(null);
@@ -252,6 +256,35 @@ export function ImportScreen() {
     loadLinked();
   }
 
+  // Feature 026: assign the chosen category to catTarget's item, then reflect the new
+  // tags locally so the ⚠ 未分類 flag updates without a refetch.
+  async function handleAssignCategory(tag: string | null) {
+    if (!catTarget) return;
+    const { txId, itemId } = catTarget;
+    try {
+      await assignItemCategory(txId, itemId, tag);
+      setLinked((prev) =>
+        prev.map((l) =>
+          l.transaction && l.transaction.id === txId
+            ? {
+                ...l,
+                transaction: {
+                  ...l.transaction,
+                  items: l.transaction.items.map((it) =>
+                    it.id === itemId
+                      ? { ...it, tags: tag ? [...it.tags.filter((t) => !t.includes(':')), tag] : it.tags.filter((t) => !t.includes(':')) }
+                      : it
+                  ),
+                },
+              }
+            : l
+        )
+      );
+    } catch {
+      // Leave as-is on failure; the user can retry.
+    }
+  }
+
   function reset() {
     setFile(null);
     setResult(null);
@@ -389,13 +422,31 @@ export function ImportScreen() {
                         {open && hasTxItems && (
                           <div className="mt-1">
                             <p className="text-xs font-medium text-gray-500 dark:text-gray-400">交易品項</p>
-                            {l.transaction!.items.map((i, idx) => {
-                              const cat = i.tags.find((t) => t.includes(':')) ?? i.tags[0];
+                            {l.transaction!.items.map((i) => {
+                              const cat = itemCategoryTag(i);
+                              const uncategorized = isItemUncategorized(i, l.transaction!);
                               return (
-                                <div key={idx} className="flex justify-between gap-2 text-xs text-gray-400 dark:text-gray-500">
-                                  <span className="truncate">{i.name}{cat ? ` #${cat}` : ''}</span>
-                                  <span className="shrink-0">{i.amount != null ? i.amount.toLocaleString() : '—'}</span>
-                                </div>
+                                <button
+                                  key={i.id}
+                                  type="button"
+                                  onClick={() => setCatTarget({
+                                    txId: l.transaction!.id,
+                                    itemId: i.id,
+                                    value: cat,
+                                    inheritedTag: l.transaction!.tags.find((t) => t.includes(':')) ?? null,
+                                  })}
+                                  className="w-full flex justify-between gap-2 text-xs text-left"
+                                >
+                                  <span className="truncate text-gray-400 dark:text-gray-500">
+                                    {i.name}
+                                    {cat ? (
+                                      <span className="text-blue-500 dark:text-blue-400"> #{cat}</span>
+                                    ) : uncategorized ? (
+                                      <span className="text-amber-600 dark:text-amber-400"> ⚠ 未分類</span>
+                                    ) : null}
+                                  </span>
+                                  <span className="shrink-0 text-gray-400 dark:text-gray-500">{i.amount != null ? i.amount.toLocaleString() : '—'}</span>
+                                </button>
                               );
                             })}
                           </div>
@@ -538,6 +589,16 @@ export function ImportScreen() {
           source={linkTarget.source}
           onClose={() => setLinkTarget(null)}
           onLinked={handleLinked}
+        />
+      )}
+
+      {catTarget && (
+        <ItemCategorySheet
+          open
+          onClose={() => setCatTarget(null)}
+          value={catTarget.value}
+          inheritedTag={catTarget.inheritedTag}
+          onSelect={handleAssignCategory}
         />
       )}
     </div>

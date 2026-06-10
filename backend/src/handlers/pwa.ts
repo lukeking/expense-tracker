@@ -32,12 +32,14 @@ import {
   deleteTransactionItemsBySourceInvoice,
   getTransactionItems,
   renameTransactionItem,
+  updateTransactionItemTags,
   type TransactionForPeriod,
 } from '../db/queries';
 import { getBudgetProgress } from '../services/budget';
 import { runImportPipeline, computeConfidence, applyInvoiceItems, selectExactDiscountCandidates, selectForexCandidates } from '../services/invoice-matcher';
 import { decodeCSVBuffer, parseCSVRows, groupInvoices, RowLimitError } from '../services/csv-parser';
 import { aggregateByCategory, aggregateBySubcategory } from '../services/summary';
+import { mergeItemCategoryTag } from '../services/item-category';
 
 interface PwaEnv { Bindings: Env }
 
@@ -71,7 +73,7 @@ pwaRouter.use('/*', async (c, next) => {
       status: 204,
       headers: {
         'Access-Control-Allow-Origin': c.env.PWA_ORIGIN,
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, OPTIONS',
         'Access-Control-Allow-Headers': 'Authorization, Content-Type',
         'Access-Control-Max-Age': '86400',
       },
@@ -169,7 +171,10 @@ pwaRouter.post('/expense', async (c) => {
   const tx = await insertTransaction(supabase, {
     amount,
     payment_method: payment_method as PaymentMethod,
-    tags: free_tags,
+    // B1: store the chosen category at tx-level too, so a transaction with no items
+    // still carries its category (items keep their own copy for per-item granularity).
+    // Category goes first (tags[0]), matching the legacy convention; plain tags follow.
+    tags: category_tag != null ? [category_tag, ...free_tags] : free_tags,
     note: note ?? null,
     transaction_type: 'expense',
     transaction_at: txAt,
@@ -496,9 +501,13 @@ pwaRouter.put('/transactions/:id', async (c) => {
     getAdjustmentsForTransaction(supabase, txId),
   ]);
 
+  // B1: keep the category at tx-level (alongside plain tags) so itemless transactions
+  // retain it; with items, the summary's remainder logic dedupes (no double-count).
+  // Category first (tags[0]) per the legacy convention; plain tags follow.
+  const txTags = category_tag != null ? [category_tag, ...free_tags] : free_tags;
   const { error: updateErr } = await supabase
     .from('transactions')
-    .update({ amount, payment_method, tags: free_tags, note: note ?? null })
+    .update({ amount, payment_method, tags: txTags, note: note ?? null })
     .eq('id', txId);
   if (updateErr) return c.json({ error: 'DB_ERROR', message: updateErr.message }, 500);
 
@@ -538,7 +547,81 @@ pwaRouter.put('/transactions/:id', async (c) => {
 
   const diff = computeEditDiff(
     { amount: tx.amount as number, payment_method: tx.payment_method as string, tags: (tx.tags as string[]) ?? [], note: (tx.note as string | null) ?? null, items: beforeItems, adjustments: beforeAdjs.map((a) => ({ kind: a.kind, amount: a.amount, note: a.note, basis: a.basis, basis_value: a.basis_value })) },
-    { amount, payment_method, free_tags, note: note ?? null, items: afterItems, adjustments: afterAdjs }
+    { amount, payment_method, free_tags: txTags, note: note ?? null, items: afterItems, adjustments: afterAdjs }
+  );
+  if (diff !== null) {
+    await supabase.from('transaction_edit_history').insert({ transaction_id: txId, diff });
+  }
+
+  return c.json({ ok: true });
+});
+
+// ─── PATCH /pwa/transactions/:id/items/:itemId ───────────────────────────────
+// Feature 026: assign / reassign / clear a single item's category inline (from the
+// import review or the Summary list) without a full-transaction rewrite. Only the
+// item's `tags` change — amount / effective_amount stay put (FR-012). Plain tags are
+// preserved; the single category (`:`-)tag is replaced in place (idempotent re-assign).
+pwaRouter.patch('/transactions/:id/items/:itemId', async (c) => {
+  const txId = c.req.param('id');
+  const itemId = c.req.param('itemId');
+
+  interface Body { category_tag?: string | null }
+  let body: Body;
+  try {
+    body = await c.req.json<Body>();
+  } catch {
+    return c.json({ error: 'INVALID_PAYLOAD', message: 'Invalid JSON' }, 400);
+  }
+  const categoryTag = body.category_tag ?? null;
+  if (categoryTag !== null && (typeof categoryTag !== 'string' || categoryTag.trim() === '')) {
+    return c.json({ error: 'INVALID_CATEGORY_TAG', message: 'category_tag must be a non-empty string or null' }, 400);
+  }
+
+  const supabase = getSupabaseClient(c.env);
+
+  const { data: tx, error: txErr } = await supabase
+    .from('transactions')
+    .select('id, transaction_type, amount, payment_method, tags, note')
+    .eq('id', txId)
+    .single();
+  if (txErr || !tx) return c.json({ error: 'NOT_FOUND', message: 'Transaction not found' }, 404);
+  if (tx.transaction_type !== 'expense') return c.json({ error: 'NOT_EXPENSE', message: 'Only expense transactions can be edited' }, 403);
+
+  const { data: item, error: itemErr } = await supabase
+    .from('transaction_items')
+    .select('id, tags')
+    .eq('id', itemId)
+    .eq('transaction_id', txId)
+    .single();
+  if (itemErr || !item) return c.json({ error: 'NOT_FOUND', message: 'Item not found' }, 404);
+
+  const currentTags = ((item.tags as string[]) ?? []);
+  const newTags = mergeItemCategoryTag(currentTags, categoryTag);
+
+  // Idempotent: same tags → no write, no audit row (data-model invariant 5).
+  if (JSON.stringify(newTags) === JSON.stringify(currentTags)) {
+    return c.json({ ok: true });
+  }
+
+  // Items-only audit diff (header + adjustments unchanged), consistent with PUT.
+  const [beforeItems, beforeAdjs] = await Promise.all([
+    readItemsForDiff(supabase, txId),
+    getAdjustmentsForTransaction(supabase, txId),
+  ]);
+
+  await updateTransactionItemTags(supabase, itemId, newTags);
+
+  const afterItems = await readItemsForDiff(supabase, txId);
+  const adjs = beforeAdjs.map((a) => ({ kind: a.kind, amount: a.amount, note: a.note, basis: a.basis, basis_value: a.basis_value }));
+  const sharedHeader = {
+    amount: tx.amount as number,
+    payment_method: tx.payment_method as string,
+    note: (tx.note as string | null) ?? null,
+    adjustments: adjs,
+  };
+  const diff = computeEditDiff(
+    { ...sharedHeader, tags: (tx.tags as string[]) ?? [], items: beforeItems },
+    { ...sharedHeader, free_tags: (tx.tags as string[]) ?? [], items: afterItems }
   );
   if (diff !== null) {
     await supabase.from('transaction_edit_history').insert({ transaction_id: txId, diff });
@@ -921,10 +1004,10 @@ pwaRouter.get('/import/matched', async (c) => {
   const txs = await getTransactionsByIds(supabase, txIds);
   const txById = new Map(txs.map((tx) => [tx.id, tx]));
   const itemRows = await getTransactionItemsByTransactionIds(supabase, txIds);
-  const itemsByTx = new Map<string, { name: string; amount: number | null; tags: string[] }[]>();
+  const itemsByTx = new Map<string, { id: string; name: string; amount: number | null; tags: string[] }[]>();
   for (const it of itemRows) {
     const arr = itemsByTx.get(it.transaction_id) ?? [];
-    arr.push({ name: it.name, amount: it.amount, tags: it.tags ?? [] });
+    arr.push({ id: it.id, name: it.name, amount: it.amount, tags: it.tags ?? [] });
     itemsByTx.set(it.transaction_id, arr);
   }
 

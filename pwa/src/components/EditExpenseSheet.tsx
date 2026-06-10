@@ -51,6 +51,12 @@ function deriveCategoryTag2(sel: CategorySelection | null): string | null {
   return sel.subcategory ? `${sel.major}:${sel.subcategory}` : sel.major;
 }
 
+function formatDateTime(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function preloadItems(rawItems: TxDetail['items'], categoryTag: string | null): ItemRowData[] {
   return rawItems.map((item) => {
     const itemCatTag = item.tags.find((t) => t.includes(':')) ?? null;
@@ -86,12 +92,14 @@ function newAdjustment(): AdjustmentRowData {
 // ─── Edit form (inner) ────────────────────────────────────────────────────────
 
 function EditExpenseFormInner({ tx, onClose }: { tx: TxDetail; onClose: () => void }) {
-  const categoryTag0 = deriveCategoryTag(tx.items);
+  // B1: category may live on the items (itemized tx) or on the transaction itself
+  // (itemless tx / legacy data). Prefer item-level, fall back to the tx-level :-tag.
+  const categoryTag0 = deriveCategoryTag(tx.items) ?? tx.tags.find((t) => t.includes(':')) ?? null;
 
   const [amount, setAmount] = useState(String(tx.amount));
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(tx.payment_method as PaymentMethod);
   const [category, setCategory] = useState<CategorySelection | null>(parseCategorySelection(categoryTag0));
-  const [freeTags, setFreeTags] = useState<string[]>(tx.tags);
+  const [freeTags, setFreeTags] = useState<string[]>(tx.tags.filter((t) => !t.includes(':')));
   const [note, setNote] = useState(tx.note ?? '');
   const [items, setItems] = useState<ItemRowData[]>(() => preloadItems(tx.items, categoryTag0));
   const [adjustments, setAdjustments] = useState<AdjustmentRowData[]>(() => preloadAdjustments(tx.adjustments));
@@ -199,6 +207,12 @@ function EditExpenseFormInner({ tx, onClose }: { tx: TxDetail; onClose: () => vo
       onSubmit={(e) => { e.preventDefault(); if (canSubmit) mutation.mutate(); }}
       className="flex flex-col gap-4 p-4 overflow-y-auto h-full"
     >
+      {/* Consumption time (read-only for now) */}
+      <div>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">消費時間</label>
+        <p className="text-sm text-gray-600 dark:text-gray-300">{formatDateTime(tx.transaction_at)}</p>
+      </div>
+
       {/* Amount */}
       <div>
         <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">金額 (NTD)</label>
