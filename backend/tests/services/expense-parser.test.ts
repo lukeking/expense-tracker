@@ -51,17 +51,19 @@ describe('parseItems — empty / no description', () => {
     expect(parseItems(null, 120, null)).toEqual({ items: [], warnings: [], error: null });
   });
 
-  it('null description, with sharedCategory → implicit item from subcategory', () => {
+  it('null description, with sharedCategory → implicit item from subcategory (inherits, no tag copy)', () => {
+    // B2: the shared category is stored at tx level by the Discord handler; the
+    // synthesized item inherits it (tags: []).
     expect(parseItems(null, 120, '食:午餐')).toEqual({
-      items: [{ name: '午餐', amount: 120, tags: ['食:午餐'] }],
+      items: [{ name: '午餐', amount: 120, tags: [] }],
       warnings: [],
       error: null,
     });
   });
 
-  it('empty string description, with sharedCategory → implicit item', () => {
+  it('empty string description, with sharedCategory → implicit item (inherits)', () => {
     expect(parseItems('  ', 35, '行:捷運')).toEqual({
-      items: [{ name: '捷運', amount: 35, tags: ['行:捷運'] }],
+      items: [{ name: '捷運', amount: 35, tags: [] }],
       warnings: [],
       error: null,
     });
@@ -85,17 +87,17 @@ describe('parseItems — sole item amount inference', () => {
     });
   });
 
-  it('untagged name amount (sole) → amount explicit, tags from sharedCategory', () => {
+  it('untagged name amount (sole) → amount explicit, inherits the shared category', () => {
     expect(parseItems('便當 120', 120, '食:午餐')).toEqual({
-      items: [{ name: '便當', amount: 120, tags: ['食:午餐'] }],
+      items: [{ name: '便當', amount: 120, tags: [] }],
       warnings: [],
       error: null,
     });
   });
 
-  it('untagged bare name (sole, no amount) → amount inferred, tags from sharedCategory', () => {
+  it('untagged bare name (sole, no amount) → amount inferred, inherits the shared category', () => {
     expect(parseItems('便當', 120, '食:午餐')).toEqual({
-      items: [{ name: '便當', amount: 120, tags: ['食:午餐'] }],
+      items: [{ name: '便當', amount: 120, tags: [] }],
       warnings: [],
       error: null,
     });
@@ -144,11 +146,11 @@ describe('parseItems — null-amount items (multi-item)', () => {
 });
 
 describe('parseItems — untagged items with sharedCategory', () => {
-  it('multiple untagged items inherit sharedCategory', () => {
+  it('multiple untagged items inherit sharedCategory (live, via empty tags)', () => {
     expect(parseItems('大麥克 200,可樂 50', 250, '食:午餐')).toEqual({
       items: [
-        { name: '大麥克', amount: 200, tags: ['食:午餐'] },
-        { name: '可樂', amount: 50, tags: ['食:午餐'] },
+        { name: '大麥克', amount: 200, tags: [] },
+        { name: '可樂', amount: 50, tags: [] },
       ],
       warnings: [],
       error: null,
@@ -166,11 +168,19 @@ describe('parseItems — untagged items with sharedCategory', () => {
     });
   });
 
-  it('mixed: own-tagged item ignores sharedCategory, untagged item inherits it', () => {
+  it('mixed: own-tagged item keeps its override, untagged item inherits', () => {
     const result = parseItems('#飲:飲料 可樂 50,薯條 50', 100, '食:午餐');
     expect(result.items).toEqual([
       { name: '可樂', amount: 50, tags: ['飲:飲料'] },
-      { name: '薯條', amount: 50, tags: ['食:午餐'] },
+      { name: '薯條', amount: 50, tags: [] },
+    ]);
+  });
+
+  it('own-tagged item equal to sharedCategory collapses to inherit (FR-013)', () => {
+    const result = parseItems('#食:午餐 便當 80,飲料 20', 100, '食:午餐');
+    expect(result.items).toEqual([
+      { name: '便當', amount: 80, tags: [] },
+      { name: '飲料', amount: 20, tags: [] },
     ]);
   });
 });

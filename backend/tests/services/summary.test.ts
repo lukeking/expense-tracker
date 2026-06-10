@@ -380,3 +380,81 @@ describe('aggregateByCategory — tx-level category for itemless transactions (B
     expect(aggregateByCategory([tx])).toEqual([{ category: '其他', total: 120 }]);
   });
 });
+
+// ─── Feature 027 (B2): old-shape ↔ normalized-shape equivalence ──────────────
+// The aggregation is deliberately unchanged by B2 — these regressions pin down the
+// property the whole feature rests on: an untagged item falls into the remainder,
+// which buckets under the tx-level tag (live inheritance), and a tagged copy
+// produces the exact same totals (mixed-era safety, FR-008/FR-012).
+
+describe('aggregateByCategory — B2 shape equivalence (FR-008)', () => {
+  const oldShape = {
+    amount: 250,
+    tags: ['食:雜貨', '全家'],
+    transaction_items: [
+      { amount: 200, tags: ['食:雜貨'] },        // write-time copy (pre-B2)
+      { amount: 50, tags: ['樂:遊戲'] },          // genuine override
+    ],
+  };
+  const normalized = {
+    amount: 250,
+    tags: ['食:雜貨', '全家'],
+    transaction_items: [
+      { amount: 200, tags: [] },                  // inherits at read time
+      { amount: 50, tags: ['樂:遊戲'] },
+    ],
+  };
+
+  it('copied shape and normalized shape produce identical category totals', () => {
+    expect(aggregateByCategory([oldShape])).toEqual(aggregateByCategory([normalized]));
+  });
+
+  it('a mixed-era dataset aggregates each tx correctly (FR-012)', () => {
+    const totals = aggregateByCategory([oldShape, normalized]);
+    expect(totals).toEqual([
+      { category: '食', total: 400 },
+      { category: '樂', total: 100 },
+    ]);
+  });
+
+  it('changing the tx category re-buckets inheriting items; overrides and the grand total hold (FR-007/SC-005)', () => {
+    const before = aggregateByCategory([normalized]);
+    const after = aggregateByCategory([{ ...normalized, tags: ['日用:雜貨', '全家'] }]);
+    expect(before).toEqual([{ category: '食', total: 200 }, { category: '樂', total: 50 }]);
+    expect(after).toEqual([{ category: '日用', total: 200 }, { category: '樂', total: 50 }]);
+    const grand = (t: { total: number }[]) => t.reduce((s, e) => s + e.total, 0);
+    expect(grand(after)).toBe(grand(before));
+  });
+
+  it('explicit-uncategorized sentinel buckets to 其他 despite the tx category', () => {
+    const tx = {
+      amount: 100,
+      tags: ['食:雜貨'],
+      transaction_items: [
+        { amount: 60, tags: [] },                 // inherits 食
+        { amount: 40, tags: ['其他:未分類'] },     // deliberate 其他
+      ],
+    };
+    expect(aggregateByCategory([tx])).toEqual([
+      { category: '食', total: 60 },
+      { category: '其他', total: 40 },
+    ]);
+  });
+});
+
+describe('aggregateBySubcategory — sentinel drill-down (B2)', () => {
+  it('the sentinel appears as 未分類 under 其他, distinct from the passive remainder', () => {
+    const tx = {
+      amount: 100,
+      tags: [],
+      transaction_items: [
+        { amount: 40, tags: ['其他:未分類'] },  // deliberate 其他
+        { amount: 60, tags: [] },               // passive (no decision anywhere)
+      ],
+    };
+    expect(aggregateBySubcategory([tx], '其他')).toEqual([
+      { subcategory: '其他', total: 60 },
+      { subcategory: '未分類', total: 40 },
+    ]);
+  });
+});

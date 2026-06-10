@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mergeItemCategoryTag } from '../../src/services/item-category';
+import { mergeItemCategoryTag, EXPLICIT_UNCATEGORIZED } from '../../src/services/item-category';
 
 // Logic-level tests for PATCH /pwa/transactions/:id/items/:itemId. The tag-merge rule
 // is the substantive new logic; the handler glue (404/403, audit-history insert) is
@@ -52,5 +52,44 @@ describe('category_tag validation rule (handler guard)', () => {
     expect(isValid('')).toBe(false);
     expect(isValid('   ')).toBe(false);
     expect(isValid(42)).toBe(false);
+  });
+});
+
+// Feature 027 (B2): PATCH semantics extension — collapse-to-inherit and the
+// explicit-uncategorized sentinel (contracts/internal-api.md).
+describe('PATCH collapse + sentinel (B2)', () => {
+  // Mirrors the handler: a tag equal to the tx's current category is treated as null.
+  const effectiveAssign = (txTags: string[], categoryTag: string | null) => {
+    const txCategoryTag = txTags.find((t) => t.includes(':')) ?? null;
+    return categoryTag !== null && categoryTag === txCategoryTag ? null : categoryTag;
+  };
+
+  it('assigning the tx own category collapses to inherit (stores nothing)', () => {
+    const assign = effectiveAssign(['食:雜貨', '全家'], '食:雜貨');
+    expect(assign).toBeNull();
+    expect(mergeItemCategoryTag(['全家', '樂:遊戲'], assign)).toEqual(['全家']);
+  });
+
+  it('assigning the sentinel stores it verbatim', () => {
+    const assign = effectiveAssign(['食:雜貨'], EXPLICIT_UNCATEGORIZED);
+    expect(assign).toBe(EXPLICIT_UNCATEGORIZED);
+    expect(mergeItemCategoryTag(['全家'], assign)).toEqual(['全家', EXPLICIT_UNCATEGORIZED]);
+  });
+
+  it('inherit (null) clears an override and a sentinel alike', () => {
+    expect(mergeItemCategoryTag(['樂:遊戲'], null)).toEqual([]);
+    expect(mergeItemCategoryTag([EXPLICIT_UNCATEGORIZED], null)).toEqual([]);
+  });
+
+  it('idempotent sentinel re-assign produces deep-equal tags (no history row)', () => {
+    const before = ['全家', EXPLICIT_UNCATEGORIZED];
+    const after = mergeItemCategoryTag(before, effectiveAssign(['食:雜貨'], EXPLICIT_UNCATEGORIZED));
+    expect(JSON.stringify(after)).toBe(JSON.stringify(before));
+  });
+
+  it('collapse on an already-inheriting item is a no-op (no history row)', () => {
+    const before = ['全家'];
+    const after = mergeItemCategoryTag(before, effectiveAssign(['食:雜貨'], '食:雜貨'));
+    expect(JSON.stringify(after)).toBe(JSON.stringify(before));
   });
 });
