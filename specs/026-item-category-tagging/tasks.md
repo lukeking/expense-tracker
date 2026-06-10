@@ -46,7 +46,7 @@ Web app: `backend/src/`, `backend/tests/`, `pwa/src/` (per plan.md Structure Dec
 
 - [x] T002 [US1] Create `pwa/src/components/ItemCategorySheet.tsx`: a `BottomSheet` with (1) a search input that type-ahead filters across `major` and `major:sub`, (2) horizontally-scrollable major filter chips, (3) subcategory chips for the selected major, (4) a 繼承主分類 / 清除 row. Props `{ value: string|null, inheritedTag: string|null, extraTags?: string[], open, onClose, onSelect(tag: string|null) }`. Reuse `useCategories`/`useMajors`/`useSubcategories` and the chips/search idiom from `pwa/src/components/CategoryPicker.tsx`. Include off-catalog `extraTags` containing `:` as selectable options (FR-005).
 - [x] T003 [US1] Refactor `pwa/src/components/ItemRow.tsx` to render `<ItemCategorySheet>` in place of the inline flat sheet: remove the flat `dbOptions`/`allTagOptions` construction (lines ~62-68) and the flat `.map` list (lines ~160-169); pass `value={item.tagOverride}`, `inheritedTag`, `extraTags`, and wire `onSelect` to the existing `selectTag`. Keep the trigger button + display behavior.
-- [ ] T004 [US1] Manual verify per quickstart §2 US1 (Entry + Edit screens): search type-ahead, major filter, subcategory pick, 繼承/清除. Confirm no flat-list remnants remain.
+- [x] T004 [US1] Manual verify per quickstart §2 US1 (Entry + Edit screens): search type-ahead, major filter, subcategory pick, 繼承/清除. Confirm no flat-list remnants remain.
 
 **Checkpoint**: US1 is independently shippable — the item picker is usable in manual entry and editing.
 
@@ -78,7 +78,7 @@ Web app: `backend/src/`, `backend/tests/`, `pwa/src/` (per plan.md Structure Dec
 - [x] T012 [P] [US2] `pwa/src/api/client.ts`: add `assignItemCategory(txId: string, itemId: string, categoryTag: string | null)` issuing `PATCH /pwa/transactions/:id/items/:itemId` with `{ category_tag }`.
 - [x] T013 [US2] `pwa/src/screens/ImportScreen.tsx`: add `id` to the `LinkedInvoice.transaction.items` type; in the 交易品項 list, show the item's `#major:sub` or an `⚠ 未分類` flag via `isItemUncategorized`; on tap open `<ItemCategorySheet>` and call `assignItemCategory`, then update local `linked` state so the flag clears. Depends on T002, T007, T011, T012.
 - [x] T014 [US2] `pwa/src/screens/SummaryScreen.tsx`: in the transaction item line (~lines 95-98), show the item's category or `⚠ 未分類` flag; on tap open `<ItemCategorySheet>` and call `assignItemCategory`, then invalidate the `['summary', …]` and `['transactions', …]` react-query keys so the moved spend re-aggregates. Depends on T002, T011, T012.
-- [ ] T015 [US2] Manual verify per quickstart §2 US2(a) + US2(b): import-review inline assign clears the flag without re-import; Summary inline assign moves spend out of 其他 with the grand total unchanged.
+- [x] T015 [US2] Manual verify per quickstart §2 US2(a) + US2(b): import-review inline assign clears the flag without re-import; Summary inline assign moves spend out of 其他 with the grand total unchanged.
 
 **Checkpoint**: US2 complete — uncategorized invoice/legacy items are visible, flagged, and fixable inline from both surfaces.
 
@@ -120,5 +120,5 @@ US2's UI surfaces (T013, T014) reuse US1's `ItemCategorySheet` (T002). US2's bac
 Implemented and statically verified: 301 backend tests pass, PWA `tsc -b && vite build` clean, backend lint 0 errors.
 
 Open items:
-- **T004, T015** — interactive PWA walkthroughs (need a running app + API key + real data); not runnable in the implementation environment. Pending manual verification via quickstart.md §2.
+- **T004, T015** — ✅ manually verified 2026-06-10 via quickstart.md §2 walkthroughs. Verification surfaced one bug, fixed same day: the PWA CORS allow-list lacked `PATCH`, so the browser blocked the item-assign request after preflight (`backend/src/handlers/pwa.ts`).
 - **T008** — the no-DB-harness test convention (DB-call query fns aren't unit-tested in this repo) means the substantive new logic — the tag-merge rule — is covered by `tests/handlers/pwa-item-category.test.ts` (T009) instead of literal `queries.test.ts` assertions. The `id`-select change is exercised by the PWA typecheck against the `/import/matched` consumer.

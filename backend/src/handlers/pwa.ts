@@ -73,7 +73,7 @@ pwaRouter.use('/*', async (c, next) => {
       status: 204,
       headers: {
         'Access-Control-Allow-Origin': c.env.PWA_ORIGIN,
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, OPTIONS',
         'Access-Control-Allow-Headers': 'Authorization, Content-Type',
         'Access-Control-Max-Age': '86400',
       },
