@@ -83,7 +83,7 @@ Luke's existing transactions — years of imported and manually entered data whe
 
 - **FR-001**: The system MUST treat the transaction-level category as the single authoritative default for the transaction and all of its items.
 - **FR-002**: An item MUST derive its effective category at read time: its own explicit override if present, otherwise the transaction's category, otherwise uncategorized (其他).
-- **FR-003**: Every path that records or edits a transaction or its items (manual entry, transaction edit, invoice import auto-fill, per-item category assignment) MUST stop writing the transaction's default category onto inheriting items.
+- **FR-003**: Every path that records or edits a transaction or its items (manual entry, transaction edit, invoice import auto-fill, per-item category assignment, automated ingest) MUST stop writing the transaction's default category onto inheriting items. Automated ingest paths whose parsed category arrives only on items apply the same unanimous-promotion rule as normalization (FR-009) at write time.
 - **FR-004**: An item MUST be able to carry an explicit category override that differs from the transaction's default, and that override MUST be unaffected by later changes to the transaction's category.
 - **FR-005**: The system MUST provide a persistent representation of "explicitly uncategorized" for an item that is distinct from "inheriting"; an item in that state MUST be bucketed under 其他 regardless of the transaction's category.
 - **FR-006**: Users MUST be able to remove an item's override, returning it to live inheritance of the transaction's category.
@@ -109,7 +109,7 @@ Luke's existing transactions — years of imported and manually entered data whe
 
 - **SC-001**: Re-categorizing a whole transaction takes exactly one user action regardless of item count (today: 1 + one per item), and the result is reflected in the summary immediately.
 - **SC-002**: After normalization, 100% of historical periods show per-category totals and grand totals identical to their pre-normalization values.
-- **SC-003**: After normalization and under the new write paths, zero items store a category identical to their transaction's default; every stored item category represents a user decision to differ (or the explicit-uncategorized state).
+- **SC-003**: After normalization and under the new write paths, zero items store a category identical to their transaction's default (excluding guard-skipped transactions explicitly listed in the migration report); every stored item category represents a user decision to differ (or the explicit-uncategorized state).
 - **SC-004**: 100% of pre-existing intentional overrides (item category ≠ transaction category) survive normalization unchanged.
 - **SC-005**: Changing a transaction's category never changes the period grand total, only its distribution across categories.
 

@@ -11,7 +11,7 @@ No schema changes. This feature redefines the **content conventions** of two exi
 | `其他:未分類` (sentinel, **not** in catalog) | Explicit-uncategorized override — item-only | — |
 | plain (no `:`) | Free tag (vendor, cross-cut) | `全家`, `訂閱` |
 
-Category detection stays position-independent: `tags.find(t => t.includes(':'))`. Writes keep the B1 convention of category-first at tx level (`[category_tag, ...free_tags]`) for legacy display fallbacks; nothing may *read* by position except the existing `tags[0]` display fallback, which remains tolerated for un-migrated data.
+Category detection stays position-independent: `tags.find(t => t.includes(':'))`. Writes keep the B1 convention of category-first at tx level (`[category_tag, ...free_tags]`). The existing `tags[0]` reads (`ParentSearch.tsx:74,125`, `EntryScreen.tsx:369`) are **transaction-label fallbacks** (`note ?? item_names[0] ?? tags[0]`), not category derivation — they are out of FR-011's scope and need no change.
 
 ## Transaction (`transactions.tags`)
 
