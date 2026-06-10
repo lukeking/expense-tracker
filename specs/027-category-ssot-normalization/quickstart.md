@@ -51,7 +51,7 @@ Dry-run report must show: per-period per-category totals **identical** before/af
 Replaces the single `✕ 繼承主分類（…）/清除分類` row in `ItemCategorySheet`.
 
 **Rendered mockup** (pixel-accurate; built from the component's exact Tailwind values):
-[`mockups/fr-014-picker.png`](mockups/fr-014-picker.png) · source [`mockups/fr-014-picker.html`](mockups/fr-014-picker.html)
+![`mockups/fr-014-picker.png`](mockups/fr-014-picker.png) · source [`mockups/fr-014-picker.html`](mockups/fr-014-picker.html)
 
 Four states — **A** inherit active (tx = `食:雜貨`), **B** 設為「其他」 active (sentinel stored), **C** tx without category (inherit row reads `不分類（跟隨主分類）`, same `null` semantics), **D** dark mode.
 
