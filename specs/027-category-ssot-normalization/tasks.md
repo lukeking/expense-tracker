@@ -48,8 +48,8 @@
 
 ### Frontend — effective-category display
 
-- [ ] T009 [P] [US1] `pwa/src/components/ItemRow.tsx` + `pwa/src/screens/EntryScreen.tsx`: item category chip renders from `effectiveItemCategory(item, tx)` — explicit override shown as today; inherited value shown de-emphasized (muted/outline, per the approved mockup's visual language); `none` keeps current placeholder. Depends on T003.
-- [ ] T010 [P] [US1] `pwa/src/screens/SummaryScreen.tsx` (~L59, L70): the transaction-item line shows the effective category via `effectiveItemCategory`; an inherited category renders de-emphasized; sentinel renders as `其他`. Depends on T003.
+- [x] T009 [P] [US1] `pwa/src/components/ItemRow.tsx` + `pwa/src/screens/EntryScreen.tsx`: item category chip renders from `effectiveItemCategory(item, tx)` — explicit override shown as today; inherited value shown de-emphasized (muted/outline, per the approved mockup's visual language); `none` keeps current placeholder. Depends on T003.
+- [x] T010 [P] [US1] `pwa/src/screens/SummaryScreen.tsx` (~L59, L70): the transaction-item line shows the effective category via `effectiveItemCategory`; an inherited category renders de-emphasized; sentinel renders as `其他`. Depends on T003.
 
 ### Tests (constitution-required)
 
@@ -70,10 +70,10 @@
 
 - [x] T015 [US2] `backend/src/handlers/pwa.ts` PATCH `/pwa/transactions/:id/items/:itemId` (~L575-599): per contracts/internal-api.md — incoming `category_tag` equal to the tx's current category is treated as `null` (collapse → inherit); the sentinel passes validation and is stored verbatim; edit-history row only on effective change (026 idempotency preserved). Depends on T001.
 - [x] T016 [US2] `backend/tests/handlers/pwa-item-category.test.ts`: extend — assign sentinel (stored verbatim, buckets to 其他); assign tag equal to tx category → item stored with no `:`-tag; inherit (`null`) clears an override and a sentinel alike; idempotent sentinel re-assign writes no history row. Add a drill-down assertion in `backend/tests/services/summary.test.ts`: sentinel item appears under 其他 → subcategory `未分類` (runs after T011 to avoid same-file conflict).
-- [ ] T017 [US2] `pwa/src/components/ItemCategorySheet.tsx`: implement the **approved mockup** (`mockups/fr-014-picker.png`) — replace the single ✕ row with `↩ 繼承主分類（{inheritedTag}）` → `onSelect(null)` (reads `不分類（跟隨主分類）` when the tx has no category) and `⊘ 設為「其他」（不歸入任何分類）` → `onSelect(EXPLICIT_UNCATEGORIZED)`; highlight inherit when `value === null`, 其他 row when `value === EXPLICIT_UNCATEGORIZED`; exclude the sentinel from search results and `extraTags` chips. Depends on T003.
-- [ ] T018 [US2] `pwa/src/components/ItemRow.tsx` + `pwa/src/screens/EntryScreen.tsx`: `tagOverride` may hold the sentinel; chip displays it as `其他`; `selectTag` passes `null`/sentinel/tag through unchanged to the POST/PUT payload (`items[].tag`). Depends on T017.
-- [ ] T019 [P] [US2] `pwa/src/screens/ImportScreen.tsx` (~L275, L436): local-state merge handles `null` (drop `:`-tag) and sentinel (replace `:`-tag) identically to `mergeItemCategoryTag`; ⚠ flag uses the updated `isItemUncategorized` (sentinel = categorized). Depends on T017.
-- [ ] T020 [P] [US2] `pwa/src/screens/SummaryScreen.tsx`: assign flow passes `null`/sentinel through `assignItemCategory`; sentinel item shows `其他` chip, never the ⚠ flag; react-query invalidations unchanged. Depends on T017.
+- [x] T017 [US2] `pwa/src/components/ItemCategorySheet.tsx`: implement the **approved mockup** (`mockups/fr-014-picker.png`) — replace the single ✕ row with `↩ 繼承主分類（{inheritedTag}）` → `onSelect(null)` (reads `不分類（跟隨主分類）` when the tx has no category) and `⊘ 設為「其他」（不歸入任何分類）` → `onSelect(EXPLICIT_UNCATEGORIZED)`; highlight inherit when `value === null`, 其他 row when `value === EXPLICIT_UNCATEGORIZED`; exclude the sentinel from search results and `extraTags` chips. Depends on T003.
+- [x] T018 [US2] `pwa/src/components/ItemRow.tsx` + `pwa/src/screens/EntryScreen.tsx`: `tagOverride` may hold the sentinel; chip displays it as `其他`; `selectTag` passes `null`/sentinel/tag through unchanged to the POST/PUT payload (`items[].tag`). Depends on T017.
+- [x] T019 [P] [US2] `pwa/src/screens/ImportScreen.tsx` (~L275, L436): local-state merge handles `null` (drop `:`-tag) and sentinel (replace `:`-tag) identically to `mergeItemCategoryTag`; ⚠ flag uses the updated `isItemUncategorized` (sentinel = categorized). Depends on T017.
+- [x] T020 [P] [US2] `pwa/src/screens/SummaryScreen.tsx`: assign flow passes `null`/sentinel through `assignItemCategory`; sentinel item shows `其他` chip, never the ⚠ flag; react-query invalidations unchanged. Depends on T017.
 - [ ] T021 [US2] Manual verify per quickstart.md §2 US2 on all four surfaces (Entry, Edit, import review, Summary list).
 
 **Checkpoint**: US2 complete — three states selectable, reversible, and correctly bucketed everywhere.
@@ -88,7 +88,7 @@
 
 - [x] T022 [US3] `backend/src/services/item-category.ts`: add pure `planTransactionNormalization(tx: { tags: string[]; items: { tags: string[] }[] })` returning the proposed tx/item tag changes (or `null` if no-op) — strip-copies when tx categorized; unanimous-promotion when not; sentinel/plain/mixed untouched (data-model.md migration transform, steps 1–2). Depends on T001.
 - [x] T023 [P] [US3] `backend/tests/services/item-category.test.ts`: extend — copied-shape strip, unanimous promotion, mixed-category no-op, sentinel untouched, idempotence (planning a normalized tx → `null`); guard scenario: item amounts exceeding `tx.amount` produce a before/after `aggregateByCategory` mismatch that the script must treat as SKIP.
-- [ ] T024 [US3] Create `backend/scripts/normalize-category-ssot.ts` (pattern: `scripts/migrate-legacy.ts`; env-loaded Supabase creds, never printed): dry-run by default, `--apply` to write; per tx applies `planTransactionNormalization`, verifies bucket equivalence with `aggregateByCategory` (skip + log on mismatch — the total-preserving guard); **no** `transaction_edit_history` rows; final report = per-period per-category totals before/after + promoted/collapsed/skipped counts; idempotent. Depends on T022.
+- [x] T024 [US3] Create `backend/scripts/normalize-category-ssot.ts` (pattern: `scripts/migrate-legacy.ts`; env-loaded Supabase creds, never printed): dry-run by default, `--apply` to write; per tx applies `planTransactionNormalization`, verifies bucket equivalence with `aggregateByCategory` (skip + log on mismatch — the total-preserving guard); **no** `transaction_edit_history` rows; final report = per-period per-category totals before/after + promoted/collapsed/skipped counts; idempotent. Depends on T022.
 - [ ] T025 [US3] Run against the live DB after US1/US2 are merged & deployed: dry-run → review report → `--apply` → save the verification output as `specs/027-category-ssot-normalization/migration-report.md` (FR-010 evidence). Manual; depends on T024 + deployment.
 
 **Checkpoint**: All historical data normalized; totals provably unchanged; old shape no longer produced anywhere.
@@ -97,8 +97,8 @@
 
 ## Phase 6: Polish & Cross-Cutting
 
-- [ ] T026 [P] `pwa/src/components/EditExpenseSheet.tsx`: confirm the dual-source category read (~L97 `deriveCategoryTag(items) ?? tx tag`) and free-tag filtering still behave for all three item states and for guard-skipped legacy data (FR-012); refresh stale comments only — no behavioral change expected.
-- [ ] T027 Full gates green: `cd backend && pnpm run typecheck && pnpm run lint && pnpm run test` (0 lint errors) and `cd pwa && pnpm run typecheck`; review that SC-001–SC-005 are each evidenced by a test or the migration report.
+- [x] T026 [P] `pwa/src/components/EditExpenseSheet.tsx`: confirm the dual-source category read (~L97 `deriveCategoryTag(items) ?? tx tag`) and free-tag filtering still behave for all three item states and for guard-skipped legacy data (FR-012); refresh stale comments only — no behavioral change expected.
+- [x] T027 Full gates green: `cd backend && pnpm run typecheck && pnpm run lint && pnpm run test` (0 lint errors) and `cd pwa && pnpm run typecheck`; review that SC-001–SC-005 are each evidenced by a test or the migration report.
 
 ---
 
@@ -122,3 +122,11 @@
 **Increment 2 = US2** (T015–T021): the three-state picker per the approved mockup.
 **Increment 3 = US3** (T022–T025): migration after deploy — the only step with a hard external gate.
 **Total**: 27 tasks (US1: 11 · US2: 7 · US3: 4 · foundation: 3 · polish: 2).
+
+## Implementation Status (2026-06-10)
+
+Implemented and statically verified: backend typecheck + lint (0 errors) + 365 tests pass; PWA `tsc -b` + `vite build` clean. Both UI mockups (picker FR-014, display states) approved before coding.
+
+Open items:
+- **T014, T021** — interactive PWA walkthroughs per quickstart.md §2 (need running app + data).
+- **T025** — live `--apply` run, gated on merge + deploy. The **dry-run already executed** against the live DB (read-only): 15,299 txs · 15,211 to update (15,209 promotions — the legacy inverse shape dominates, as designed for) · 3 guard-skipped · 124 periods verified, **zero drift**. Re-run dry-run after deploy, then `--apply`, then save the output as `migration-report.md`.
