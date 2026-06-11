@@ -63,6 +63,21 @@ All three skips are the known pathology from research.md D3: item amounts exceed
 | `e719c5e0-be4c-43f7-a07f-d4a1a1be6d7f` | 2026-06-08 |
 | `dce7ab7d-b563-4c0c-bba5-3046a9b446bc` | 2026-06-10 |
 
+### Postscript — skips resolved (2026-06-11, same day)
+
+All three were B1-era Discord entries: a category tag on a synthesized nameless, null-amount item, which aggregation ignores — so they bucketed under 其他 despite the recorded category. Luke re-saved each via the PWA edit sheet (no manual changes needed — the sheet's dual-source read derives the category from the item and the normalized PUT promotes it to tx level). This deliberately moved NT$602 from 其他 to 食. A subsequent dry-run reports:
+
+```
+transactions:        15302
+already normalized:  15302
+to update:           0
+guard-skipped:       0
+periods verified:    124
+total drift:         NONE — per-period totals identical ✓
+```
+
+**The full history — 15,302 of 15,302 transactions — is normalized.**
+
 ## Verdict
 
 - **FR-010 / SC-003:** totals provably unchanged — zero drift across 124 periods, guard exception limited to the 3 listed transactions. ✓
