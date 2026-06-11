@@ -375,3 +375,19 @@ describe('formatReminderMessage', () => {
   });
 });
 
+
+// Feature 027 (B2): the shared category from the tags option is stored on the
+// transaction (prepended, legacy tags[0] convention); items inherit it instead of
+// carrying copies (see expense-parser.test.ts for the item-side rules).
+describe('/expense tx tag composition (B2)', () => {
+  const compose = (sharedCategory: string | null, plainTags: string[]) =>
+    sharedCategory ? [sharedCategory, ...plainTags] : plainTags;
+
+  it('prepends the shared category before plain tags at tx level', () => {
+    expect(compose('食:午餐', ['麥當勞'])).toEqual(['食:午餐', '麥當勞']);
+  });
+
+  it('keeps plain tags only when no category was given', () => {
+    expect(compose(null, ['麥當勞'])).toEqual(['麥當勞']);
+  });
+});

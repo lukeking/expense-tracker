@@ -39,7 +39,7 @@ import { getBudgetProgress } from '../services/budget';
 import { runImportPipeline, computeConfidence, applyInvoiceItems, selectExactDiscountCandidates, selectForexCandidates } from '../services/invoice-matcher';
 import { decodeCSVBuffer, parseCSVRows, groupInvoices, RowLimitError } from '../services/csv-parser';
 import { aggregateByCategory, aggregateBySubcategory } from '../services/summary';
-import { mergeItemCategoryTag } from '../services/item-category';
+import { mergeItemCategoryTag, itemWriteTags } from '../services/item-category';
 
 interface PwaEnv { Bindings: Env }
 
@@ -171,9 +171,10 @@ pwaRouter.post('/expense', async (c) => {
   const tx = await insertTransaction(supabase, {
     amount,
     payment_method: payment_method as PaymentMethod,
-    // B1: store the chosen category at tx-level too, so a transaction with no items
-    // still carries its category (items keep their own copy for per-item granularity).
-    // Category goes first (tags[0]), matching the legacy convention; plain tags follow.
+    // B2: the tx-level category is the single source of truth (category first per the
+    // legacy tags[0] write convention; plain tags follow). Items below store a tag
+    // only as a deliberate override — inheriting items stay untagged and follow the
+    // tx live via the summary's remainder logic.
     tags: category_tag != null ? [category_tag, ...free_tags] : free_tags,
     note: note ?? null,
     transaction_type: 'expense',
@@ -187,7 +188,7 @@ pwaRouter.post('/expense', async (c) => {
       items.map((item, i) => ({
         name: item.name,
         amount: item.amount ?? null,
-        tags: item.tag != null ? [item.tag] : category_tag != null ? [category_tag] : [],
+        tags: itemWriteTags(category_tag ?? null, item.tag ?? null),
         sort_order: i,
         note: item.note?.trim() || null,
       }))
@@ -501,9 +502,9 @@ pwaRouter.put('/transactions/:id', async (c) => {
     getAdjustmentsForTransaction(supabase, txId),
   ]);
 
-  // B1: keep the category at tx-level (alongside plain tags) so itemless transactions
-  // retain it; with items, the summary's remainder logic dedupes (no double-count).
-  // Category first (tags[0]) per the legacy convention; plain tags follow.
+  // B2: the tx-level category is the single source of truth (category first per the
+  // legacy tags[0] write convention; plain tags follow). Items keep a tag only as a
+  // deliberate override; inheriting items follow the tx live at read time.
   const txTags = category_tag != null ? [category_tag, ...free_tags] : free_tags;
   const { error: updateErr } = await supabase
     .from('transactions')
@@ -517,7 +518,7 @@ pwaRouter.put('/transactions/:id', async (c) => {
   const afterItems: HistoryItem[] = items.map((item) => ({
     name: item.name,
     amount: item.amount ?? null,
-    tags: item.tag != null ? [item.tag] : category_tag != null ? [category_tag] : [],
+    tags: itemWriteTags(category_tag ?? null, item.tag ?? null),
     note: item.note?.trim() || null,
   }));
 
@@ -561,6 +562,9 @@ pwaRouter.put('/transactions/:id', async (c) => {
 // import review or the Summary list) without a full-transaction rewrite. Only the
 // item's `tags` change — amount / effective_amount stay put (FR-012). Plain tags are
 // preserved; the single category (`:`-)tag is replaced in place (idempotent re-assign).
+// Feature 027 (B2): `null` = inherit the tx category (live); a tag equal to the tx's
+// current category collapses to inherit (FR-013); the EXPLICIT_UNCATEGORIZED sentinel
+// is stored verbatim (deliberate 其他).
 pwaRouter.patch('/transactions/:id/items/:itemId', async (c) => {
   const txId = c.req.param('id');
   const itemId = c.req.param('itemId');
@@ -596,7 +600,10 @@ pwaRouter.patch('/transactions/:id/items/:itemId', async (c) => {
   if (itemErr || !item) return c.json({ error: 'NOT_FOUND', message: 'Item not found' }, 404);
 
   const currentTags = ((item.tags as string[]) ?? []);
-  const newTags = mergeItemCategoryTag(currentTags, categoryTag);
+  // B2 (FR-013): picking the tx's own category means "follow the transaction" — collapse to inherit.
+  const txCategoryTag = ((tx.tags as string[]) ?? []).find((t) => t.includes(':')) ?? null;
+  const effectiveAssign = categoryTag !== null && categoryTag === txCategoryTag ? null : categoryTag;
+  const newTags = mergeItemCategoryTag(currentTags, effectiveAssign);
 
   // Idempotent: same tags → no write, no audit row (data-model invariant 5).
   if (JSON.stringify(newTags) === JSON.stringify(currentTags)) {
@@ -762,7 +769,9 @@ pwaRouter.post('/refund', async (c) => {
     await updateParentTransactionId(supabase, tx.id, parent_transaction_id);
   }
 
-  await insertTransactionItems(supabase, tx.id, [{ name: description || `退款`, amount, tags: parentCategoryTag ? [parentCategoryTag] : [] }]);
+  // B2: the refund tx carries the parent-category snapshot at tx level (above); its
+  // item inherits from its own transaction rather than storing a redundant copy.
+  await insertTransactionItems(supabase, tx.id, [{ name: description || `退款`, amount, tags: [] }]);
 
   return c.json({ id: tx.id, amount: tx.amount, transaction_at: tx.transaction_at }, 201);
 });
@@ -1219,14 +1228,14 @@ pwaRouter.post('/import/manual-link', async (c) => {
     }
     inv = data as Invoice;
   } else {
-    if (!invoice!.invoice_number || !import_run_id) {
+    if (!invoice?.invoice_number || !import_run_id) {
       return c.json({ error: 'INVALID_PAYLOAD', message: 'invoice.invoice_number and import_run_id are required' }, 400);
     }
-    const existing = await findExistingInvoiceNumbers(supabase, [invoice!.invoice_number]);
+    const existing = await findExistingInvoiceNumbers(supabase, [invoice.invoice_number]);
     if (existing.length > 0) {
       return c.json({ error: 'ALREADY_IMPORTED', message: 'Invoice already imported' }, 409);
     }
-    const parsed: ParsedInvoice = { ...invoice!, invoice_date: new Date(invoice!.invoice_date) };
+    const parsed: ParsedInvoice = { ...invoice, invoice_date: new Date(invoice.invoice_date) };
     // Persist in a valid transient state, flipped to `matched` last (ordered writes).
     // `ambiguous` is allowed by the match_status CHECK constraint and, on a mid-request
     // failure, lands the row in 待手動確認 (recoverable). Migration 023 also aligns the

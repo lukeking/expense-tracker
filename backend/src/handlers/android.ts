@@ -5,6 +5,7 @@ import { insertTransaction, insertTransactionItems, findExistingTransaction, mer
 import { getBudgetProgress } from '../services/budget';
 import { sendTransactionNotification } from '../services/discord-notify';
 import { parseRawExpenseText } from '../services/gemini';
+import { normalizeItemTagsOnWrite, promoteUnanimousCategory } from '../services/item-category';
 
 interface NotificationPayload {
   amount: number;
@@ -165,9 +166,21 @@ export async function androidInputHandler(c: Context<{ Bindings: Env }>) {
     return c.json({ success: false, message: 'Duplicate detected — already recorded' }, 409);
   }
 
+  // B2: normalize Gemini-parsed tags — item copies of the tx category collapse to
+  // inheritance; a category that arrives only on items (and unanimously) is promoted
+  // to tx level (FR-003).
+  const txCategoryTag = parsed.tags.find((t) => t.includes(':')) ?? null;
+  let txTags = parsed.tags;
+  let itemTagsList = parsed.items.map((i) => i.tags ?? []);
+  if (txCategoryTag !== null) {
+    itemTagsList = itemTagsList.map((tags) => normalizeItemTagsOnWrite(txCategoryTag, tags));
+  } else {
+    ({ txTags, itemTagsList } = promoteUnanimousCategory(txTags, itemTagsList));
+  }
+
   const transaction = await insertTransaction(supabase, {
     amount: parsed.amount,
-    tags: parsed.tags,
+    tags: txTags,
     payment_method: parsed.payment_method,
     wallet,
     note: parseText,
@@ -179,7 +192,7 @@ export async function androidInputHandler(c: Context<{ Bindings: Env }>) {
   await insertTransactionItems(supabase, transaction.id, parsed.items.map((i, idx) => ({
     name: i.name,
     amount: i.amount ?? null,
-    tags: i.tags ?? [],
+    tags: itemTagsList[idx],
     sort_order: idx,
   })));
 

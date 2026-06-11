@@ -10,7 +10,7 @@ import { EditExpenseSheet } from '../components/EditExpenseSheet';
 import { useQueryClient } from '@tanstack/react-query';
 import { ItemCategorySheet } from '../components/ItemCategorySheet';
 import { assignItemCategory } from '../api/client';
-import { isItemUncategorized, itemCategoryTag } from '../lib/itemCategory';
+import { itemCategoryTag, effectiveItemCategory } from '../lib/itemCategory';
 
 const COLOURS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
 
@@ -117,14 +117,19 @@ function TxEntry({ tx, parentMap, onEdit }: { tx: TxRecord; parentMap: Map<strin
         <div className="mt-1 space-y-0.5 pl-2">
           {tx.items.map((item) => {
             const cat = itemCategoryTag(item);
-            const uncategorized = canCategorize && isItemUncategorized(item, tx);
+            // B2 (FR-011): show the effective category — blue = own decision
+            // (override / sentinel-as-其他), pale gray = inherited live from the tx,
+            // amber ⚠ = no decision anywhere.
+            const eff = effectiveItemCategory(item, tx);
             const inner = (
               <>
                 <span className="text-gray-400 dark:text-gray-500">
                   {item.name}
-                  {cat ? (
-                    <span className="text-blue-500 dark:text-blue-400"> #{cat}</span>
-                  ) : uncategorized ? (
+                  {eff.source === 'override' || eff.source === 'explicit-uncategorized' ? (
+                    <span className="text-blue-500 dark:text-blue-400"> #{eff.tag}</span>
+                  ) : eff.source === 'inherited' ? (
+                    <span className="text-gray-300 dark:text-gray-600"> #{eff.tag}</span>
+                  ) : canCategorize ? (
                     <span className="text-amber-600 dark:text-amber-400"> ⚠ 未分類</span>
                   ) : null}
                 </span>

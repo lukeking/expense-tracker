@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { PaymentMethod, MobileWallet } from '../../src/types';
+import { normalizeItemTagsOnWrite, promoteUnanimousCategory } from '../../src/services/item-category';
 
 describe('Android notification ingestion endpoint', () => {
   const validPaymentMethods = ['credit_card', 'prepaid_wallet', 'easy_card', 'bank_account', 'cash'];
@@ -272,5 +273,40 @@ describe('GET /android/transactions/recent — candidate shape', () => {
     ] as { transaction_type: PaymentMethod | 'expense' | 'fee' | 'refund' }[];
     const candidates = rows.filter((r) => r.transaction_type === 'expense');
     expect(candidates).toHaveLength(1);
+  });
+});
+
+// Feature 027 (B2): Gemini-parsed tags are normalized server-side — item copies of
+// the tx category collapse to inheritance; a category arriving only on items (and
+// unanimously) is promoted to tx level (FR-003). Mirrors the handler's pre-insert block.
+describe('ingest tag normalization (B2)', () => {
+  const normalize = (parsed: { tags: string[]; items: { tags: string[] }[] }) => {
+    const txCategoryTag = parsed.tags.find((t) => t.includes(':')) ?? null;
+    let txTags = parsed.tags;
+    let itemTagsList = parsed.items.map((i) => i.tags ?? []);
+    if (txCategoryTag !== null) {
+      itemTagsList = itemTagsList.map((tags) => normalizeItemTagsOnWrite(txCategoryTag, tags));
+    } else {
+      ({ txTags, itemTagsList } = promoteUnanimousCategory(txTags, itemTagsList));
+    }
+    return { txTags, itemTagsList };
+  };
+
+  it('collapses item copies of the tx category to inheritance', () => {
+    const r = normalize({ tags: ['食:午餐', '星巴克'], items: [{ tags: ['食:午餐'] }, { tags: ['飲:咖啡'] }] });
+    expect(r.txTags).toEqual(['食:午餐', '星巴克']);
+    expect(r.itemTagsList).toEqual([[], ['飲:咖啡']]);
+  });
+
+  it('promotes a unanimous item-only category to tx level', () => {
+    const r = normalize({ tags: ['星巴克'], items: [{ tags: ['飲:咖啡'] }, { tags: ['飲:咖啡'] }] });
+    expect(r.txTags).toEqual(['飲:咖啡', '星巴克']);
+    expect(r.itemTagsList).toEqual([[], []]);
+  });
+
+  it('leaves mixed item categories as overrides (no promotion)', () => {
+    const r = normalize({ tags: [], items: [{ tags: ['飲:咖啡'] }, { tags: ['食:午餐'] }] });
+    expect(r.txTags).toEqual([]);
+    expect(r.itemTagsList).toEqual([['飲:咖啡'], ['食:午餐']]);
   });
 });

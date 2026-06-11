@@ -68,8 +68,10 @@ export function parseItems(
     if (sharedCategory !== null) {
       const subcategory = sharedCategory.split(':')[1] ?? '';
       if (subcategory.trim().length > 0) {
+        // B2: the category lives on the transaction; the synthesized item keeps the
+        // subcategory-derived name but inherits (no tag copy).
         return {
-          items: [{ name: subcategory, amount: totalAmount, tags: [sharedCategory] }],
+          items: [{ name: subcategory, amount: totalAmount, tags: [] }],
           warnings: [],
           error: null,
         };
@@ -99,18 +101,19 @@ export function parseItems(
       if (rest.length === 0) {
         hasBareTag = true;
         const subcategory = tagBody.split(':')[1] ?? '';
-        items.push({ name: subcategory || tagBody, amount: undefined, tags: [tagBody] });
+        // B2: an item tag equal to the shared (tx-level) category collapses to inherit.
+        items.push({ name: subcategory || tagBody, amount: undefined, tags: tagBody === sharedCategory ? [] : [tagBody] });
       } else {
         const parsed = parseTaggedItemRest(rest);
-        items.push({ name: parsed.name, amount: parsed.amount, tags: [tagBody] });
+        items.push({ name: parsed.name, amount: parsed.amount, tags: tagBody === sharedCategory ? [] : [tagBody] });
       }
     } else {
       const lineItem = parseLineItem(token);
-      const itemTags = sharedCategory ? [sharedCategory] : [];
+      // B2: untagged items inherit the tx-level category — no copy stored.
       if (lineItem !== null) {
-        items.push({ name: lineItem.name, amount: lineItem.amount, tags: itemTags });
+        items.push({ name: lineItem.name, amount: lineItem.amount, tags: [] });
       } else {
-        items.push({ name: token, amount: undefined, tags: itemTags });
+        items.push({ name: token, amount: undefined, tags: [] });
       }
     }
   }

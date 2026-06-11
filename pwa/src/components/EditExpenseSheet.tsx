@@ -6,6 +6,7 @@ import type { CategorySelection } from './CategoryPicker';
 import { TagInput } from './TagInput';
 import { ItemRow } from './ItemRow';
 import type { ItemRowData } from './ItemRow';
+import { EXPLICIT_UNCATEGORIZED } from '../lib/itemCategory';
 import { AdjustmentRow, KIND_LABELS, resolveAdjAmount } from './AdjustmentRow';
 import type { AdjustmentRowData, AdjustmentKind } from './AdjustmentRow';
 import { PaymentPills } from './PaymentPills';
@@ -33,7 +34,9 @@ type TxDetail = {
 
 function deriveCategoryTag(items: TxDetail['items']): string | null {
   for (const item of items) {
-    const cat = item.tags.find((t) => t.includes(':'));
+    // The explicit-uncategorized sentinel is an item-only override — it must never
+    // surface (or be saved) as the transaction's category.
+    const cat = item.tags.find((t) => t.includes(':') && t !== EXPLICIT_UNCATEGORIZED);
     if (cat) return cat;
   }
   return null;
@@ -92,9 +95,10 @@ function newAdjustment(): AdjustmentRowData {
 // ─── Edit form (inner) ────────────────────────────────────────────────────────
 
 function EditExpenseFormInner({ tx, onClose }: { tx: TxDetail; onClose: () => void }) {
-  // B1: category may live on the items (itemized tx) or on the transaction itself
-  // (itemless tx / legacy data). Prefer item-level, fall back to the tx-level :-tag.
-  const categoryTag0 = deriveCategoryTag(tx.items) ?? tx.tags.find((t) => t.includes(':')) ?? null;
+  // B2: the tx-level :-tag is the authoritative category; item :-tags are overrides.
+  // Fall back to item-level only for un-migrated legacy data whose category still
+  // lives on the items (FR-012 mixed-shape reads).
+  const categoryTag0 = tx.tags.find((t) => t.includes(':')) ?? deriveCategoryTag(tx.items) ?? null;
 
   const [amount, setAmount] = useState(String(tx.amount));
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(tx.payment_method as PaymentMethod);

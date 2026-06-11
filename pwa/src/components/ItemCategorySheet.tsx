@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import { BottomSheet } from './BottomSheet';
 import { useCategories, useMajors, useSubcategories } from '../hooks/useCategories';
+import { EXPLICIT_UNCATEGORIZED } from '../lib/itemCategory';
 
 interface Props {
   open: boolean;
   onClose: () => void;
-  value: string | null;          // current item category tag, or null (inherit)
+  value: string | null;          // current item category tag (may be the sentinel), or null (inherit)
   inheritedTag: string | null;   // the transaction's category, shown on the inherit option
   extraTags?: string[];          // off-catalog category tags already present (FR-005)
-  onSelect: (tag: string | null) => void; // null = inherit / clear
+  onSelect: (tag: string | null) => void; // null = inherit; EXPLICIT_UNCATEGORIZED = deliberate 其他
 }
 
 // Feature 026 (US1): a searchable + major-filterable category picker for a single item.
@@ -26,7 +27,8 @@ export function ItemCategorySheet({ open, onClose, value, inheritedTag, extraTag
   const allOptions = [
     ...majors,
     ...((categories ?? []).filter((c) => c.subcategory !== null).map((c) => `${c.major}:${c.subcategory}`)),
-    ...extraTags.filter((t) => t.includes(':')),
+    // The sentinel is selectable only via its dedicated action row, never as a chip.
+    ...extraTags.filter((t) => t.includes(':') && t !== EXPLICIT_UNCATEGORIZED),
   ];
   const uniqueOptions = [...new Set(allOptions)];
 
@@ -69,20 +71,35 @@ export function ItemCategorySheet({ open, onClose, value, inheritedTag, extraTag
           className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
         />
 
-        {/* Clear / inherit — always available (the outer row chip is too small to hold it).
-            Falls back to the transaction's category when there is one, else clears entirely. */}
-        <button
-          type="button"
-          onClick={() => pick(null)}
-          className={`w-full flex items-center gap-2 px-3 py-2 rounded text-sm border ${
-            !value
-              ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700'
-              : 'text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
-          }`}
-        >
-          <span className="text-base leading-none">✕</span>
-          <span>{inheritedTag ? `繼承主分類（${inheritedTag}）` : '清除分類（不分類）'}</span>
-        </button>
+        {/* Feature 027 (FR-014, approved mockup): two distinct, mutually reversible
+            actions replace the old single ✕ row — inherit (live, follows the tx) and
+            explicitly-uncategorized (deliberate 其他 via the sentinel). */}
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={() => pick(null)}
+            className={`w-full flex items-center gap-2 px-3 py-2 rounded text-sm border ${
+              value === null
+                ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700'
+                : 'text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+            }`}
+          >
+            <span className="text-base leading-none">↩</span>
+            <span>{inheritedTag ? `繼承主分類（${inheritedTag}）` : '不分類（跟隨主分類）'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => pick(EXPLICIT_UNCATEGORIZED)}
+            className={`w-full flex items-center gap-2 px-3 py-2 rounded text-sm border ${
+              value === EXPLICIT_UNCATEGORIZED
+                ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700'
+                : 'text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+            }`}
+          >
+            <span className="text-base leading-none">⊘</span>
+            <span>設為「其他」（不歸入任何分類）</span>
+          </button>
+        </div>
 
         {q ? (
           <div className="space-y-1">

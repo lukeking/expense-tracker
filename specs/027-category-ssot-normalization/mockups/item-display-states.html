@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>027 — item effective-category display states (T009/T010)</title>
+<style>
+  /* Values mirror the existing Tailwind classes in SummaryScreen.tsx / ItemRow.tsx.
+     Visual language (already shipped): blue = own decision, pale gray = inherited,
+     amber ⚠ = no decision anywhere. */
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:"Noto Sans TC",system-ui,sans-serif; background:#e5e7eb; padding:24px; display:flex; gap:24px; align-items:flex-start; }
+  .panel { width: 400px; }
+  .caption { font-size:13px; color:#374151; margin-bottom:8px; line-height:1.5; }
+  .caption b { color:#111827; }
+  .card { background:#fff; border-radius:12px; padding:12px 16px; }
+  .new { background:#fef9c3; border-radius:3px; padding:0 3px; font-size:11px; color:#854d0e; margin-left:6px; vertical-align:1px; }
+
+  /* ── Summary tx entry (TxEntry) ── */
+  .tx-head { display:flex; justify-content:space-between; font-size:14px; line-height:20px; }
+  .tx-label { color:#374151; }
+  .tx-time { font-size:12px; color:#9ca3af; margin-left:6px; }
+  .tx-amt { font-weight:500; color:#1f2937; }
+  .items { margin-top:4px; padding-left:8px; }
+  .items > div { display:flex; justify-content:space-between; font-size:12px; line-height:18px; margin-top:2px; }
+  .iname { color:#9ca3af; }
+  .iamt { color:#9ca3af; }
+  .cat-own { color:#3b82f6; }        /* blue-500 — own decision (override / sentinel) */
+  .cat-inherited { color:#d1d5db; }  /* gray-300 — inherited from the tx (NEW on Summary) */
+  .cat-warn { color:#d97706; }       /* amber-600 — no decision anywhere (unchanged) */
+
+  /* ── Entry/Edit ItemRow chip ── */
+  .rows > div { display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid #f3f4f6; }
+  .rows > div:last-child { border-bottom:none; }
+  .chip { flex-shrink:0; font-size:12px; line-height:16px; padding:4px 8px; border-radius:4px; border:1px solid; max-width:90px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .chip.override { border-color:#60a5fa; color:#1d4ed8; background:#eff6ff; }   /* as shipped */
+  .chip.inherit  { border-color:#e5e7eb; color:#d1d5db; background:none; }      /* as shipped */
+  .chip.none     { border-color:#e5e7eb; color:#9ca3af; background:none; }
+  .rname { flex:1; font-size:14px; color:#111827; }
+  .rdesc { font-size:11px; color:#6b7280; width:130px; text-align:right; }
+</style>
+</head>
+<body>
+
+  <div class="panel">
+    <div class="caption"><b>Summary 交易列表 item 行</b>（tx = 全家 · 食:雜貨 250）<br>
+    規則：藍 = 自己的決定；淡灰 = 繼承主分類；琥珀 ⚠ = 完全未分類</div>
+    <div class="card">
+      <div class="tx-head">
+        <span class="tx-label">全家(宵夜)<span class="tx-time">06/10 21:40</span></span>
+        <span class="tx-amt">NT$250</span>
+      </div>
+      <div class="items">
+        <div><span class="iname">吐司 <span class="cat-inherited">#食:雜貨</span><span class="new">NEW：顯示繼承</span></span><span class="iamt">NT$60</span></div>
+        <div><span class="iname">電池 <span class="cat-own">#日用:雜貨</span></span><span class="iamt">NT$120</span></div>
+        <div><span class="iname">怪東西 <span class="cat-own">#其他</span><span class="new">NEW：sentinel</span></span><span class="iamt">NT$40</span></div>
+      </div>
+      <div class="tx-head" style="margin-top:14px">
+        <span class="tx-label">愛買(無主分類)<span class="tx-time">06/10 18:02</span></span>
+        <span class="tx-amt">NT$80</span>
+      </div>
+      <div class="items">
+        <div><span class="iname">小東西 <span class="cat-warn">⚠ 未分類</span></span><span class="iamt">NT$80</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="caption"><b>Entry / Edit ItemRow 晶片</b>（既有視覺語言，僅新增 sentinel 狀態）<br>
+    淡灰繼承晶片 = 現狀不變；sentinel 顯示為藍色「其他」</div>
+    <div class="card rows">
+      <div><span class="chip override">日用:雜貨</span><span class="rname">電池</span><span class="rdesc">override（現狀）</span></div>
+      <div><span class="chip inherit">食:雜貨</span><span class="rname">吐司</span><span class="rdesc">繼承（現狀不變）</span></div>
+      <div><span class="chip override">其他</span><span class="rname">怪東西</span><span class="rdesc">sentinel（NEW）</span></div>
+      <div><span class="chip none">—</span><span class="rname">某物</span><span class="rdesc">無主分類可繼承（現狀）</span></div>
+    </div>
+  </div>
+
+</body>
+</html>

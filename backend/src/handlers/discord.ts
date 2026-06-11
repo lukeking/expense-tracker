@@ -157,7 +157,11 @@ async function handleExpenseCommand(
         const transaction = await insertTransaction(supabase, {
           amount,
           payment_method: paymentMethod,
-          tags: parsedTags.plainTags,
+          // B2: the shared category lives on the transaction (prepended, legacy
+          // tags[0] convention); items inherit it instead of carrying copies.
+          tags: parsedTags.sharedCategory
+            ? [parsedTags.sharedCategory, ...parsedTags.plainTags]
+            : parsedTags.plainTags,
           note,
           transaction_at: new Date().toISOString(),
           transaction_type: 'expense',
