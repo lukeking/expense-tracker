@@ -101,8 +101,8 @@ describe('planTransactionNormalization — migration transform', () => {
       items: [{ tags: ['食:雜貨'] }, { tags: ['食:雜貨', '7-11'] }, { tags: ['樂:遊戲'] }],
     });
     expect(plan).not.toBeNull();
-    expect(plan!.txTags).toEqual(['食:雜貨', '全家']);
-    expect(plan!.itemTags).toEqual([[], ['7-11'], ['樂:遊戲']]);
+    expect(plan?.txTags).toEqual(['食:雜貨', '全家']);
+    expect(plan?.itemTags).toEqual([[], ['7-11'], ['樂:遊戲']]);
   });
 
   it('promotes the unanimous category of a category-less tx (legacy inverse shape)', () => {
@@ -111,8 +111,8 @@ describe('planTransactionNormalization — migration transform', () => {
       items: [{ tags: ['食:早餐'] }, { tags: ['食:早餐'] }],
     });
     expect(plan).not.toBeNull();
-    expect(plan!.txTags).toEqual(['食:早餐', '全家']);
-    expect(plan!.itemTags).toEqual([[], []]);
+    expect(plan?.txTags).toEqual(['食:早餐', '全家']);
+    expect(plan?.itemTags).toEqual([[], []]);
   });
 
   it('leaves mixed-category legacy transactions untouched (null plan)', () => {
@@ -127,7 +127,7 @@ describe('planTransactionNormalization — migration transform', () => {
       tags: ['食:雜貨'],
       items: [{ tags: ['食:雜貨'] }, { tags: [EXPLICIT_UNCATEGORIZED] }],
     });
-    expect(plan!.itemTags).toEqual([[], [EXPLICIT_UNCATEGORIZED]]);
+    expect(plan?.itemTags).toEqual([[], [EXPLICIT_UNCATEGORIZED]]);
   });
 
   it('is idempotent: planning an already-normalized tx returns null', () => {
@@ -152,7 +152,7 @@ describe('total-preserving guard pathology (migration SKIP case)', () => {
     };
     const plan = planTransactionNormalization({ tags: before.tags, items: [{ tags: ['食:雜貨'] }] });
     expect(plan).not.toBeNull(); // the transform alone would strip it…
-    const after = { ...before, transaction_items: [{ amount: 120, tags: plan!.itemTags[0] }] };
+    const after = { ...before, transaction_items: [{ amount: 120, tags: plan?.itemTags[0] ?? [] }] };
     // …but aggregation differs (食:120 → 食:100), so the guard rejects the plan.
     expect(aggregateByCategory([before])).not.toEqual(aggregateByCategory([after]));
   });
@@ -164,7 +164,7 @@ describe('total-preserving guard pathology (migration SKIP case)', () => {
       transaction_items: [{ amount: 200, tags: ['食:雜貨'] }, { amount: 50, tags: ['樂:遊戲'] }],
     };
     const plan = planTransactionNormalization({ tags: before.tags, items: before.transaction_items.map((i) => ({ tags: i.tags })) });
-    const after = { ...before, transaction_items: before.transaction_items.map((it, i) => ({ ...it, tags: plan!.itemTags[i] })) };
+    const after = { ...before, transaction_items: before.transaction_items.map((it, i) => ({ ...it, tags: plan?.itemTags[i] ?? [] })) };
     expect(aggregateByCategory([before])).toEqual(aggregateByCategory([after]));
   });
 });
