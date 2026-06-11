@@ -56,7 +56,7 @@
 - [x] T011 [P] [US1] `backend/tests/services/summary.test.ts`: equivalence regressions — (a) the same purchase in old shape (item carries a copy of the tx tag) vs normalized shape (item untagged) produces identical `aggregateByCategory`/`aggregateBySubcategory` results (FR-008); (b) changing the tx tag re-buckets untagged items, grand total unchanged (FR-007/SC-005); (c) mixed-era dataset (one tx of each shape) aggregates correctly (FR-012).
 - [x] T012 [P] [US1] Create `backend/tests/handlers/pwa-transactions-category.test.ts`: POST stores no category copy on inheriting items; `items[].tag === category_tag` is collapsed; an overriding `items[].tag` is preserved; PUT same; refund-link item is created with `tags: []` while the refund tx keeps the snapshot tag.
 - [x] T013 [P] [US1] `backend/tests/handlers/discord.test.ts` + `backend/tests/handlers/android.test.ts`: update/extend expectations — Discord `/expense` writes `sharedCategory` at tx level and items carry no copies; Android unanimous item category is promoted to tx level.
-- [ ] T014 [US1] Manual verify per quickstart.md §2 US1 (requires running app + data).
+- [x] T014 [US1] Manual verify per quickstart.md §2 US1 (requires running app + data). Verified 2026-06-11.
 
 **Checkpoint**: US1 shippable — new writes are normalized; displays follow the tx live; suite green.
 
@@ -74,7 +74,7 @@
 - [x] T018 [US2] `pwa/src/components/ItemRow.tsx` + `pwa/src/screens/EntryScreen.tsx`: `tagOverride` may hold the sentinel; chip displays it as `其他`; `selectTag` passes `null`/sentinel/tag through unchanged to the POST/PUT payload (`items[].tag`). Depends on T017.
 - [x] T019 [P] [US2] `pwa/src/screens/ImportScreen.tsx` (~L275, L436): local-state merge handles `null` (drop `:`-tag) and sentinel (replace `:`-tag) identically to `mergeItemCategoryTag`; ⚠ flag uses the updated `isItemUncategorized` (sentinel = categorized). Depends on T017.
 - [x] T020 [P] [US2] `pwa/src/screens/SummaryScreen.tsx`: assign flow passes `null`/sentinel through `assignItemCategory`; sentinel item shows `其他` chip, never the ⚠ flag; react-query invalidations unchanged. Depends on T017.
-- [ ] T021 [US2] Manual verify per quickstart.md §2 US2 on all four surfaces (Entry, Edit, import review, Summary list).
+- [x] T021 [US2] Manual verify per quickstart.md §2 US2 on all four surfaces (Entry, Edit, import review, Summary list). Verified 2026-06-11.
 
 **Checkpoint**: US2 complete — three states selectable, reversible, and correctly bucketed everywhere.
 
@@ -123,10 +123,9 @@
 **Increment 3 = US3** (T022–T025): migration after deploy — the only step with a hard external gate.
 **Total**: 27 tasks (US1: 11 · US2: 7 · US3: 4 · foundation: 3 · polish: 2).
 
-## Implementation Status (2026-06-10)
+## Implementation Status (2026-06-11)
 
-Implemented and statically verified: backend typecheck + lint (0 errors) + 365 tests pass; PWA `tsc -b` + `vite build` clean. Both UI mockups (picker FR-014, display states) approved before coding.
+Implemented and statically verified: backend typecheck + lint (0 errors) + 365 tests pass; PWA `tsc -b` + `vite build` clean. Both UI mockups (picker FR-014, display states) approved before coding. T014/T021 manual walkthroughs verified 2026-06-11 against the local dev stack (US1 live inheritance; US2 three-state picker incl. override persistence across tx category change, sentinel bucketing under 其他→未分類, picker sentinel exclusion); test transactions removed from the live DB afterward.
 
 Open items:
-- **T014, T021** — interactive PWA walkthroughs per quickstart.md §2 (need running app + data).
 - **T025** — live `--apply` run, gated on merge + deploy. The **dry-run already executed** against the live DB (read-only): 15,299 txs · 15,211 to update (15,209 promotions — the legacy inverse shape dominates, as designed for) · 3 guard-skipped · 124 periods verified, **zero drift**. Re-run dry-run after deploy, then `--apply`, then save the output as `migration-report.md`.
