@@ -1228,14 +1228,14 @@ pwaRouter.post('/import/manual-link', async (c) => {
     }
     inv = data as Invoice;
   } else {
-    if (!invoice!.invoice_number || !import_run_id) {
+    if (!invoice?.invoice_number || !import_run_id) {
       return c.json({ error: 'INVALID_PAYLOAD', message: 'invoice.invoice_number and import_run_id are required' }, 400);
     }
-    const existing = await findExistingInvoiceNumbers(supabase, [invoice!.invoice_number]);
+    const existing = await findExistingInvoiceNumbers(supabase, [invoice.invoice_number]);
     if (existing.length > 0) {
       return c.json({ error: 'ALREADY_IMPORTED', message: 'Invoice already imported' }, 409);
     }
-    const parsed: ParsedInvoice = { ...invoice!, invoice_date: new Date(invoice!.invoice_date) };
+    const parsed: ParsedInvoice = { ...invoice, invoice_date: new Date(invoice.invoice_date) };
     // Persist in a valid transient state, flipped to `matched` last (ordered writes).
     // `ambiguous` is allowed by the match_status CHECK constraint and, on a mid-request
     // failure, lands the row in 待手動確認 (recoverable). Migration 023 also aligns the
