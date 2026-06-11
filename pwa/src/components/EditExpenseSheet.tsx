@@ -197,6 +197,7 @@ function EditExpenseFormInner({ tx, onClose }: { tx: TxDetail; onClose: () => vo
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['summary'] });
+      queryClient.invalidateQueries({ queryKey: ['subcategories'] });
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['tx-detail', tx.id] });
       queryClient.invalidateQueries({ queryKey: ['tx-month'] });
@@ -297,7 +298,7 @@ function EditExpenseFormInner({ tx, onClose }: { tx: TxDetail; onClose: () => vo
             extraTags={freeTags}
             onMax={makeOnMax(item.id)}
             onChange={(updated) => updateItem(item.id, updated)}
-            onRemove={() => setItems((prev) => prev.filter((i) => i.id !== item.id))}
+            onRemove={items.length > 1 ? () => setItems((prev) => prev.filter((i) => i.id !== item.id)) : undefined}
           />
         ))}
         <button
