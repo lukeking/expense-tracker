@@ -5,6 +5,14 @@
 **Status**: Draft
 **Input**: User description: "End-to-end test automation stack for the PWA expense tracker. Stand up a local, resettable test environment and automate the core user flows as a regression suite. Local datastore + local backend + browser-driven PWA, no cloud/CI dependency. Seed cases: the add-expense and view-summary walkthroughs. Category catalog must be seeded representatively (catalog SSOT is the live DB; the base migrations are only an initial seed). Known local port constraints must be accommodated. Goal: a reproducible, locally-runnable E2E suite that catches regressions in the entry and summary flows before merge."
 
+## Clarifications
+
+### Session 2026-06-13
+
+- Q: Where does the local test DB get its category catalog? → A: A checked-in snapshot of the live catalog (~133 production rows) committed as a seed fixture, refreshed when the catalog meaningfully changes.
+- Q: When running the suite, what does the test command start versus assume? → A: Hybrid — the test command auto-starts the backend and PWA and waits for readiness; the local datastore is a documented prerequisite, started and reset separately.
+- Q: How often does the DB reset to the seed baseline? → A: Before each test (per-test identical baseline) for order-independence; the reset mechanism (fast truncate-and-reseed vs. full reset) is a planning detail.
+
 ## User Scenarios & Testing *(mandatory)*
 
 The "user" of this feature is the developer/maintainer who ships changes to the expense tracker and needs confidence that the core flows still work before merging. Stories are ordered so that each builds a demonstrable slice on the previous one.
@@ -69,16 +77,17 @@ The suite drives the PWA to the summary view and verifies that aggregates reflec
 ### Functional Requirements
 
 - **FR-001**: The test environment MUST run entirely on the developer's machine with no dependency on the production database or any hosted service.
-- **FR-002**: The test environment MUST be resettable to a deterministic seed baseline on demand, so runs are repeatable and independent of prior runs.
-- **FR-003**: The seed baseline MUST include a representative category catalog sufficient to exercise the entry flow's category selection, independent of the live catalog (which remains the production source of truth).
+- **FR-002**: The test environment MUST reset to the identical deterministic seed baseline before each test, so tests are order-independent and a test's writes cannot perturb any other test's assertions.
+- **FR-003**: The seed baseline MUST include a representative category catalog loaded from a checked-in snapshot of the live catalog (the production source of truth), sufficient to exercise the entry flow's category selection without depending on the live database.
 - **FR-004**: The suite MUST drive the actual PWA user interface in a browser, exercising the same paths a real user does, rather than calling backend APIs directly.
 - **FR-005**: The suite MUST cover the add-expense flow end-to-end and assert the resulting data is persisted correctly.
 - **FR-006**: The suite MUST cover the view-summary flow and assert that aggregates reflect known seeded data, including at least one filter.
-- **FR-007**: The suite MUST be runnable with a single documented command (or short documented sequence) and report a clear pass/fail result.
+- **FR-007**: The suite MUST be runnable with a single command that starts the backend and PWA, waits for them to be ready, runs the tests, and reports a clear pass/fail result, assuming the local datastore is already running.
 - **FR-008**: The startup procedure MUST accommodate the local environment's port constraints and document the required configuration so the stack comes up reliably.
 - **FR-009**: A developer MUST be able to follow checked-in documentation to run the suite from a clean checkout without relying on undocumented knowledge.
 - **FR-010**: The suite MUST fail when a covered core flow regresses (demonstrated by intentionally breaking a flow and observing a failing test).
 - **FR-011**: Test runs MUST NOT mutate any production or shared data.
+- **FR-012**: The local datastore MUST be started and reset to the seed baseline via a documented step separate from the test command (it is a prerequisite the test command relies on, not something it boots).
 
 ### Key Entities *(include if feature involves data)*
 
