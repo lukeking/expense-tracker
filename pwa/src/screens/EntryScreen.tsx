@@ -10,6 +10,7 @@ import { AdjustmentRow, KIND_LABELS, resolveAdjAmount } from '../components/Adju
 import type { AdjustmentRowData } from '../components/AdjustmentRow';
 import { PaymentPills } from '../components/PaymentPills';
 import type { PaymentMethod } from '../components/PaymentPills';
+import { DescriptionSuggest } from '../components/DescriptionSuggest';
 import { ParentSearch } from '../components/ParentSearch';
 import type { ParentSearchResult } from '../components/ParentSearch';
 
@@ -353,11 +354,7 @@ function FeeForm() {
       </div>
       <div>
         <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">說明</label>
-        <input
-          type="text" value={description} onChange={(e) => setDescription(e.target.value)}
-          placeholder="國外交易服務費"
-          className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-        />
+        <DescriptionSuggest value={description} onChange={setDescription} type="fee" placeholder="國外交易服務費" />
       </div>
       <div>
         <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">連結原始交易（可選）</label>
@@ -433,11 +430,7 @@ function RefundForm() {
       </div>
       <div>
         <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">說明</label>
-        <input
-          type="text" value={description} onChange={(e) => setDescription(e.target.value)}
-          placeholder="如：訂單退款" required
-          className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-        />
+        <DescriptionSuggest value={description} onChange={setDescription} type="refund" placeholder="如：訂單退款" required />
       </div>
       <div>
         <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">退款至</label>

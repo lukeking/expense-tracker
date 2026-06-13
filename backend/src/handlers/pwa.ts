@@ -114,6 +114,41 @@ pwaRouter.get('/tags', async (c) => {
   return c.json({ tags: plainTags });
 });
 
+// ─── GET /pwa/descriptions ───────────────────────────────────────────────────
+
+// Distinct, trimmed, non-empty notes preserving input order (callers pass them
+// most-recent-first), capped at `limit`.
+function distinctNotes(notes: (string | null)[], limit = 30): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of notes) {
+    const note = raw?.trim();
+    if (note && !seen.has(note)) {
+      seen.add(note);
+      out.push(note);
+      if (out.length >= limit) break;
+    }
+  }
+  return out;
+}
+
+pwaRouter.get('/descriptions', async (c) => {
+  const type = c.req.query('type');
+  if (type !== 'fee' && type !== 'refund') {
+    return c.json({ error: 'INVALID_TYPE', message: 'type must be fee or refund' }, 400);
+  }
+  const supabase = getSupabaseClient(c.env);
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('note')
+    .eq('transaction_type', type)
+    .not('note', 'is', null)
+    .order('transaction_at', { ascending: false })
+    .limit(500);
+  if (error) return c.json({ error: 'DB_ERROR', message: error.message }, 500);
+  return c.json({ descriptions: distinctNotes((data ?? []).map((r) => r.note as string | null)) });
+});
+
 // ─── POST /pwa/expense ───────────────────────────────────────────────────────
 
 pwaRouter.post('/expense', async (c) => {
