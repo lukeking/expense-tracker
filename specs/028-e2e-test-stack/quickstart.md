@@ -7,26 +7,26 @@ excluding the one-time tool installs in Step 0).
 
 ## Step 0 — One-time prerequisites (excluded from the 15-min budget)
 
-These are **not yet installed** in the current WSL2 environment and must be set up once:
+Set up once:
 
 1. **Docker** with WSL2 integration enabled (Docker Desktop → Settings → Resources → WSL Integration, or Docker Engine inside WSL2). Verify: `docker info`.
-2. **Supabase CLI** on PATH. Verify: `supabase --version`.
+2. **Supabase CLI** — installed as a backend dev-dependency, invoked via `pnpm exec supabase`. Verify: `pnpm -C backend exec supabase --version`. (Install if missing: `pnpm -C backend add -D supabase`.)
 3. **Playwright browsers**: from `e2e/`, `pnpm install` then `pnpm exec playwright install chromium`.
 
-> Without Docker + Supabase CLI the local datastore cannot start, and the suite cannot run.
+> Without Docker + the Supabase CLI the local datastore cannot start, and the suite cannot run.
 
 ## Step 1 — Start the local datastore (prerequisite, kept running)
 
 ```bash
 cd backend
-cp .dev.vars.e2e.example .dev.vars.e2e   # one-time: create the gitignored active env file
-supabase start          # boots Postgres + PostgREST + GoTrue (Docker)
-supabase db reset        # applies migrations + seed.sql (categories snapshot)
+pnpm exec supabase start          # boots Postgres + PostgREST (Docker)
+pnpm exec supabase db reset       # applies migrations (incl. 000_base_schema) + seed.sql + seed-grants.sql
+bash scripts/gen-e2e-dev-vars.sh  # writes the gitignored .dev.vars.e2e (service-role key pulled from supabase status)
 ```
 
-`supabase start` prints the local API URL (`http://127.0.0.1:54321`) and keys. The
-service-role key in the committed `.dev.vars.e2e.example` is the well-known static local
-value, so the copied `.dev.vars.e2e` already matches — no manual key entry needed.
+`gen-e2e-dev-vars.sh` reads the local service-role key from `supabase status` at runtime
+and writes `.dev.vars.e2e` — so no key is ever committed or copied by hand. (The committed
+`.dev.vars.e2e.example` documents the variable names only.)
 
 Leave this stack running between test runs. Re-run `supabase db reset` only after schema
 or category-snapshot changes (the suite resets transactional data itself, per test).
@@ -71,8 +71,8 @@ When the live catalog changes meaningfully:
 curl -s -H "Authorization: Bearer $ANDROID_API_KEY" \
   https://<prod-worker>/pwa/categories > /tmp/categories.json
 # Update backend/supabase/seed/categories.md rows from that, then regenerate SQL:
-cd backend && pnpm tsx supabase/seed/build-seed.ts   # → supabase/seed.sql
-supabase db reset                                      # reload
+cd backend && pnpm exec tsx supabase/seed/build-seed.ts   # → supabase/seed.sql
+pnpm exec supabase db reset                               # reload
 ```
 
 ## Ports (WSL2)

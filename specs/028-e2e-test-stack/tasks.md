@@ -73,9 +73,9 @@ description: "Task list for 028-e2e-test-stack"
 
 **Independent Test**: the add-expense spec passes on known-good code and fails if the entry flow breaks.
 
-- [ ] T015 [US2] Create `e2e/tests/add-expense.spec.ts` — drive `pwa/src/screens/EntryScreen.tsx`: enter amount, pick a category, add item(s), choose a payment method, submit; assert the success toast (acceptance scenario 1).
-- [ ] T016 [US2] Extend `e2e/tests/add-expense.spec.ts` — read the expense back through the app (summary/transactions surface) and assert amount, category, item(s), and payment method match what was entered (acceptance scenario 2).
-- [ ] T017 [US2] Add an invalid-entry case to `e2e/tests/add-expense.spec.ts` — zero/empty amount → submit is blocked (button disabled / no transaction created), matching the app's existing guard (acceptance scenario 3).
+- [X] T015 [US2] Create `e2e/tests/add-expense.spec.ts` — drive `pwa/src/screens/EntryScreen.tsx`: enter amount, pick a category, add item(s), choose a payment method, submit; assert the success toast (acceptance scenario 1).
+- [X] T016 [US2] Extend `e2e/tests/add-expense.spec.ts` — read the expense back through the app (summary/transactions surface) and assert amount, category, item(s), and payment method match what was entered (acceptance scenario 2).
+- [X] T017 [US2] Add an invalid-entry case to `e2e/tests/add-expense.spec.ts` — zero/empty amount → submit is blocked (button disabled / no transaction created), matching the app's existing guard (acceptance scenario 3).
 
 **Checkpoint**: add-expense regression is automated and green.
 
@@ -87,8 +87,8 @@ description: "Task list for 028-e2e-test-stack"
 
 **Independent Test**: summary totals match the `baseline.ts` aggregate and one filter narrows correctly.
 
-- [ ] T018 [US3] Create `e2e/tests/view-summary.spec.ts` — open `pwa/src/screens/SummaryScreen.tsx` and assert the displayed totals equal the baseline aggregate computed from `baseline.ts` (acceptance scenario 1).
-- [ ] T019 [US3] Add a filter case to `e2e/tests/view-summary.spec.ts` — apply a category or period filter and assert only matching baseline transactions are reflected (acceptance scenario 2).
+- [X] T018 [US3] Create `e2e/tests/view-summary.spec.ts` — open `pwa/src/screens/SummaryScreen.tsx` and assert the displayed totals equal the baseline aggregate computed from `baseline.ts` (acceptance scenario 1).
+- [X] T019 [US3] Add a filter case to `e2e/tests/view-summary.spec.ts` — apply a category or period filter and assert only matching baseline transactions are reflected (acceptance scenario 2).
 
 **Checkpoint**: both primary journeys (add-expense, view-summary) are covered — launch scope (SC-006) met.
 
@@ -98,10 +98,10 @@ description: "Task list for 028-e2e-test-stack"
 
 **Purpose**: Reproducibility, regression-catching proof, and performance/stability validation.
 
-- [ ] T020 [P] Add an `e2e/README.md` (and reconcile quickstart.md) documenting prerequisites and the single run command, so the suite runs from a clean checkout without tribal knowledge (FR-009).
-- [ ] T021 Verify the net catches regressions (SC-004): temporarily break add-expense or a summary aggregate, confirm the matching spec fails, revert to green; record the procedure in `e2e/README.md`.
-- [ ] T022 [P] Confirm performance and stability: full suite completes < 5 min (SC-002) and is flake-free across repeated runs (SC-003 — run the suite several consecutive times).
-- [ ] T023 Walk quickstart.md from a clean state (stack down) to a green run, timing the cold start to validate SC-001 (< 15 min excluding tool install).
+- [X] T020 [P] Add an `e2e/README.md` (and reconcile quickstart.md) documenting prerequisites and the single run command, so the suite runs from a clean checkout without tribal knowledge (FR-009).
+- [X] T021 Verify the net catches regressions (SC-004): temporarily break add-expense or a summary aggregate, confirm the matching spec fails, revert to green; record the procedure in `e2e/README.md`.
+- [X] T022 [P] Confirm performance and stability: full suite completes < 5 min (SC-002) and is flake-free across repeated runs (SC-003 — run the suite several consecutive times).
+- [X] T023 Walk quickstart.md from a clean state (stack down) to a green run, timing the cold start to validate SC-001 (< 15 min excluding tool install).
 
 ---
 
