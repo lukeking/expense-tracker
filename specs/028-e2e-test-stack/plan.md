@@ -27,7 +27,7 @@ Stand up a reproducible, local-only test stack and an automated regression suite
 - [x] **II. Offline-First on Android** — N/A. No Android changes.
 - [x] **III. Serverless Boundary Compliance** — N/A. The backend Worker runs unmodified under `wrangler dev`; no new handlers, no gateway/WebSocket, no slow-op changes.
 - [x] **IV. Automation Over Manual Input** — N/A. No change to capture, parsing, or receipt-matching flows.
-- [x] **V. Security at System Boundaries** — PASS. The stack uses only local, non-production credentials: the well-known static local Supabase service-role key and a literal test `ANDROID_API_KEY`. No production secret is committed or transmitted. Catalog-snapshot refresh loads `$ANDROID_API_KEY` from env (never inlined). FR-001/FR-011 enforce zero production data access.
+- [x] **V. Security at System Boundaries** — PASS. The stack uses only local, non-production credentials. The operative `backend/.dev.vars.e2e` is **gitignored**; only a `.dev.vars.e2e.example` template is committed (mirroring the repo's `!.env.example` convention), so no `ANDROID_API_KEY=` line lands in a committed config file (analyze finding C1). No production secret is committed or transmitted. Catalog-snapshot refresh loads `$ANDROID_API_KEY` from env (never inlined). FR-001/FR-011 enforce zero production data access.
 
 *Post-Phase-1 re-check*: still PASS — design introduces no production code paths and no new secrets.
 
@@ -70,7 +70,7 @@ backend/
 │   │   └── build-seed.ts     # NEW — categories.md → seed.sql generator
 │   └── migrations/*          # existing schema (unchanged)
 ├── wrangler.toml             # + [env.e2e] block
-└── .dev.vars.e2e             # NEW — local-only env (committable; non-secret)
+└── .dev.vars.e2e.example     # NEW — committed template; active .dev.vars.e2e is gitignored (cp on setup)
 ```
 
 **Structure Decision**: Add a third sibling package `e2e/` alongside the existing per-package `backend/` and `pwa/` (the repo has no workspace linker — separate `package.json` per project). Local-stack config lives under the existing `backend/supabase/` tree next to the migrations and the catalog snapshot it already hosts. No production source files are modified.

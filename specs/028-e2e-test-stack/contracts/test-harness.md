@@ -14,7 +14,7 @@ change with them — they are the coupling points.
 
 ## C2 — Backend env contract (`[env.e2e]`)
 
-`wrangler dev --env e2e` must provide (from `backend/.dev.vars.e2e`):
+`wrangler dev --env e2e` must provide (from `backend/.dev.vars.e2e`, which is gitignored and created at setup via `cp .dev.vars.e2e.example .dev.vars.e2e`):
 
 | Var | Local value |
 |-----|-------------|

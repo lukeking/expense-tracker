@@ -35,15 +35,15 @@ Decisions resolving the Technical Context unknowns. The three clarified spec dec
 
 ## D4 — Backend env wiring for the local stack
 
-**Decision**: Add a committed **`backend/.dev.vars.e2e`** with local-only values and start the backend with `wrangler dev --env e2e` (define `[env.e2e]` in `wrangler.toml`). Values:
+**Decision**: Commit a **template** `backend/.dev.vars.e2e.example`; the active **`backend/.dev.vars.e2e`** is **gitignored** and created at setup via `cp .dev.vars.e2e.example .dev.vars.e2e`. Start the backend with `wrangler dev --env e2e` (define `[env.e2e]` in `wrangler.toml`). Template values:
 - `SUPABASE_URL` → `http://127.0.0.1:54321`
 - `SUPABASE_SERVICE_ROLE_KEY` → the **well-known static local Supabase service-role JWT** (identical on every local install; documented publicly by Supabase — not a secret)
-- `ANDROID_API_KEY` → a fixed literal test key (e.g. `e2e-test-key`)
+- `ANDROID_API_KEY` → a fixed literal test key `e2e-test-key` (must match `TEST_API_KEY` in `e2e/fixtures/auth.ts`, the single source of truth)
 - `PWA_ORIGIN` → `http://localhost:5300`
 
-**Rationale**: `.gitignore` blocks `.dev.vars` exactly but not `.dev.vars.e2e`, so this file is committable. None of the values are production secrets, so committing them satisfies FR-009 (clean-checkout reproducibility, no tribal knowledge) without violating Principle V. Keeping it as a separate `--env e2e` file leaves the developer's personal `.dev.vars` untouched.
+**Rationale (Principle V compliance — analyze finding C1)**: Principle V forbids `ANDROID_API_KEY` from appearing in committed config files. Even though the value here is a local throwaway, we keep the **operative** vars file out of git entirely and commit only an `.example` template — mirroring the repo's existing `!.env.example` gitignore convention. The one-line `cp` setup step preserves FR-009 (clean-checkout reproducibility). The `--env e2e` separation leaves the developer's personal `.dev.vars` untouched.
 
-**Alternatives**: Injecting env vars into `wrangler dev` at launch — rejected: wrangler bindings come from `.dev.vars`/`wrangler.toml`, not arbitrary `process.env`. Reusing the personal `.dev.vars` — rejected: clobbers the dev's own config and may point at the cloud.
+**Alternatives**: Committing the active `.dev.vars.e2e` (original plan) — rejected: places an `ANDROID_API_KEY=` line in a committed config file, conflicting with Principle V's letter. Injecting via `wrangler dev` env — rejected: wrangler bindings come from `.dev.vars`/`wrangler.toml`, not arbitrary `process.env`. Reusing the personal `.dev.vars` — rejected: clobbers the dev's own config and may point at the cloud.
 
 ## D5 — Auth seam in the browser
 

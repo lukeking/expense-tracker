@@ -19,13 +19,14 @@ These are **not yet installed** in the current WSL2 environment and must be set 
 
 ```bash
 cd backend
+cp .dev.vars.e2e.example .dev.vars.e2e   # one-time: create the gitignored active env file
 supabase start          # boots Postgres + PostgREST + GoTrue (Docker)
 supabase db reset        # applies migrations + seed.sql (categories snapshot)
 ```
 
 `supabase start` prints the local API URL (`http://127.0.0.1:54321`) and keys. The
-service-role key is the well-known static local value already in `backend/.dev.vars.e2e`
-— no copying needed.
+service-role key in the committed `.dev.vars.e2e.example` is the well-known static local
+value, so the copied `.dev.vars.e2e` already matches — no manual key entry needed.
 
 Leave this stack running between test runs. Re-run `supabase db reset` only after schema
 or category-snapshot changes (the suite resets transactional data itself, per test).
