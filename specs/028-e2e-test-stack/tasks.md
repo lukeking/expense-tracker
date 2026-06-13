@@ -28,9 +28,9 @@ description: "Task list for 028-e2e-test-stack"
 
 **Purpose**: Tooling and package scaffold.
 
-- [ ] T001 Verify (and install if missing) **Docker** with WSL2 integration and the **Supabase CLI** on PATH — `docker info` and `supabase --version` must both succeed. ⚠ Neither is currently installed; this is a one-time manual prerequisite (see quickstart.md Step 0) and blocks everything downstream.
-- [ ] T002 [P] Scaffold the E2E package: create `e2e/package.json` (deps `@playwright/test`, `pg`; dev `tsx`, `@types/pg`) and `e2e/tsconfig.json`.
-- [ ] T003 Install the Playwright Chromium browser from `e2e/` (`pnpm install` then `pnpm exec playwright install chromium`).
+- [X] T001 Verify (and install if missing) **Docker** with WSL2 integration and the **Supabase CLI** on PATH — `docker info` and `supabase --version` must both succeed. ⚠ Neither is currently installed; this is a one-time manual prerequisite (see quickstart.md Step 0) and blocks everything downstream.
+- [X] T002 [P] Scaffold the E2E package: create `e2e/package.json` (deps `@playwright/test`, `pg`; dev `tsx`, `@types/pg`) and `e2e/tsconfig.json`.
+- [X] T003 Install the Playwright Chromium browser from `e2e/` (`pnpm install` then `pnpm exec playwright install chromium`).
 
 ---
 
@@ -40,15 +40,15 @@ description: "Task list for 028-e2e-test-stack"
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T004 Run `supabase init` to create `backend/supabase/config.toml`; pin API port 54321 / DB port 54322 and wire `seed.sql` under the `[db.seed]` key (per research.md D1, D2).
-- [ ] T005 [P] Create the category seed generator `backend/supabase/seed/build-seed.ts` — parse `backend/supabase/seed/categories.md` rows and emit idempotent `INSERT INTO categories (major, subcategory, sort_order) … ON CONFLICT (major, subcategory) DO NOTHING;` (research.md D6).
-- [ ] T006 Generate `backend/supabase/seed.sql` by running `backend/supabase/seed/build-seed.ts`; confirm it contains the full ~133-row catalog snapshot.
-- [ ] T007 [P] Add an `[env.e2e]` block to `backend/wrangler.toml`, commit the template `backend/.dev.vars.e2e.example` with the local-only values from contracts/test-harness.md C2 (`SUPABASE_URL`, static local `SUPABASE_SERVICE_ROLE_KEY`, `ANDROID_API_KEY=e2e-test-key`, `PWA_ORIGIN=http://localhost:5300`), and add `backend/.dev.vars.e2e` to `.gitignore` (active file stays out of git — Principle V / analyze finding C1).
-- [ ] T008 Create the active env file and bring the stack up: `cp backend/.dev.vars.e2e.example backend/.dev.vars.e2e`, then from `backend/` `supabase start` and `supabase db reset`; verify `categories` is populated (~133 rows) and the REST API answers at `http://127.0.0.1:54321`.
-- [ ] T009 [P] Create `e2e/fixtures/baseline.ts` — the deterministic baseline transactions (shape + invariants per data-model.md): ≥2 categories, one known month, small integer amounts with self-evident aggregates.
-- [ ] T010 [P] Create `e2e/fixtures/reset-db.ts` — connect via `pg` to `postgresql://postgres:postgres@127.0.0.1:54322/postgres`, `TRUNCATE transactions, transaction_items, transaction_adjustments, transaction_edit_history RESTART IDENTITY CASCADE`, then insert the `baseline.ts` set; export `resetDb()` (does **not** touch `categories`). Depends on T009.
-- [ ] T011 [P] Create `e2e/fixtures/auth.ts` — Playwright `addInitScript`/storage helper that sets `localStorage['expense_api_key'] = 'e2e-test-key'` before app code runs (contracts C1).
-- [ ] T012 Create `e2e/playwright.config.ts` — two `webServer` entries (`cd backend && wrangler dev --env e2e` ready on :8787; `cd pwa && pnpm dev --port 5300` with `VITE_API_BASE=http://localhost:8787` ready on :5300), a `beforeEach` that calls `resetDb()`, the auth fixture, a chromium project, and the HTML reporter. Depends on T010, T011.
+- [X] T004 Run `supabase init` to create `backend/supabase/config.toml`; pin API port 54321 / DB port 54322 and wire `seed.sql` under the `[db.seed]` key (per research.md D1, D2).
+- [X] T005 [P] Create the category seed generator `backend/supabase/seed/build-seed.ts` — parse `backend/supabase/seed/categories.md` rows and emit idempotent `INSERT INTO categories (major, subcategory, sort_order) … ON CONFLICT (major, subcategory) DO NOTHING;` (research.md D6).
+- [X] T006 Generate `backend/supabase/seed.sql` by running `backend/supabase/seed/build-seed.ts`; confirm it contains the full ~133-row catalog snapshot.
+- [X] T007 [P] Add an `[env.e2e]` block to `backend/wrangler.toml`, commit the template `backend/.dev.vars.e2e.example` with the local-only values from contracts/test-harness.md C2 (`SUPABASE_URL`, static local `SUPABASE_SERVICE_ROLE_KEY`, `ANDROID_API_KEY=e2e-test-key`, `PWA_ORIGIN=http://localhost:5300`), and add `backend/.dev.vars.e2e` to `.gitignore` (active file stays out of git — Principle V / analyze finding C1).
+- [X] T008 Create the active env file and bring the stack up: `cp backend/.dev.vars.e2e.example backend/.dev.vars.e2e`, then from `backend/` `supabase start` and `supabase db reset`; verify `categories` is populated (~133 rows) and the REST API answers at `http://127.0.0.1:54321`.
+- [X] T009 [P] Create `e2e/fixtures/baseline.ts` — the deterministic baseline transactions (shape + invariants per data-model.md): ≥2 categories, one known month, small integer amounts with self-evident aggregates.
+- [X] T010 [P] Create `e2e/fixtures/reset-db.ts` — connect via `pg` to `postgresql://postgres:postgres@127.0.0.1:54322/postgres`, `TRUNCATE transactions, transaction_items, transaction_adjustments, transaction_edit_history RESTART IDENTITY CASCADE`, then insert the `baseline.ts` set; export `resetDb()` (does **not** touch `categories`). Depends on T009.
+- [X] T011 [P] Create `e2e/fixtures/auth.ts` — Playwright `addInitScript`/storage helper that sets `localStorage['expense_api_key'] = 'e2e-test-key'` before app code runs (contracts C1).
+- [X] T012 Create `e2e/playwright.config.ts` — two `webServer` entries (`cd backend && wrangler dev --env e2e` ready on :8787; `cd pwa && pnpm dev --port 5300` with `VITE_API_BASE=http://localhost:8787` ready on :5300), a `beforeEach` that calls `resetDb()`, the auth fixture, a chromium project, and the HTML reporter. Depends on T010, T011.
 
 **Checkpoint**: stack reachable + seeded + resettable; fixtures and Playwright config in place.
 
@@ -60,8 +60,8 @@ description: "Task list for 028-e2e-test-stack"
 
 **Independent Test**: `pnpm test` (from `e2e/`) runs the smoke spec — PWA loads with no 401, seeded categories appear, and `resetDb()` yields the baseline.
 
-- [ ] T013 [US1] Create `e2e/tests/environment.smoke.spec.ts` — with auth seeded, load the PWA, assert it reaches the local backend (a `/pwa/*` call returns 200, not 401), assert the category picker shows seeded majors (e.g. 食/住/行), and assert that after `resetDb()` the baseline transaction count matches `baseline.ts`.
-- [ ] T014 [US1] Run `pnpm test` from `e2e/` and confirm Playwright auto-starts backend + PWA and the smoke spec passes; reconcile any port/readiness deviations back into `playwright.config.ts` and quickstart.md.
+- [X] T013 [US1] Create `e2e/tests/environment.smoke.spec.ts` — with auth seeded, load the PWA, assert it reaches the local backend (a `/pwa/*` call returns 200, not 401), assert the category picker shows seeded majors (e.g. 食/住/行), and assert that after `resetDb()` the baseline transaction count matches `baseline.ts`.
+- [X] T014 [US1] Run `pnpm test` from `e2e/` and confirm Playwright auto-starts backend + PWA and the smoke spec passes; reconcile any port/readiness deviations back into `playwright.config.ts` and quickstart.md.
 
 **Checkpoint**: the environment is demonstrably reproducible and resettable — MVP delivered.
 

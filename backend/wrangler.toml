@@ -19,3 +19,9 @@ crons = ["0 9 1 */2 *"]
 # GEMINI_API_KEY
 # ANDROID_API_KEY
 # DISCORD_CHANNEL_ID
+
+# ─── Local E2E environment (feature 028) ───────────────────────────────────────
+# Run: wrangler dev --env e2e
+# SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ANDROID_API_KEY, PWA_ORIGIN are provided by
+# .dev.vars.e2e (gitignored; `cp .dev.vars.e2e.example .dev.vars.e2e`). All local, non-secret.
+[env.e2e]
