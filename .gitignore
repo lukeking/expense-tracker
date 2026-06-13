@@ -13,6 +13,8 @@ build/
 # Wrangler
 .wrangler/
 .dev.vars
+# Local E2E env (active file; the committed template is .dev.vars.e2e.example)
+.dev.vars.e2e
 
 # Android
 android/app/src/main/res/values/secrets.xml
