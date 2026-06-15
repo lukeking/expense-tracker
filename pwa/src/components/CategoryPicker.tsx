@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useCategories, useMajors, useSubcategories } from '../hooks/useCategories';
 import { BottomSheet } from './BottomSheet';
+import { useT } from '../i18n';
 
 export interface CategorySelection {
   major: string;
@@ -15,6 +16,7 @@ interface Props {
 const MAX_VISIBLE_SUBCATEGORIES = 5;
 
 export function CategoryPicker({ value, onChange }: Props) {
+  const t = useT();
   const { data: categories } = useCategories();
   const majors = useMajors(categories);
   const subcategories = useSubcategories(categories, value?.major ?? null);
@@ -99,14 +101,14 @@ export function CategoryPicker({ value, onChange }: Props) {
       <BottomSheet
         open={sheetOpen}
         onClose={() => setSheetOpen(false)}
-        title={`${value?.major ?? ''} — 所有子分類`}
+        title={t('category.allSubsTitle', { major: value?.major ?? '' })}
       >
         <div className="px-4 py-3">
           <input
             type="search"
             value={sheetSearch}
             onChange={(e) => setSheetSearch(e.target.value)}
-            placeholder="搜尋子分類…"
+            placeholder={t('category.searchSubs')}
             className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm mb-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
           />
           <div className="flex flex-wrap gap-2">

@@ -1,11 +1,14 @@
+import { useT } from '../i18n';
+import type { MessageKey } from '../i18n';
+
 export type PaymentMethod = 'cash' | 'credit_card' | 'easy_card' | 'prepaid_wallet' | 'bank_account';
 
-const LABELS: Record<PaymentMethod, string> = {
-  cash: '現金',
-  credit_card: '信用卡',
-  easy_card: '悠遊卡',
-  prepaid_wallet: '電子支付',
-  bank_account: '銀行帳戶',
+const LABEL_KEYS: Record<PaymentMethod, MessageKey> = {
+  cash: 'payment.cash',
+  credit_card: 'payment.creditCard',
+  easy_card: 'payment.easyCard',
+  prepaid_wallet: 'payment.prepaidWallet',
+  bank_account: 'payment.bankAccount',
 };
 
 const METHODS: PaymentMethod[] = ['cash', 'credit_card', 'easy_card', 'prepaid_wallet', 'bank_account'];
@@ -16,6 +19,7 @@ interface Props {
 }
 
 export function PaymentPills({ value, onChange }: Props) {
+  const t = useT();
   return (
     <div className="flex flex-wrap gap-2">
       {METHODS.map((method) => (
@@ -29,7 +33,7 @@ export function PaymentPills({ value, onChange }: Props) {
               : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600'
           }`}
         >
-          {LABELS[method]}
+          {t(LABEL_KEYS[method])}
         </button>
       ))}
     </div>

@@ -7,11 +7,12 @@ import { TagInput } from './TagInput';
 import { ItemRow } from './ItemRow';
 import type { ItemRowData } from './ItemRow';
 import { EXPLICIT_UNCATEGORIZED } from '../lib/itemCategory';
-import { AdjustmentRow, KIND_LABELS, resolveAdjAmount } from './AdjustmentRow';
+import { AdjustmentRow, KIND_LABEL_KEYS, resolveAdjAmount } from './AdjustmentRow';
 import type { AdjustmentRowData, AdjustmentKind } from './AdjustmentRow';
 import { PaymentPills } from './PaymentPills';
 import type { PaymentMethod } from './PaymentPills';
 import { EditHistorySection } from './EditHistorySection';
+import { useT } from '../i18n';
 
 type EditDiff = {
   header?: Record<string, { before: unknown; after: unknown }>;
@@ -95,6 +96,7 @@ function newAdjustment(): AdjustmentRowData {
 // ─── Edit form (inner) ────────────────────────────────────────────────────────
 
 function EditExpenseFormInner({ tx, onClose }: { tx: TxDetail; onClose: () => void }) {
+  const t = useT();
   // B2: the tx-level :-tag is the authoritative category; item :-tags are overrides.
   // Fall back to item-level only for un-migrated legacy data whose category still
   // lives on the items (FR-012 mixed-shape reads).
@@ -323,7 +325,7 @@ function EditExpenseFormInner({ tx, onClose }: { tx: TxDetail; onClose: () => vo
             const isDeduct = a.kind !== 'fee';
             return (
               <div key={a.id} className="flex justify-between text-gray-500 dark:text-gray-400">
-                <span>{KIND_LABELS[a.kind]}</span>
+                <span>{t(KIND_LABEL_KEYS[a.kind])}</span>
                 <span>{isDeduct ? '−' : '+'}NT${amt}</span>
               </div>
             );
