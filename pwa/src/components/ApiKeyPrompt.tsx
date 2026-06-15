@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { setApiKey, apiFetch, AuthError } from '../api/client';
+import { useT } from '../i18n';
 
 interface Props {
   onSuccess: () => void;
 }
 
 export function ApiKeyPrompt({ onSuccess }: Props) {
+  const t = useT();
   const [key, setKey] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -21,9 +23,9 @@ export function ApiKeyPrompt({ onSuccess }: Props) {
       onSuccess();
     } catch (err) {
       if (err instanceof AuthError) {
-        setError('API key 不正確，請重試');
+        setError(t('apiKey.invalid'));
       } else {
-        setError('連線失敗，請確認網路後重試');
+        setError(t('apiKey.connFailed'));
       }
       setLoading(false);
     }
@@ -33,7 +35,7 @@ export function ApiKeyPrompt({ onSuccess }: Props) {
     <div className="flex items-center justify-center h-full bg-gray-50 dark:bg-gray-900 px-6">
       <div className="w-full max-w-sm">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Expense Tracker</h1>
-        <p className="text-gray-500 dark:text-gray-400 text-sm mb-8">請輸入 API key 以繼續</p>
+        <p className="text-gray-500 dark:text-gray-400 text-sm mb-8">{t('apiKey.subtitle')}</p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <input
             type="password"
@@ -49,7 +51,7 @@ export function ApiKeyPrompt({ onSuccess }: Props) {
             disabled={loading || !key.trim()}
             className="w-full bg-blue-600 text-white rounded-lg py-3 font-semibold disabled:opacity-50"
           >
-            {loading ? '驗證中…' : '登入'}
+            {loading ? t('apiKey.verifying') : t('apiKey.login')}
           </button>
         </form>
       </div>

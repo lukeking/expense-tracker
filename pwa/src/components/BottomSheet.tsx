@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useT } from '../i18n';
 
 interface Props {
   open: boolean;
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export function BottomSheet({ open, onClose, title, children }: Props) {
+  const t = useT();
   const sheetRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -38,7 +40,7 @@ export function BottomSheet({ open, onClose, title, children }: Props) {
           <button
             onClick={onClose}
             className="ml-auto text-gray-500 dark:text-gray-400 text-xl leading-none p-1"
-            aria-label="關閉"
+            aria-label={t('common.close')}
           >
             ✕
           </button>

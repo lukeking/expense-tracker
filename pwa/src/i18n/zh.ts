@@ -173,6 +173,36 @@ export const zh = {
   'import.renameItems': '重新命名既有品項（以發票品名取代，金額不變）',
   'import.noReplace': '不取代',
   'import.linking': '連結中…',
+
+  'common.close': '關閉',
+
+  'edit.consumptionTime': '消費時間',
+  'edit.title': '編輯支出',
+  'edit.saving': '儲存中…',
+  'edit.save': '儲存',
+  'edit.loadFailed': '載入失敗：{msg}',
+
+  'editHist.title': '編輯紀錄',
+  'editHist.amount': '金額',
+  'editHist.items': '品項',
+  'editHist.adjustments': '折抵',
+  'editHist.empty': '（空）',
+  'editHist.itemsCount': '{n} 項',
+  'editHist.adjCount': '{n} 筆',
+
+  'itemCat.title': '選擇品項分類',
+  'itemCat.searchCategory': '搜尋分類…',
+  'itemCat.inheritMajor': '繼承主分類（{tag}）',
+  'itemCat.noCategory': '不分類（跟隨主分類）',
+  'itemCat.setOther': '設為「其他」（不歸入任何分類）',
+  'itemCat.noMatch': '沒有符合的分類',
+  'itemCat.wholeMajor': '{major}（整體）',
+
+  'apiKey.invalid': 'API key 不正確，請重試',
+  'apiKey.connFailed': '連線失敗，請確認網路後重試',
+  'apiKey.subtitle': '請輸入 API key 以繼續',
+  'apiKey.verifying': '驗證中…',
+  'apiKey.login': '登入',
 };
 
 export type Messages = typeof zh;

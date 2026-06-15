@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { BottomSheet } from './BottomSheet';
 import { useCategories, useMajors, useSubcategories } from '../hooks/useCategories';
 import { EXPLICIT_UNCATEGORIZED } from '../lib/itemCategory';
+import { useT } from '../i18n';
 
 interface Props {
   open: boolean;
@@ -9,13 +10,14 @@ interface Props {
   value: string | null;          // current item category tag (may be the sentinel), or null (inherit)
   inheritedTag: string | null;   // the transaction's category, shown on the inherit option
   extraTags?: string[];          // off-catalog category tags already present (FR-005)
-  onSelect: (tag: string | null) => void; // null = inherit; EXPLICIT_UNCATEGORIZED = deliberate 其他
+  onSelect: (tag: string | null) => void; // null = inherit; EXPLICIT_UNCATEGORIZED = deliberate 'Other'
 }
 
 // Feature 026 (US1): a searchable + major-filterable category picker for a single item.
 // Replaces ItemRow's flat, ungrouped list. Shared by ItemRow, the import review, and the
 // Summary list so there is one item-categorization UI.
 export function ItemCategorySheet({ open, onClose, value, inheritedTag, extraTags = [], onSelect }: Props) {
+  const t = useT();
   const { data: categories } = useCategories();
   const majors = useMajors(categories);
   const [search, setSearch] = useState('');
@@ -61,19 +63,19 @@ export function ItemCategorySheet({ open, onClose, value, inheritedTag, extraTag
     }`;
 
   return (
-    <BottomSheet open={open} onClose={handleClose} title="選擇品項分類">
+    <BottomSheet open={open} onClose={handleClose} title={t('itemCat.title')}>
       <div className="px-4 py-3 space-y-3">
         <input
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="搜尋分類…"
+          placeholder={t('itemCat.searchCategory')}
           className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
         />
 
         {/* Feature 027 (FR-014, approved mockup): two distinct, mutually reversible
             actions replace the old single ✕ row — inherit (live, follows the tx) and
-            explicitly-uncategorized (deliberate 其他 via the sentinel). */}
+            explicitly-uncategorized (deliberate 'Other' via the sentinel). */}
         <div className="space-y-2">
           <button
             type="button"
@@ -85,7 +87,7 @@ export function ItemCategorySheet({ open, onClose, value, inheritedTag, extraTag
             }`}
           >
             <span className="text-base leading-none">↩</span>
-            <span>{inheritedTag ? `繼承主分類（${inheritedTag}）` : '不分類（跟隨主分類）'}</span>
+            <span>{inheritedTag ? t('itemCat.inheritMajor', { tag: inheritedTag }) : t('itemCat.noCategory')}</span>
           </button>
           <button
             type="button"
@@ -97,14 +99,14 @@ export function ItemCategorySheet({ open, onClose, value, inheritedTag, extraTag
             }`}
           >
             <span className="text-base leading-none">⊘</span>
-            <span>設為「其他」（不歸入任何分類）</span>
+            <span>{t('itemCat.setOther')}</span>
           </button>
         </div>
 
         {q ? (
           <div className="space-y-1">
             {results.length === 0 ? (
-              <p className="text-sm text-gray-400 dark:text-gray-500 px-1">沒有符合的分類</p>
+              <p className="text-sm text-gray-400 dark:text-gray-500 px-1">{t('itemCat.noMatch')}</p>
             ) : (
               results.map((tag) => (
                 <button key={tag} type="button" onClick={() => pick(tag)} className={rowCls(value === tag)}>
@@ -135,7 +137,7 @@ export function ItemCategorySheet({ open, onClose, value, inheritedTag, extraTag
             {activeMajor && (
               <div className="flex flex-wrap gap-2">
                 <button type="button" onClick={() => pick(activeMajor)} className={chipCls(value === activeMajor)}>
-                  {activeMajor}（整體）
+                  {t('itemCat.wholeMajor', { major: activeMajor })}
                 </button>
                 {subsOfActive.map((sub) => {
                   const tag = `${activeMajor}:${sub}`;

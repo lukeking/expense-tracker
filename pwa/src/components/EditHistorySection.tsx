@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useT } from '../i18n';
+import type { MessageKey } from '../i18n';
 
 type EditDiff = {
   header?: Record<string, { before: unknown; after: unknown }>;
@@ -8,11 +10,11 @@ type EditDiff = {
 
 type HistoryEntry = { id: string; edited_at: string; diff: EditDiff };
 
-const HEADER_LABELS: Record<string, string> = {
-  amount:         '金額',
-  payment_method: '付款方式',
-  note:           '備註',
-  tags:           '標籤',
+const HEADER_LABEL_KEYS: Record<string, MessageKey> = {
+  amount:         'editHist.amount',
+  payment_method: 'entry.paymentMethod',
+  note:           'entry.note',
+  tags:           'entry.tags',
 };
 
 function formatDateTime(iso: string): string {
@@ -21,36 +23,38 @@ function formatDateTime(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function formatValue(v: unknown): string {
-  if (v === null || v === undefined) return '（空）';
-  if (Array.isArray(v)) return v.length === 0 ? '（空）' : v.join(', ');
+function formatValue(v: unknown, emptyLabel: string): string {
+  if (v === null || v === undefined) return emptyLabel;
+  if (Array.isArray(v)) return v.length === 0 ? emptyLabel : v.join(', ');
   return String(v);
 }
 
 function DiffSummary({ diff }: { diff: EditDiff }) {
+  const t = useT();
+  const empty = t('editHist.empty');
   return (
     <div className="mt-1 text-xs text-gray-600 dark:text-gray-400 space-y-0.5">
       {diff.header && Object.entries(diff.header).map(([key, { before, after }]) => (
         <div key={key}>
-          <span className="font-medium">{HEADER_LABELS[key] ?? key}</span>
+          <span className="font-medium">{HEADER_LABEL_KEYS[key] ? t(HEADER_LABEL_KEYS[key]) : key}</span>
           {': '}
-          <span className="line-through text-gray-400">{formatValue(before)}</span>
+          <span className="line-through text-gray-400">{formatValue(before, empty)}</span>
           {' → '}
-          <span>{formatValue(after)}</span>
+          <span>{formatValue(after, empty)}</span>
         </div>
       ))}
       {diff.items && (
         <div>
-          <span className="font-medium">品項</span>
+          <span className="font-medium">{t('editHist.items')}</span>
           {': '}
-          {diff.items.before.length} 項 → {diff.items.after.length} 項
+          {t('editHist.itemsCount', { n: diff.items.before.length })} → {t('editHist.itemsCount', { n: diff.items.after.length })}
         </div>
       )}
       {diff.adjustments && (
         <div>
-          <span className="font-medium">折抵</span>
+          <span className="font-medium">{t('editHist.adjustments')}</span>
           {': '}
-          {diff.adjustments.before.length} 筆 → {diff.adjustments.after.length} 筆
+          {t('editHist.adjCount', { n: diff.adjustments.before.length })} → {t('editHist.adjCount', { n: diff.adjustments.after.length })}
         </div>
       )}
     </div>
@@ -58,6 +62,7 @@ function DiffSummary({ diff }: { diff: EditDiff }) {
 }
 
 export function EditHistorySection({ history }: { history: HistoryEntry[] }) {
+  const t = useT();
   const [expanded, setExpanded] = useState(false);
 
   if (history.length === 0) return null;
@@ -69,7 +74,7 @@ export function EditHistorySection({ history }: { history: HistoryEntry[] }) {
         onClick={() => setExpanded((v) => !v)}
         className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300"
       >
-        <span>編輯紀錄 ({history.length})</span>
+        <span>{t('editHist.title')} ({history.length})</span>
         <span>{expanded ? '▾' : '▸'}</span>
       </button>
       {expanded && (

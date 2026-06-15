@@ -173,4 +173,34 @@ export const en: Messages = {
   'import.renameItems': 'Rename existing items (replace name with invoice item, amount unchanged)',
   'import.noReplace': "Don't replace",
   'import.linking': 'Linking…',
+
+  'common.close': 'Close',
+
+  'edit.consumptionTime': 'Consumption time',
+  'edit.title': 'Edit expense',
+  'edit.saving': 'Saving…',
+  'edit.save': 'Save',
+  'edit.loadFailed': 'Load failed: {msg}',
+
+  'editHist.title': 'Edit history',
+  'editHist.amount': 'Amount',
+  'editHist.items': 'Items',
+  'editHist.adjustments': 'Adjustments',
+  'editHist.empty': '(empty)',
+  'editHist.itemsCount': '{n} items',
+  'editHist.adjCount': '{n}',
+
+  'itemCat.title': 'Choose item category',
+  'itemCat.searchCategory': 'Search categories…',
+  'itemCat.inheritMajor': 'Inherit main category ({tag})',
+  'itemCat.noCategory': 'No category (follow main)',
+  'itemCat.setOther': 'Set as "Other" (no category)',
+  'itemCat.noMatch': 'No matching categories',
+  'itemCat.wholeMajor': '{major} (whole)',
+
+  'apiKey.invalid': 'Incorrect API key, please retry',
+  'apiKey.connFailed': 'Connection failed, check your network and retry',
+  'apiKey.subtitle': 'Enter your API key to continue',
+  'apiKey.verifying': 'Verifying…',
+  'apiKey.login': 'Log in',
 };
