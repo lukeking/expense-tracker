@@ -26,9 +26,9 @@ description: "Task list for 029-multilingual-i18n"
 
 **Purpose**: Stand up the catalog + accessor that every later task depends on.
 
-- [ ] T001 Create `pwa/src/i18n/zh.ts` as the base catalog: `export const zh = { ... }` seeded with shared `common.*` keys (e.g. `common.loading` = `載入中…`, plus save/cancel/confirm/delete/edit/close/back/retry as encountered). Also export `export type Messages = typeof zh;` and `export type MessageKey = keyof Messages;`. Do **not** use `as const` (values must stay `string`).
-- [ ] T002 Create `pwa/src/i18n/en.ts`: `import type { Messages } from './zh'; export const en: Messages = { ... }` with the matching English `common.*` strings. The `Messages` annotation makes a missing/renamed key a compile error (coverage guard).
-- [ ] T003 Implement `pwa/src/i18n/index.ts` (depends on T001, T002): `catalog = { zh, en }`; `interpolate(raw, params)` doing `{name}` → value replacement; `translate(lang, key, params?)` with the fallback chain `catalog[lang][key] ?? catalog.zh[key] ?? key` then interpolate; `useT()` hook = `const { lang } = useSettings(); return useMemo(() => (k, p) => translate(lang, k, p), [lang])`; re-export `Messages`, `MessageKey`, `Params`. Matches `contracts/i18n-api.md`.
+- [X] T001 Create `pwa/src/i18n/zh.ts` as the base catalog: `export const zh = { ... }` seeded with shared `common.*` keys (e.g. `common.loading` = `載入中…`, plus save/cancel/confirm/delete/edit/close/back/retry as encountered). Also export `export type Messages = typeof zh;` and `export type MessageKey = keyof Messages;`. Do **not** use `as const` (values must stay `string`).
+- [X] T002 Create `pwa/src/i18n/en.ts`: `import type { Messages } from './zh'; export const en: Messages = { ... }` with the matching English `common.*` strings. The `Messages` annotation makes a missing/renamed key a compile error (coverage guard).
+- [X] T003 Implement `pwa/src/i18n/index.ts` (depends on T001, T002): `catalog = { zh, en }`; `interpolate(raw, params)` doing `{name}` → value replacement; `translate(lang, key, params?)` with the fallback chain `catalog[lang][key] ?? catalog.zh[key] ?? key` then interpolate; `useT()` hook = `const { lang } = useSettings(); return useMemo(() => (k, p) => translate(lang, k, p), [lang])`; re-export `Messages`, `MessageKey`, `Params`. Matches `contracts/i18n-api.md`.
 
 **Checkpoint**: `useT()` is importable and resolves keys with zh→key fallback.
 
@@ -40,8 +40,8 @@ description: "Task list for 029-multilingual-i18n"
 
 **⚠️ Blocks all user stories** — every screen renders inside this shell.
 
-- [ ] T004 Migrate `pwa/src/App.tsx`: move the inline `NAV_LABELS` into the catalog as `nav.entry`/`nav.summary`/`nav.budget`/`nav.import`/`nav.settings`, consume them via `useT()` in `NavBar`, and replace the Suspense fallback literal `載入中…` with `t('common.loading')`. Add the `nav.*` keys (verbatim zh) to `pwa/src/i18n/zh.ts` + English to `pwa/src/i18n/en.ts`.
-- [ ] T005 Migrate `pwa/src/components/SettingsSheet.tsx` chrome to `t()`: `設定 / Settings`→`settings.title`, `語系 / Language`→`settings.language`, `主題 / Theme`→`settings.theme`, `☀️ 淺色`→`settings.themeLight`, `🌙 深色`→`settings.themeDark`; the `中文`/`English` toggle labels stay as language self-names (key as `settings.langZh`/`settings.langEn`). Add keys to both catalogs.
+- [X] T004 Migrate `pwa/src/App.tsx`: move the inline `NAV_LABELS` into the catalog as `nav.entry`/`nav.summary`/`nav.budget`/`nav.import`/`nav.settings`, consume them via `useT()` in `NavBar`, and replace the Suspense fallback literal `載入中…` with `t('common.loading')`. Add the `nav.*` keys (verbatim zh) to `pwa/src/i18n/zh.ts` + English to `pwa/src/i18n/en.ts`.
+- [X] T005 Migrate `pwa/src/components/SettingsSheet.tsx` chrome to `t()`: `設定 / Settings`→`settings.title`, `語系 / Language`→`settings.language`, `主題 / Theme`→`settings.theme`, `☀️ 淺色`→`settings.themeLight`, `🌙 深色`→`settings.themeDark`; the `中文`/`English` toggle labels stay as language self-names (key as `settings.langZh`/`settings.langEn`). Add keys to both catalogs.
 
 **Checkpoint**: toggling language in Settings re-labels the nav, settings sheet, and loading state live.
 
