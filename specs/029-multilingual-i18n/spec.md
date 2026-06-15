@@ -77,7 +77,7 @@ A user who has never chosen a language sees the app in Traditional Chinese, exac
 - **FR-001**: Users MUST be able to select their display language from the set of supported languages via the app's existing settings surface.
 - **FR-002**: System MUST persist the selected language on the device so the choice survives app restarts and sessions.
 - **FR-003**: System MUST apply a newly selected language to all static UI chrome without requiring a manual reload and without discarding the user's current screen or in-progress input.
-- **FR-004**: System MUST support Traditional Chinese (zh-TW) and English (en) at launch.
+- **FR-004**: System MUST support Traditional Chinese (zh-TW) and English (en) at launch. (The in-app/storage language code for Traditional Chinese is `zh` ≡ zh-TW — see plan.md D5; English is `en`.)
 - **FR-005**: When no language preference is stored, system MUST default to Traditional Chinese (zh-TW); the device/browser language MUST NOT be auto-detected to override this default.
 - **FR-006**: System MUST present every static UI string — including screen titles, navigation labels, buttons, form labels, input placeholders, validation messages, error messages, empty states, and confirmation/notification text — in the selected language.
 - **FR-007**: When a string has no translation in the selected language, system MUST fall back to the Traditional Chinese base text rather than displaying an empty value, a raw key, or broken text.

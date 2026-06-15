@@ -8,10 +8,18 @@ This is a front-end UI feature; the "contract" is the public surface of `pwa/src
 
 ### Types
 
+`Messages` / `MessageKey` are declared **in `zh.ts`** (next to the base catalog) so that
+`en.ts` can `import type { Messages } from './zh'` without creating an `index ↔ en`
+import cycle (`index.ts` imports the `en` *value*). `index.ts` re-exports them.
+
 ```ts
-// Derived from the zh base catalog — the single source of truth for the key set.
-export type Messages = typeof import('./zh').zh;
+// pwa/src/i18n/zh.ts — base catalog is the single source of truth for the key set
+export const zh = { /* 'common.loading': '載入中…', ... */ };
+export type Messages = typeof zh;
 export type MessageKey = keyof Messages;
+
+// pwa/src/i18n/index.ts — re-export the types + the params shape
+export type { Messages, MessageKey } from './zh';
 export type Params = Record<string, string | number>;
 ```
 
@@ -43,7 +51,7 @@ export function translate(lang: Lang, key: MessageKey, params?: Params): string;
 ### Catalog contract
 
 - `pwa/src/i18n/zh.ts` exports `zh` — the base catalog, the source of truth for `MessageKey`. Values are the **verbatim** current zh-TW strings (FR-008).
-- `pwa/src/i18n/en.ts` exports `en` typed as `const en: Messages` — guarantees **key parity** with zh at compile time (SC-002). A missing/renamed key fails the build.
+- `pwa/src/i18n/en.ts` does `import type { Messages } from './zh'` and exports `en` typed as `const en: Messages` — guarantees **key parity** with zh at compile time (SC-002). A missing/renamed key fails the build.
 - Keys are dotted-namespace strings grouped by area: `common.*`, `entry.*`, `summary.*`, `budget.*`, `import.*`, `settings.*` (+ component-scoped groups as needed).
 - **Only static UI chrome** belongs in the catalog; DB-sourced display content must not be keyed (FR-009).
 
