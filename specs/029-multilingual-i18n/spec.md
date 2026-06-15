@@ -5,6 +5,14 @@
 **Status**: Draft
 **Input**: User description: "Add multilingual / internationalization (i18n) support to the PWA. Today all UI strings are hardcoded in Traditional Chinese (zh-TW) throughout pwa/src with no i18n library. Introduce an i18n foundation so UI text can be served in multiple languages, extract existing hardcoded zh-TW strings into a message catalog, add at least English (en) alongside Traditional Chinese (zh-TW) as the initial baseline language, let the user switch language and have the choice persist across sessions, and default sensibly to the user's existing zh-TW experience."
 
+## Clarifications
+
+### Session 2026-06-15
+
+- Q: When switching to English, should database-sourced display content (category/subcategory names, descriptions, autocomplete) also be translated, or only static UI chrome? → A: Static UI chrome only — DB-sourced content stays in its stored (zh-TW) form.
+- Q: In English mode, should dates/numbers/currency reformat to English conventions, or keep current formatting in both languages? → A: Keep current formatting in both languages; only text strings translate.
+- Q: For a user who has never picked a language, how is the starting language decided? → A: Always default to zh-TW; no browser/device auto-detection.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Switch language and have it stick (Priority: P1)
@@ -70,7 +78,7 @@ A user who has never chosen a language sees the app in Traditional Chinese, exac
 - **FR-002**: System MUST persist the selected language on the device so the choice survives app restarts and sessions.
 - **FR-003**: System MUST apply a newly selected language to all static UI chrome without requiring a manual reload and without discarding the user's current screen or in-progress input.
 - **FR-004**: System MUST support Traditional Chinese (zh-TW) and English (en) at launch.
-- **FR-005**: When no language preference is stored, system MUST default to Traditional Chinese (zh-TW).
+- **FR-005**: When no language preference is stored, system MUST default to Traditional Chinese (zh-TW); the device/browser language MUST NOT be auto-detected to override this default.
 - **FR-006**: System MUST present every static UI string — including screen titles, navigation labels, buttons, form labels, input placeholders, validation messages, error messages, empty states, and confirmation/notification text — in the selected language.
 - **FR-007**: When a string has no translation in the selected language, system MUST fall back to the Traditional Chinese base text rather than displaying an empty value, a raw key, or broken text.
 - **FR-008**: System MUST keep the extracted Traditional Chinese strings identical in wording to the current app, so the default experience is visually unchanged.
