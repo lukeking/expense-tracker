@@ -4,6 +4,8 @@ import { AmbiguousInvoiceCard, type AmbiguousEntry, type MatchedDetail } from '.
 import { ManualLinkSheet, type UnmatchedInvoice, type ManualLinkInvoice, type ManualLinkSource } from '../components/ManualLinkSheet';
 import { ItemCategorySheet } from '../components/ItemCategorySheet';
 import { itemCategoryTag, effectiveItemCategory } from '../lib/itemCategory';
+import { useT } from '../i18n';
+import type { MessageKey } from '../i18n';
 
 interface LinkedInvoice {
   id: string;
@@ -39,10 +41,11 @@ interface ImportResult {
   skipped_unmatched_detail: UnmatchedInvoice[];
 }
 
-const CONFIDENCE_LABEL: Record<MatchedDetail['confidence'], string> = { exact: '同日', near: '鄰近' };
-const OUTCOME_LABEL: Record<MatchedDetail['items_outcome'], string> = { filled: '已填入', kept: '保留', replaced: '已取代' };
+const CONFIDENCE_LABEL_KEYS: Record<MatchedDetail['confidence'], MessageKey> = { exact: 'import.confExact', near: 'import.confNear' };
+const OUTCOME_LABEL_KEYS: Record<MatchedDetail['items_outcome'], MessageKey> = { filled: 'import.outcomeFilled', kept: 'import.outcomeKept', replaced: 'import.outcomeReplaced' };
 
 export function ImportScreen() {
+  const t = useT();
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
@@ -67,7 +70,7 @@ export function ImportScreen() {
   const isExpanded = (l: LinkedInvoice) => expanded[l.id] ?? (l.reviewed_at == null);
   const toggleExpanded = (id: string, open: boolean) => setExpanded((prev) => ({ ...prev, [id]: !open }));
 
-  // US1: the review queue shows only unacknowledged matches by default; 顯示已讀
+  // US1: the review queue shows only unacknowledged matches by default; the 'Show read' toggle
   // refetches with include_read=true to reveal acknowledged (still un-linkable) ones.
   async function loadLinked(includeRead = showRead) {
     try {
@@ -110,12 +113,12 @@ export function ImportScreen() {
     }
   }
 
-  // When 顯示已讀 is on, acknowledged rows stay visible (dimmed + badge) so we flip
+  // When 'Show read' is on, acknowledged rows stay visible (dimmed + badge) so we flip
   // reviewed_at in place; otherwise the row leaves the unread-only list.
   const NOW = () => new Date().toISOString();
 
-  // 改配對: detach the (wrong) transaction and send the invoice back to 待手動確認, where
-  // it can be re-linked without re-importing.
+  // Rematch: detach the (wrong) transaction and send the invoice back to the manual-confirm
+  // queue, where it can be re-linked without re-importing.
   async function handleRematch(invoiceId: string) {
     setRematching(invoiceId);
     try {
@@ -202,11 +205,11 @@ export function ImportScreen() {
       loadLinked();
     } catch (err) {
       if (err instanceof ApiError) {
-        if (err.code === 'INVALID_CSV') setError(`無效的 CSV 格式：${err.message}`);
-        else if (err.code === 'ROW_LIMIT_EXCEEDED') setError(`${err.message}（最多 1,000 筆）`);
+        if (err.code === 'INVALID_CSV') setError(t('import.invalidCsv', { msg: err.message }));
+        else if (err.code === 'ROW_LIMIT_EXCEEDED') setError(t('import.rowLimit', { msg: err.message }));
         else setError(err.message);
       } else {
-        setError('上傳失敗，請重試');
+        setError(t('import.uploadFailed'));
       }
     } finally {
       setLoading(false);
@@ -257,7 +260,7 @@ export function ImportScreen() {
   }
 
   // Feature 026: assign the chosen category to catTarget's item, then reflect the new
-  // tags locally so the ⚠ 未分類 flag updates without a refetch.
+  // tags locally so the uncategorized flag updates without a refetch.
   // Feature 027 (B2): mirror the server's collapse rule — picking the tx's own
   // category stores nothing (inherit), so the local state must do the same.
   async function handleAssignCategory(tag: string | null) {
@@ -301,28 +304,28 @@ export function ImportScreen() {
 
   const resultRows = result
     ? [
-        { label: '已配對（同日）', value: exactCount },
-        { label: '已配對（鄰近）', value: nearCount },
-        { label: '模糊待處理', value: ambiguous.length },
-        { label: '略過（未配對）', value: unmatched.length },
-        { label: '略過（重複）', value: result.skipped_duplicate },
-        { label: '略過（作廢）', value: result.skipped_voided },
-        { label: '略過（零額）', value: result.skipped_zero },
+        { label: t('import.rowMatchedExact'), value: exactCount },
+        { label: t('import.rowMatchedNear'), value: nearCount },
+        { label: t('import.rowAmbiguous'), value: ambiguous.length },
+        { label: t('import.rowSkipUnmatched'), value: unmatched.length },
+        { label: t('import.rowSkipDuplicate'), value: result.skipped_duplicate },
+        { label: t('import.rowSkipVoided'), value: result.skipped_voided },
+        { label: t('import.rowSkipZero'), value: result.skipped_zero },
       ]
     : [];
 
   return (
     <div className="flex flex-col gap-6 p-4 h-full overflow-y-auto">
       <div>
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">匯入電子發票 CSV</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">請上傳財政部電子發票整合服務平台匯出的 CSV 檔</p>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{t('import.title')}</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('import.subtitle')}</p>
       </div>
 
       {!result ? (
         <>
           <label className="flex flex-col items-center gap-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-8 cursor-pointer hover:border-blue-400 transition-colors">
             <span className="text-4xl">📂</span>
-            <span className="text-sm text-gray-600 dark:text-gray-300">{file ? file.name : '點擊選擇 CSV 檔案'}</span>
+            <span className="text-sm text-gray-600 dark:text-gray-300">{file ? file.name : t('import.pickFile')}</span>
             {file && <span className="text-xs text-gray-400 dark:text-gray-500">{(file.size / 1024).toFixed(1)} KB</span>}
             <input type="file" accept=".csv,text/csv" onChange={handleFileChange} className="hidden" />
           </label>
@@ -339,12 +342,12 @@ export function ImportScreen() {
             disabled={!file || loading}
             className="bg-blue-600 text-white rounded-xl py-3 font-semibold disabled:opacity-50"
           >
-            {loading ? '處理中…' : '上傳並處理'}
+            {loading ? t('common.processing') : t('import.uploadProcess')}
           </button>
 
           {ambiguous.length > 0 && (
             <div className="flex flex-col gap-3">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">待手動確認（{ambiguous.length}）</h3>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{t('import.pendingManual', { n: ambiguous.length })}</h3>
               {ambiguous.map((entry) => (
                 <AmbiguousInvoiceCard key={entry.id} entry={entry} onResolved={(r) => handleResolved(entry.id, r)} onManualLink={() => openAmbiguousLink(entry)} />
               ))}
@@ -353,7 +356,7 @@ export function ImportScreen() {
 
           <div className="flex flex-col gap-2">
             <div className="flex justify-between items-center gap-2">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">已配對發票（可解除）</h3>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{t('import.linkedInvoices')}</h3>
               <div className="flex items-center gap-2 shrink-0">
                 {linked.some((l) => !l.reviewed_at) && (
                   <button
@@ -362,7 +365,7 @@ export function ImportScreen() {
                     disabled={markingAll}
                     className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 disabled:opacity-50"
                   >
-                    {markingAll ? '處理中…' : '全部標為已讀'}
+                    {markingAll ? t('common.processing') : t('import.markAllRead')}
                   </button>
                 )}
                 <button
@@ -370,13 +373,13 @@ export function ImportScreen() {
                   onClick={toggleShowRead}
                   className={`text-xs px-2 py-1 rounded-lg border ${showRead ? 'border-blue-400 text-blue-600 dark:text-blue-400' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300'}`}
                 >
-                  顯示已讀
+                  {t('import.showRead')}
                 </button>
               </div>
             </div>
-            <p className="text-xs text-gray-400 dark:text-gray-500">若發票配對到錯誤的交易，可在此解除連結。已確認的可標為已讀以收起。</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500">{t('import.linkedHint')}</p>
             {linked.length === 0 ? (
-              <p className="text-xs text-gray-400 dark:text-gray-500">{showRead ? '沒有已配對的發票。' : '沒有未讀的已配對發票。'}</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">{showRead ? t('import.noMatchedAll') : t('import.noMatchedUnread')}</p>
             ) : (
               <div className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl overflow-hidden">
                 {linked.map((l) => {
@@ -387,14 +390,14 @@ export function ImportScreen() {
                   return (
                     <div key={l.id} className={`flex justify-between items-start gap-2 px-4 py-3 border-b border-gray-50 dark:border-gray-700 last:border-0 ${l.reviewed_at ? 'opacity-60' : ''}`}>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm text-gray-800 dark:text-gray-100 truncate">{l.seller_name || '未知商家'}</p>
+                        <p className="text-sm text-gray-800 dark:text-gray-100 truncate">{l.seller_name || t('import.unknownSeller')}</p>
                         <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
                           {l.invoice_number} · NT${l.net_amount.toLocaleString()} · {l.invoice_date}
                         </p>
 
                         {open && hasInvoiceItems && (
                           <div className="mt-1.5">
-                            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">發票品項</p>
+                            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{t('import.invoiceItems')}</p>
                             {l.items!.map((i, idx) => (
                               <div key={idx} className="flex justify-between gap-2 text-xs text-gray-400 dark:text-gray-500">
                                 <span className="truncate">{i.name}</span>
@@ -404,10 +407,10 @@ export function ImportScreen() {
                             {l.allowance > 0 && (
                               <>
                                 <div className="flex justify-between gap-2 text-xs text-gray-400 dark:text-gray-500">
-                                  <span>折讓</span><span className="shrink-0">−{l.allowance.toLocaleString()}</span>
+                                  <span>{t('import.allowance')}</span><span className="shrink-0">−{l.allowance.toLocaleString()}</span>
                                 </div>
                                 <div className="flex justify-between gap-2 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-700 mt-0.5 pt-0.5">
-                                  <span>淨額</span><span className="shrink-0">{l.net_amount.toLocaleString()}</span>
+                                  <span>{t('import.netAmount')}</span><span className="shrink-0">{l.net_amount.toLocaleString()}</span>
                                 </div>
                               </>
                             )}
@@ -416,7 +419,7 @@ export function ImportScreen() {
 
                         {l.transaction && (
                           <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
-                            → 交易 NT${l.transaction.amount.toLocaleString()}
+                            → {t('import.transaction')} NT${l.transaction.amount.toLocaleString()}
                             {l.transaction.tags.length > 0 ? ` · ${l.transaction.tags.join('/')}` : ''}
                             {l.transaction.note ? ` · ${l.transaction.note}` : ''}
                           </p>
@@ -424,11 +427,11 @@ export function ImportScreen() {
 
                         {open && hasTxItems && (
                           <div className="mt-1">
-                            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">交易品項</p>
+                            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{t('import.txItems')}</p>
                             {l.transaction!.items.map((i) => {
                               const cat = itemCategoryTag(i);
-                              // B2 (FR-011): blue = own decision (override / sentinel-as-其他),
-                              // pale gray = inherited live from the tx, amber ⚠ = no decision.
+                              // B2 (FR-011): blue = own decision (override / sentinel-as-'Other'),
+                              // pale gray = inherited live from the tx, amber = no decision.
                               const eff = effectiveItemCategory(i, l.transaction!);
                               return (
                                 <button
@@ -449,7 +452,7 @@ export function ImportScreen() {
                                     ) : eff.source === 'inherited' ? (
                                       <span className="text-gray-300 dark:text-gray-600"> #{eff.tag}</span>
                                     ) : (
-                                      <span className="text-amber-600 dark:text-amber-400"> ⚠ 未分類</span>
+                                      <span className="text-amber-600 dark:text-amber-400">{t('summary.uncategorized')}</span>
                                     )}
                                   </span>
                                   <span className="shrink-0 text-gray-400 dark:text-gray-500">{i.amount != null ? i.amount.toLocaleString() : '—'}</span>
@@ -465,14 +468,14 @@ export function ImportScreen() {
                             onClick={() => toggleExpanded(l.id, open)}
                             className="text-xs text-blue-600 dark:text-blue-400 mt-1.5"
                           >
-                            {open ? '收合 ▴' : '展開 ▾'}
+                            {open ? t('import.collapse') : t('import.expand')}
                           </button>
                         )}
                       </div>
 
                       <div className="flex flex-col items-end gap-1 shrink-0">
                         {l.reviewed_at ? (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">✓ 已讀</span>
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">{t('import.readBadge')}</span>
                         ) : (
                           <button
                             type="button"
@@ -480,7 +483,7 @@ export function ImportScreen() {
                             disabled={markingRead === l.id}
                             className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 disabled:opacity-50"
                           >
-                            {markingRead === l.id ? '處理中…' : '已讀'}
+                            {markingRead === l.id ? t('common.processing') : t('import.markRead')}
                           </button>
                         )}
                         <button
@@ -489,7 +492,7 @@ export function ImportScreen() {
                           disabled={rematching === l.id}
                           className="text-xs px-3 py-1.5 rounded-lg border border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400 disabled:opacity-50"
                         >
-                          {rematching === l.id ? '處理中…' : '改配對'}
+                          {rematching === l.id ? t('common.processing') : t('import.rematch')}
                         </button>
                         <button
                           type="button"
@@ -497,7 +500,7 @@ export function ImportScreen() {
                           disabled={unlinking === l.id}
                           className="text-xs px-3 py-1.5 rounded-lg border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 disabled:opacity-50"
                         >
-                          {unlinking === l.id ? '解除中…' : '解除'}
+                          {unlinking === l.id ? t('import.unlinking') : t('import.unlink')}
                         </button>
                       </div>
                     </div>
@@ -510,7 +513,7 @@ export function ImportScreen() {
       ) : (
         <>
           <div className="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-xl p-4">
-            <p className="text-sm font-medium text-green-800 dark:text-green-300 mb-1">匯入完成</p>
+            <p className="text-sm font-medium text-green-800 dark:text-green-300 mb-1">{t('import.importComplete')}</p>
             <p className="text-xs text-green-600 dark:text-green-400 truncate">{result.filename}</p>
           </div>
 
@@ -527,7 +530,7 @@ export function ImportScreen() {
 
           {ambiguous.length > 0 && (
             <div className="flex flex-col gap-3">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">待手動確認（{ambiguous.length}）</h3>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{t('import.pendingManual', { n: ambiguous.length })}</h3>
               {ambiguous.map((entry) => (
                 <AmbiguousInvoiceCard key={entry.id} entry={entry} onResolved={(r) => handleResolved(entry.id, r)} onManualLink={() => openAmbiguousLink(entry)} />
               ))}
@@ -536,17 +539,17 @@ export function ImportScreen() {
 
           {matched.length > 0 && (
             <div className="flex flex-col gap-2">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">已配對（{matched.length}）</h3>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{t('import.matchedCount', { n: matched.length })}</h3>
               <div className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl overflow-hidden">
                 {matched.map((m) => (
                   <div key={m.invoice_number} className="flex justify-between items-center px-4 py-3 border-b border-gray-50 dark:border-gray-700 last:border-0">
                     <div className="min-w-0">
-                      <p className="text-sm text-gray-800 dark:text-gray-100 truncate">{m.seller_name || '未知商家'}</p>
+                      <p className="text-sm text-gray-800 dark:text-gray-100 truncate">{m.seller_name || t('import.unknownSeller')}</p>
                       <p className="text-xs text-gray-400 dark:text-gray-500">{m.invoice_number} · NT${m.amount.toLocaleString()}</p>
                     </div>
                     <div className="text-right shrink-0 ml-2">
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">{CONFIDENCE_LABEL[m.confidence]}</span>
-                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">項目{OUTCOME_LABEL[m.items_outcome]}</p>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">{t(CONFIDENCE_LABEL_KEYS[m.confidence])}</span>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{t('import.itemPrefix')}{t(OUTCOME_LABEL_KEYS[m.items_outcome])}</p>
                     </div>
                   </div>
                 ))}
@@ -556,13 +559,13 @@ export function ImportScreen() {
 
           {unmatched.length > 0 && (
             <div className="flex flex-col gap-2">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">略過·未配對（{unmatched.length}）</h3>
-              <p className="text-xs text-gray-400 dark:text-gray-500">找不到金額與日期相符的交易。可手動連結到既有交易（否則不會被儲存）。</p>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{t('import.skipUnmatchedCount', { n: unmatched.length })}</h3>
+              <p className="text-xs text-gray-400 dark:text-gray-500">{t('import.unmatchedHint')}</p>
               <div className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl overflow-hidden">
                 {unmatched.map((u) => (
                   <div key={u.invoice_number} className="flex justify-between items-center gap-2 px-4 py-3 border-b border-gray-50 dark:border-gray-700 last:border-0">
                     <div className="min-w-0">
-                      <p className="text-sm text-gray-800 dark:text-gray-100 truncate">{u.seller_name || '未知商家'}</p>
+                      <p className="text-sm text-gray-800 dark:text-gray-100 truncate">{u.seller_name || t('import.unknownSeller')}</p>
                       <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
                         {u.invoice_number} · NT${u.net_amount.toLocaleString()} · {u.invoice_date.slice(0, 10)}
                       </p>
@@ -572,7 +575,7 @@ export function ImportScreen() {
                       onClick={() => openUnmatchedLink(u)}
                       className="shrink-0 text-xs px-3 py-1.5 rounded-lg border border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400"
                     >
-                      手動連結
+                      {t('import.manualLink')}
                     </button>
                   </div>
                 ))}
@@ -585,7 +588,7 @@ export function ImportScreen() {
             onClick={reset}
             className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-xl py-3 font-medium"
           >
-            再次匯入
+            {t('import.importAgain')}
           </button>
         </>
       )}
