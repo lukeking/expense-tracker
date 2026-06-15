@@ -3,6 +3,16 @@ import { createContext, useContext, useEffect, useState } from 'react';
 export type Theme = 'light' | 'dark';
 export type Lang = 'zh' | 'en';
 
+// The supported display languages. `zh` ≡ Traditional Chinese (zh-TW); `en` ≡ English.
+export const SUPPORTED_LANGS: Lang[] = ['zh', 'en'];
+
+// Resolve the startup language: a valid stored choice, else default to zh (FR-005).
+// An absent or unrecognized stored value falls back to zh — no browser auto-detection.
+function resolveStoredLang(): Lang {
+  const stored = localStorage.getItem('lang');
+  return stored !== null && (SUPPORTED_LANGS as string[]).includes(stored) ? (stored as Lang) : 'zh';
+}
+
 interface Settings {
   theme: Theme;
   lang: Lang;
@@ -21,9 +31,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(
     () => (localStorage.getItem('theme') as Theme | null) ?? 'light'
   );
-  const [lang, setLangState] = useState<Lang>(
-    () => (localStorage.getItem('lang') as Lang | null) ?? 'zh'
-  );
+  const [lang, setLangState] = useState<Lang>(resolveStoredLang);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');

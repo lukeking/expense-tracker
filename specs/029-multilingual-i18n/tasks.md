@@ -55,7 +55,7 @@ description: "Task list for 029-multilingual-i18n"
 
 - [X] T006 [US1] Migrate `pwa/src/screens/EntryScreen.tsx` (~31 zh lines): replace every static chrome literal with `t('entry.*')`, using `t(key, { ... })` for strings that embed values. Add the `entry.*` keys verbatim to `pwa/src/i18n/zh.ts` and English to `pwa/src/i18n/en.ts`. Leave any API/DB-derived text (category/description values) untranslated.
 - [X] T007 [US1] Migrate the components EntryScreen renders on the add path to `t()` — for each file EntryScreen imports (e.g. `pwa/src/components/CategoryPicker.tsx`, `pwa/src/components/PaymentPills.tsx`, `pwa/src/components/TagInput.tsx`, `pwa/src/components/DescriptionSuggest.tsx`), replace chrome literals and add `entry.*`/`common.*` keys to both catalogs. (Components shared with other screens but first reached here are migrated now; later phases only add missing keys.)
-- [ ] T008 [US1] Verify the US1 loop end-to-end: language toggle updates EntryScreen + nav instantly (no reload, input preserved), the choice persists across an app reload via existing `localStorage['lang']`, and switching back to `中文` restores exact wording. Run the existing default-zh E2E (`cd e2e && pnpm test`) to confirm no regression.
+- [X] T008 [US1] Verify the US1 loop end-to-end: language toggle updates EntryScreen + nav instantly (no reload, input preserved), the choice persists across an app reload via existing `localStorage['lang']`, and switching back to `中文` restores exact wording. Run the existing default-zh E2E (`cd e2e && pnpm test`) to confirm no regression.
 
 **Checkpoint**: MVP — language switch observably works on the core flow and persists. Deployable.
 
@@ -87,8 +87,8 @@ description: "Task list for 029-multilingual-i18n"
 
 **Independent Test**: Clear `localStorage['lang']` and open the app → zh. Set it to `en` → opens in English. Set it to garbage → falls back to zh.
 
-- [ ] T016 [US3] Harden language resolution in `pwa/src/context/SettingsContext.tsx`: validate the stored `localStorage['lang']` against the supported codes and fall back to `'zh'` when the value is absent or unrecognized (FR-005, spec Edge Case). Keep default `'zh'`; do **not** add browser/device auto-detection.
-- [ ] T017 [US3] Verify resolution: fresh state (no `lang` key) opens in zh; stored `en` is honored on load; an invalid stored value falls back to zh. (Manual via devtools localStorage; existing default-zh E2E continues to pass.)
+- [X] T016 [US3] Harden language resolution in `pwa/src/context/SettingsContext.tsx`: validate the stored `localStorage['lang']` against the supported codes and fall back to `'zh'` when the value is absent or unrecognized (FR-005, spec Edge Case). Keep default `'zh'`; do **not** add browser/device auto-detection.
+- [X] T017 [US3] Verify resolution: fresh state (no `lang` key) opens in zh; stored `en` is honored on load; an invalid stored value falls back to zh. (Manual via devtools localStorage; existing default-zh E2E continues to pass.)
 
 **Checkpoint**: first-run and stored-preference resolution locked to spec.
 
@@ -98,8 +98,8 @@ description: "Task list for 029-multilingual-i18n"
 
 **Purpose**: Real-browser regression guard and final verification.
 
-- [ ] T018 [P] Add an English-mode E2E smoke in `e2e/tests/i18n-language.spec.ts`: seed `localStorage['lang']='en'` before load, then assert a known label renders in English (e.g. nav "Entry"). Leave the existing default-zh specs untouched.
-- [ ] T019 Run the full `quickstart.md` verification: `pnpm exec tsc --noEmit`, `pnpm run i18n:check`, and `cd e2e && pnpm test` (zh default + en smoke) all green.
+- [X] T018 [P] Add an English-mode E2E smoke in `e2e/tests/i18n-language.spec.ts`: seed `localStorage['lang']='en'` before load, then assert a known label renders in English (e.g. nav "Entry"). Leave the existing default-zh specs untouched.
+- [X] T019 Run the full `quickstart.md` verification: `pnpm exec tsc --noEmit`, `pnpm run i18n:check`, and `cd e2e && pnpm test` (zh default + en smoke) all green.
 
 ---
 
