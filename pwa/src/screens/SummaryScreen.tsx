@@ -11,10 +11,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { ItemCategorySheet } from '../components/ItemCategorySheet';
 import { assignItemCategory } from '../api/client';
 import { itemCategoryTag, effectiveItemCategory } from '../lib/itemCategory';
+import { useT } from '../i18n';
 
 const COLOURS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
 
-// 全部 doesn't bulk-load transactions, so its payment-method chips come from this full
+// The all-time view doesn't bulk-load transactions, so its payment-method chips come from this full
 // list rather than being derived from the in-view rows (as week/month/year do).
 const ALL_PAYMENT_METHODS = ['credit_card', 'cash', 'easy_card', 'prepaid_wallet', 'bank_account'];
 
@@ -64,6 +65,7 @@ function txLabel(tx: TxRecord): string {
 
 function TxEntry({ tx, parentMap, onEdit }: { tx: TxRecord; parentMap: Map<string, TxRecord>; onEdit?: (id: string) => void }) {
   const qc = useQueryClient();
+  const t = useT();
   // Feature 026: the item being categorized inline from the Summary list.
   const [catItem, setCatItem] = useState<{ itemId: string; value: string | null } | null>(null);
   const canCategorize = tx.transaction_type === 'expense';
@@ -73,7 +75,7 @@ function TxEntry({ tx, parentMap, onEdit }: { tx: TxRecord; parentMap: Map<strin
     if (!catItem) return;
     try {
       await assignItemCategory(tx.id, catItem.itemId, catTag);
-      // Re-aggregate: the item's spend moves between 其他 and its category.
+      // Re-aggregate: the item's spend moves between the 'Other' bucket and its category.
       for (const key of ['summary', 'subcategories', 'transactions', 'tx-month']) {
         qc.invalidateQueries({ queryKey: [key] });
       }
@@ -95,7 +97,7 @@ function TxEntry({ tx, parentMap, onEdit }: { tx: TxRecord; parentMap: Map<strin
               type="button"
               onClick={(e) => { e.stopPropagation(); onEdit(tx.id); }}
               className="text-xs text-blue-500 hover:text-blue-700"
-              aria-label="編輯"
+              aria-label={t('common.edit')}
             >
               ✏
             </button>
@@ -109,8 +111,10 @@ function TxEntry({ tx, parentMap, onEdit }: { tx: TxRecord; parentMap: Map<strin
         <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
           ↳ {parentMap.has(tx.parent_transaction_id)
             ? `${txLabel(parentMap.get(tx.parent_transaction_id)!)} ${formatMoney(parentMap.get(tx.parent_transaction_id)!.amount)}`
-            : '已連結原始交易'}
-          {' · '}於 {localDt(tx.created_at)} 實際{tx.transaction_type === 'refund' ? '退款' : '計費'}
+            : t('summary.linkedOriginal')}
+          {' · '}{tx.transaction_type === 'refund'
+            ? t('summary.actualRefund', { date: localDt(tx.created_at) })
+            : t('summary.actualCharge', { date: localDt(tx.created_at) })}
         </p>
       )}
       {tx.items.length > 0 && (
@@ -118,7 +122,7 @@ function TxEntry({ tx, parentMap, onEdit }: { tx: TxRecord; parentMap: Map<strin
           {tx.items.map((item) => {
             const cat = itemCategoryTag(item);
             // B2 (FR-011): show the effective category — blue = own decision
-            // (override / sentinel-as-其他), pale gray = inherited live from the tx,
+            // (override / sentinel-as-'Other'), pale gray = inherited live from the tx,
             // amber ⚠ = no decision anywhere.
             const eff = effectiveItemCategory(item, tx);
             const inner = (
@@ -130,7 +134,7 @@ function TxEntry({ tx, parentMap, onEdit }: { tx: TxRecord; parentMap: Map<strin
                   ) : eff.source === 'inherited' ? (
                     <span className="text-gray-300 dark:text-gray-600"> #{eff.tag}</span>
                   ) : canCategorize ? (
-                    <span className="text-amber-600 dark:text-amber-400"> ⚠ 未分類</span>
+                    <span className="text-amber-600 dark:text-amber-400">{t('summary.uncategorized')}</span>
                   ) : null}
                 </span>
                 {item.amount !== null && <span className="text-gray-400 dark:text-gray-500">NT${item.amount}</span>}
@@ -225,6 +229,7 @@ function HistoryGroup({ label, items, parentMap, showDateSubs, onEdit }: { label
 }
 
 function LazyHistoryGroup({ period, onEdit }: { period: PeriodData; onEdit?: (id: string) => void }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const { data: txData, isLoading } = useMonthTransactions(period.from_date, period.to_date, open);
 
@@ -254,7 +259,7 @@ function LazyHistoryGroup({ period, onEdit }: { period: PeriodData; onEdit?: (id
       {open && (
         <div className="pb-2">
           {isLoading
-            ? <div className="px-4 py-2 text-sm text-gray-400 dark:text-gray-500">載入中…</div>
+            ? <div className="px-4 py-2 text-sm text-gray-400 dark:text-gray-500">{t('common.loading')}</div>
             : dateGroups.map(([d, txs]) => <DateSubGroup key={d} dateLabel={d} items={txs} parentMap={parentMap} onEdit={onEdit} />)}
         </div>
       )}
@@ -263,6 +268,7 @@ function LazyHistoryGroup({ period, onEdit }: { period: PeriodData; onEdit?: (id
 }
 
 export function SummaryScreen() {
+  const t = useT();
   const [timeBase, setTimeBase] = useState<TimeBase>('week');
   const [offset, setOffset] = useState(0);
   const [tag, setTag] = useState<string | null>(null);
@@ -299,7 +305,7 @@ export function SummaryScreen() {
   const { data: periods } = useTransactionPeriods(timeBase);
 
   // Filter-bar chips. week/month/year derive them from the period's transactions;
-  // 全部 (which doesn't bulk-load transactions) uses the lightweight /tags endpoint
+  // the all-time view (which doesn't bulk-load transactions) uses the lightweight /tags endpoint
   // plus the full payment-method list.
   const { data: allPlainTags } = useTags();
   const { data: allTxData } = useTransactions(timeBase, offset);
@@ -322,7 +328,7 @@ export function SummaryScreen() {
     return Array.from(new Set(txs.map((tx) => tx.payment_method))).sort();
   }, [timeBase, allTxData]);
 
-  // Under 全部, an active filter/drilldown switches the history from the lazy per-period
+  // Under the all-time view, an active filter/drilldown switches the history from the lazy per-period
   // list to a single filtered, month-grouped list.
   const allFiltered = timeBase === 'all' && (!!tag || !!paymentMethod || !!drilldown);
 
@@ -364,13 +370,13 @@ export function SummaryScreen() {
         <div>
           <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-100 dark:border-gray-700">
             <button type="button" onClick={() => setDrilldown(null)} className="text-blue-600 text-sm">
-              ← 返回
+              {t('common.back')}
             </button>
             <span className="font-semibold text-gray-800 dark:text-gray-100">{drilldown}</span>
             {subData && <span className="ml-auto text-sm text-gray-500 dark:text-gray-400">{formatMoney(subData.total)}</span>}
           </div>
           {subLoading ? (
-            <div className="p-8 text-center text-gray-400 dark:text-gray-500">載入中…</div>
+            <div className="p-8 text-center text-gray-400 dark:text-gray-500">{t('common.loading')}</div>
           ) : subData && subData.subcategories.length > 0 ? (
             <div className="px-4 py-3">
               <ResponsiveContainer width="100%" height={subData.subcategories.length * 44}>
@@ -387,20 +393,20 @@ export function SummaryScreen() {
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="p-8 text-center text-gray-400 dark:text-gray-500">此期間無子分類資料</div>
+            <div className="p-8 text-center text-gray-400 dark:text-gray-500">{t('summary.noSubcategoryData')}</div>
           )}
         </div>
       ) : (
         /* ── Main view ── */
         <div>
           {summaryLoading ? (
-            <div className="p-8 text-center text-gray-400 dark:text-gray-500">載入中…</div>
+            <div className="p-8 text-center text-gray-400 dark:text-gray-500">{t('common.loading')}</div>
           ) : !summaryData || summaryData.categories.length === 0 ? (
-            <div className="p-8 text-center text-gray-400 dark:text-gray-500">此期間無支出記錄</div>
+            <div className="p-8 text-center text-gray-400 dark:text-gray-500">{t('summary.noExpenses')}</div>
           ) : (
             <>
               <div className="text-center py-2">
-                <span className="text-xs text-gray-500 dark:text-gray-400">總計</span>
+                <span className="text-xs text-gray-500 dark:text-gray-400">{t('summary.total')}</span>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatMoney(summaryData.grand_total)}</p>
               </div>
               <ResponsiveContainer width="100%" height={240}>
@@ -446,16 +452,16 @@ export function SummaryScreen() {
       {/* Transaction history */}
       <div className="border-t border-gray-100 dark:border-gray-700">
         <div className="px-4 py-2">
-          <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">交易記錄</span>
+          <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">{t('summary.txHistory')}</span>
         </div>
         {timeBase === 'all' && !allFiltered ? (
           periods === undefined
-            ? <div className="p-4 text-center text-gray-400 dark:text-gray-500 text-sm">載入中…</div>
+            ? <div className="p-4 text-center text-gray-400 dark:text-gray-500 text-sm">{t('common.loading')}</div>
             : periods.length === 0
-              ? <p className="text-center text-gray-400 dark:text-gray-500 text-sm py-4">此期間無交易</p>
+              ? <p className="text-center text-gray-400 dark:text-gray-500 text-sm py-4">{t('summary.noTransactions')}</p>
               : periods.map((p) => <LazyHistoryGroup key={p.period} period={p} onEdit={setEditingTxId} />)
         ) : groups.length === 0 ? (
-          <p className="text-center text-gray-400 dark:text-gray-500 text-sm py-4">此期間無交易</p>
+          <p className="text-center text-gray-400 dark:text-gray-500 text-sm py-4">{t('summary.noTransactions')}</p>
         ) : (
           groups.map((g) => (
             <HistoryGroup

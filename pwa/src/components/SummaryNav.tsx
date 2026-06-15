@@ -1,5 +1,7 @@
 import type { TimeBase } from '../hooks/useSummary';
 import { timeBaseToRange } from '../hooks/useSummary';
+import { useT } from '../i18n';
+import type { MessageKey } from '../i18n';
 
 interface SummaryNavProps {
   timeBase: TimeBase;
@@ -9,14 +11,15 @@ interface SummaryNavProps {
   onPickerOpen: () => void;
 }
 
-const TABS: { value: TimeBase; label: string }[] = [
-  { value: 'week', label: '週' },
-  { value: 'month', label: '月' },
-  { value: 'year', label: '年' },
-  { value: 'all', label: '全部' },
+const TABS: { value: TimeBase; labelKey: MessageKey }[] = [
+  { value: 'week', labelKey: 'summary.tabWeek' },
+  { value: 'month', labelKey: 'summary.tabMonth' },
+  { value: 'year', labelKey: 'summary.tabYear' },
+  { value: 'all', labelKey: 'summary.tabAll' },
 ];
 
 export function SummaryNav({ timeBase, offset, onTimeBaseChange, onNavigate, onPickerOpen }: SummaryNavProps) {
+  const t = useT();
   const { label } = timeBaseToRange(timeBase, offset);
   const atPresent = offset === 0;
 
@@ -35,19 +38,19 @@ export function SummaryNav({ timeBase, offset, onTimeBaseChange, onNavigate, onP
                 : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600'
             }`}
           >
-            {tab.label}
+            {t(tab.labelKey)}
           </button>
         ))}
       </div>
 
-      {/* Navigation row — hidden in 全部 mode */}
+      {/* Navigation row — hidden in all-time mode */}
       {timeBase !== 'all' && (
         <div className="flex items-center justify-between">
           <button
             type="button"
             onClick={() => onNavigate(-1)}
             className="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100"
-            aria-label="上一期"
+            aria-label={t('summary.prevPeriod')}
           >
             ◀
           </button>
@@ -55,7 +58,7 @@ export function SummaryNav({ timeBase, offset, onTimeBaseChange, onNavigate, onP
             type="button"
             onClick={onPickerOpen}
             className="flex-1 text-center text-sm font-semibold text-gray-800 dark:text-gray-100 py-1"
-            aria-label="選擇期間"
+            aria-label={t('summary.selectPeriod')}
           >
             {label}
           </button>
@@ -64,7 +67,7 @@ export function SummaryNav({ timeBase, offset, onTimeBaseChange, onNavigate, onP
             onClick={() => onNavigate(1)}
             disabled={atPresent}
             className={`p-2 transition-opacity ${atPresent ? 'opacity-30 pointer-events-none' : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100'}`}
-            aria-label="下一期"
+            aria-label={t('summary.nextPeriod')}
           >
             ▶
           </button>

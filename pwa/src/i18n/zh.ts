@@ -76,6 +76,30 @@ export const zh = {
   'parentSearch.noResults90': '近90天無結果',
   'parentSearch.searchEarlier': '搜尋更早的交易',
   'parentSearch.noNote': '(無備註)',
+
+  'common.back': '← 返回',
+  'common.edit': '編輯',
+
+  'summary.tabWeek': '週',
+  'summary.tabMonth': '月',
+  'summary.tabYear': '年',
+  'summary.tabAll': '全部',
+  'summary.prevPeriod': '上一期',
+  'summary.nextPeriod': '下一期',
+  'summary.selectPeriod': '選擇期間',
+  'summary.total': '總計',
+  'summary.txHistory': '交易記錄',
+  'summary.noExpenses': '此期間無支出記錄',
+  'summary.noSubcategoryData': '此期間無子分類資料',
+  'summary.noTransactions': '此期間無交易',
+  'summary.uncategorized': ' ⚠ 未分類',
+  'summary.linkedOriginal': '已連結原始交易',
+  'summary.actualRefund': '於 {date} 實際退款',
+  'summary.actualCharge': '於 {date} 實際計費',
+
+  'filter.searchTags': '搜尋標籤…',
+  'filter.noMatchingTags': '無符合標籤',
+  'payment.prepaidWalletShort': '儲值卡',
 };
 
 export type Messages = typeof zh;

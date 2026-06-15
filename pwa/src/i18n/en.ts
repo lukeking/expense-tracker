@@ -76,4 +76,28 @@ export const en: Messages = {
   'parentSearch.noResults90': 'No results in the last 90 days',
   'parentSearch.searchEarlier': 'Search earlier transactions',
   'parentSearch.noNote': '(no note)',
+
+  'common.back': '← Back',
+  'common.edit': 'Edit',
+
+  'summary.tabWeek': 'Week',
+  'summary.tabMonth': 'Month',
+  'summary.tabYear': 'Year',
+  'summary.tabAll': 'All',
+  'summary.prevPeriod': 'Previous period',
+  'summary.nextPeriod': 'Next period',
+  'summary.selectPeriod': 'Select period',
+  'summary.total': 'Total',
+  'summary.txHistory': 'Transactions',
+  'summary.noExpenses': 'No expenses this period',
+  'summary.noSubcategoryData': 'No subcategory data this period',
+  'summary.noTransactions': 'No transactions this period',
+  'summary.uncategorized': ' ⚠ Uncategorized',
+  'summary.linkedOriginal': 'Linked to original transaction',
+  'summary.actualRefund': 'refunded on {date}',
+  'summary.actualCharge': 'charged on {date}',
+
+  'filter.searchTags': 'Search tags…',
+  'filter.noMatchingTags': 'No matching tags',
+  'payment.prepaidWalletShort': 'Stored-value card',
 };
