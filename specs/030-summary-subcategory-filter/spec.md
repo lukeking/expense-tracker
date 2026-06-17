@@ -5,6 +5,13 @@
 **Status**: Draft  
 **Input**: User description: "在 summary 畫面，點擊圓餅圖隨便一個 major category，進入該分類的 summary 畫面，上方長條圖都是該 major category 底下的 subcategory，下面的 tx 也都是 filter 過的結果，但點擊長條圖只會顯示 Total tip，底下的 tx 並不會進一步 filter，我希望改成這邊可以做第二層的 subcategory filter"
 
+## Clarifications
+
+### Session 2026-06-17
+
+- Q: How should the user clear an active subcategory filter from within the drilldown? → A: Both — tapping the active bar again (toggle) **and** a dedicated clear control.
+- Q: When a subcategory is selected, what should the drilldown header total show? → A: The selected subcategory's total (with breadcrumb Major › Sub), reverting to the major total when cleared.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Filter transactions by tapping a subcategory bar (Priority: P1)
@@ -29,12 +36,13 @@ After narrowing the list to one subcategory, the user wants to go back to seeing
 
 **Why this priority**: A filter that cannot be cleared in place is frustrating and traps the user. It is required for the feature to feel complete, but US1 still demonstrates the core value without it.
 
-**Independent Test**: With a subcategory filter active, perform the clear action and confirm the transaction list returns to showing all transactions for the major category.
+**Independent Test**: With a subcategory filter active, perform either clear action (re-tap the active bar, or use the dedicated clear control) and confirm the transaction list returns to showing all transactions for the major category.
 
 **Acceptance Scenarios**:
 
 1. **Given** a subcategory filter is active, **When** the user taps the currently selected (active) subcategory bar again, **Then** the subcategory filter clears and the list returns to the full major-category transaction list.
-2. **Given** a subcategory filter is active, **When** the user taps "back" to return to the pie chart and then drills into any major category, **Then** no subcategory filter is active in the new drilldown.
+2. **Given** a subcategory filter is active, **When** the user taps the dedicated clear control, **Then** the subcategory filter clears and the list returns to the full major-category transaction list.
+3. **Given** a subcategory filter is active, **When** the user taps "back" to return to the pie chart and then drills into any major category, **Then** no subcategory filter is active in the new drilldown.
 
 ---
 
@@ -49,7 +57,7 @@ The user can tell at a glance which subcategory the transaction list is currentl
 **Acceptance Scenarios**:
 
 1. **Given** a subcategory filter is active, **When** the user looks at the drilldown view, **Then** the selected subcategory is visually distinguished from the unselected subcategories.
-2. **Given** a subcategory filter is active, **When** the user looks at the drilldown header, **Then** it indicates the active subcategory (and its total) in addition to the major category.
+2. **Given** a subcategory filter is active, **When** the user looks at the drilldown header, **Then** it shows a breadcrumb (Major › Subcategory) and the headline total is the selected subcategory's total; **When** the filter is cleared, **Then** the header reverts to the major category and its total.
 
 ---
 
@@ -71,10 +79,10 @@ The user can tell at a glance which subcategory the transaction list is currentl
 - **FR-003**: Selecting a different subcategory bar MUST replace the active subcategory selection (selections do not stack); only one subcategory filter is active at a time.
 - **FR-004**: The subcategory filter MUST compose (AND) with the already-active major category, the selected time period/time base, and any active tag and payment-method filters — consistent with how the major-category drilldown already filters the list.
 - **FR-005**: The transactions listed for a selected subcategory MUST be consistent with that subcategory's bar total — i.e. the net sum of the listed transactions equals the value shown on the bar — including for the `其他`/Other bucket.
-- **FR-006**: Users MUST be able to clear the active subcategory filter from within the drilldown view (without navigating back to the pie chart) and return to the full major-category transaction list.
+- **FR-006**: Users MUST be able to clear the active subcategory filter from within the drilldown view (without navigating back to the pie chart) and return to the full major-category transaction list, via **both** of: (a) tapping the currently selected bar again (toggle), and (b) a dedicated clear control shown while a subcategory is selected.
 - **FR-007**: The system MUST reset any active subcategory selection when the user leaves the drilldown (returns to the pie chart), drills into a different major category, changes the time period, or switches the time base.
 - **FR-008**: The system MUST visually indicate which subcategory is currently selected, distinguishing it from the unselected subcategories.
-- **FR-009**: The drilldown header MUST reflect the active subcategory selection (name and total) in addition to the major category, and revert to the major-category-only header when the selection is cleared.
+- **FR-009**: While a subcategory is selected, the drilldown header MUST show a breadcrumb (major category › subcategory) and display the **selected subcategory's total** as the headline figure; when the selection is cleared, the header MUST revert to the major category alone with the major-category total.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -95,7 +103,7 @@ The user can tell at a glance which subcategory the transaction list is currentl
 
 - **Scope is the PWA Summary screen only.** This is a client-side interaction change on the existing major-category drilldown; the existing transaction-listing capability is reused. No new screen is introduced.
 - **No backend change is required.** The existing transaction list already supports filtering by a category value that matches an exact tag or a `major:` prefix, so a `major:subcategory` value can drive the second-level filter. The `其他`/Other bucket (FR-005) is the one case that may need special handling to stay consistent with the bar total; this is resolved at planning time, not a scope question.
-- **Clear mechanism = tapping the active bar again** (toggle), in addition to the implicit reset on leaving/changing the drilldown context (FR-007). This is the assumed default; an explicit separate "clear" control is not assumed.
-- **Header shows a breadcrumb-style indication** (major category › subcategory + the subcategory total) when a subcategory is selected. The exact visual treatment is finalized at planning time (a UI mockup will be presented before implementation, per project convention for non-trivial UI changes).
+- **Clear mechanism** (resolved in Clarifications): both tapping the active bar again (toggle) and a dedicated clear control, in addition to the implicit reset on leaving/changing the drilldown context (FR-007).
+- **Header total** (resolved in Clarifications): a breadcrumb (major category › subcategory) with the selected subcategory's total as the headline figure, reverting to the major-category total on clear. The exact visual treatment is finalized at planning time (a UI mockup will be presented before implementation, per project convention for non-trivial UI changes).
 - **Date/number formatting, category names, and transaction row content are unchanged.** Only the displayed subset and the active-state indication change.
 - **Both languages (zh/en) are supported** using the existing in-house i18n; any new UI label (e.g. a header separator or active-state text) is added to both message catalogs.
