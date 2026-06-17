@@ -44,14 +44,15 @@ and amounts MUST be the **net per-item sum** (refunds negate):
 
 ```
 subAmount(tx) = sign(tx) * Σ over matching items of (item.effective_amount ?? item.amount ?? 0)
-header total  = Σ subAmount over the S2 list
+row amount    = subAmount(tx)                  // the figure shown on each transaction row
 day subtotal  = Σ subAmount over that day's S2 rows
+header total  = Σ subAmount over the S2 list
 ```
 
 Guarantees:
 - **Subset**: the S2 list is always a subset of the S1 list (no row appears that wasn't already in the major list).
 - **Exhaustive switch/clear**: leaving S2 (clear or re-tap) restores exactly the S1 list.
-- **Net amounts**: header total and day subtotals reconcile (both are sums of `subAmount`); they equal the subcategory's bar for item-tagged spend. Transaction-level-only tags are the documented edge (research D3).
+- **Net amounts reconcile bottom-up**: item lines → row (`subAmount(tx)`) → day subtotal → header total are all net subcategory amounts and sum consistently; they equal the subcategory's bar for item-tagged spend. Transaction-level-only tags are the documented edge (research D3).
 
 ## Composition with existing filters
 

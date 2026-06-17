@@ -36,12 +36,17 @@ In the Summary drilldown, tapping a subcategory bar now **filters** the transact
 │  其他  ░░                        NT$  800    │   ← 百葉窗 shade
 ├────────────────────────────────────────────┤
 │  TRANSACTIONS                                │
-│  2026-06-15            NT$  420        ▼     │   ← days with 飲食:午餐 spend; subtotal = NET 午餐
-│  2026-06-13            NT$  380        ▼     │   ← (420 + 380 + … = 3,800 header total)
+│  2026-06-15            NT$  420        ▲     │   ← day subtotal = NET 午餐 that day
+│    便當(午餐)  12:30          NT$  120        │   ← row amount = NET 午餐 portion of that tx
+│       便當  #飲食:午餐         NT$120          │   ← matching item line, net
+│    丼飯        13:05          NT$  300        │
+│  2026-06-13            NT$  380        ▼     │
 └────────────────────────────────────────────┘
+   amounts reconcile bottom-up: item lines → row → day subtotal → header (3,800)
 ```
 
 Resolved decisions:
+- **Net everywhere (U1)**: every figure under the filter — item lines, transaction rows, day subtotals, header — is the **net 午餐 portion** (`effective_amount`), not the whole-transaction amount. A mixed transaction (e.g. a 午餐 + 飲料 receipt) shows only its 午餐 part here. They reconcile bottom-up.
 - **Net total**: `NT$3,800` is the sum of matching items' `effective_amount` (discounts already netted); day subtotals sum to it.
 - **百葉窗 shade**: non-selected bars get a semi-transparent overlay that animates down on select / retracts on clear (lightweight CSS transition; not literal slats). The selected bar shows through — no accent repaint.
 - **Clear**: tap the selected `午餐` bar again **or** tap `[✕ All]` → back to S1.
