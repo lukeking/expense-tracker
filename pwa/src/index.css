@@ -6,6 +6,15 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  height: 100%;
+  /* Lock the page so only inner containers scroll. On Android Chrome a scrollable
+     page toggles the URL bar, which resizes the dvh-sized shell and pushes the bottom
+     nav (or top tabs) past the fold; never scrolling the page keeps both bars pinned. */
+  overflow: hidden;
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -14,7 +23,10 @@ body {
 }
 
 #root {
-  height: 100dvh;
+  /* svh = smallest viewport (URL bar visible) so the bottom nav is never below the
+     fold. With the page locked above, the URL bar stays put, so this stays stable. */
+  height: 100svh;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
