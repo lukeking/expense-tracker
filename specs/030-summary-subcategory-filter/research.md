@@ -4,18 +4,19 @@ All decisions below are grounded in the current code: `pwa/src/screens/SummarySc
 
 ---
 
-## D1 — Apply the subcategory filter client-side (in memory), not via a new server fetch
+## D1 — Filter and sum amounts client-side; enrich the payload with `effective_amount`
 
-**Decision**: When a subcategory is selected, filter the **already-loaded** major-category transaction list (`useTransactions(timeBase, offset, drilldown, tag, paymentMethod)`) in memory. Do **not** add a new server query or backend parameter.
+**Decision**: When a subcategory is selected, filter the **already-loaded** major-category transaction list (`useTransactions(timeBase, offset, drilldown, tag, paymentMethod)`) in memory, and compute subcategory amounts client-side. Do **not** add a new server query or parameter. The **one** backend change is adding the already-stored `effective_amount` column to the `GET /pwa/transactions` `transaction_items(...)` projection, so the PWA has the net per-item figure it needs (D3).
 
 **Rationale**:
-- The drilldown already fetches the full major-category list; the subcategory is a strict subset of rows already on the client. An `Array.filter` is instant — no second round-trip, no loading spinner, no flicker (satisfies the "one tap" success criteria and Performance goal).
-- The server `GET /pwa/transactions?category=X` predicate is `tags.some(t => t === X || t.startsWith(X + ':'))`. Passing `Major:Sub` works for normal subcategories **but misses the `其他` bucket**: the bar's `其他` total (from `aggregateBySubcategory`) includes items tagged only with the bare major (no specific subcategory), which never match `t === 'Major:其他'`. Client-side filtering lets us reproduce the bucket correctly (D2).
-- Fewer moving parts than threading a new param through the hook + query key + handler (Constitution I).
+- The drilldown already fetches the full major-category list; the subcategory is a strict subset of rows already on the client. An `Array.filter` + sum is instant — no second round-trip, no spinner, no flicker.
+- The server `GET /pwa/transactions?category=X` predicate is `tags.some(t => t === X || t.startsWith(X + ':'))`. Passing `Major:Sub` works for normal subcategories **but misses the `其他` bucket** (bare-major-tagged items never match `t === 'Major:其他'`). Client-side filtering reproduces the bucket correctly (D2).
+- The compute load is trivial (filter + sum over a few hundred in-memory rows). The reason amounts were previously inexact was **missing data**, not load: `effective_amount` (net of discounts/adjustments) is a persisted column the summary path already reads but `/pwa/transactions` did not project. Adding it is a one-token select change; the alternative of a new aggregation endpoint is more surface for no benefit.
 
 **Alternatives considered**:
-- *Server refetch with `category=Major:Sub`*: rejected — breaks the `其他` bucket, adds a fetch + loading state per tap, and still needs special-casing for `其他`.
-- *Re-summing a client list to reproduce `aggregateBySubcategory` exactly*: rejected — the backend aggregation is per-item with a remainder/fallback path; duplicating it on the client is fragile and unnecessary for a row-membership filter (D3).
+- *Server refetch with `category=Major:Sub`*: rejected — breaks the `其他` bucket, adds a fetch + loading state per tap.
+- *New backend endpoint returning per-subcategory transaction contributions*: rejected — heavier than projecting one existing column; the PWA can sum `effective_amount` itself.
+- *Compute amounts from raw item `amount` (no payload change)*: rejected — ignores discounts/adjustments, so totals would be gross, not net.
 
 ---
 
@@ -41,32 +42,35 @@ function txInSubcategory(tx, major, sub):
 
 ---
 
-## D3 — Bar-total ↔ list-total reconciliation (and the documented approximation)
+## D3 — Net-amount reconciliation via `effective_amount` (the two user goals)
 
-**Decision**: Source the **header total** for a selected subcategory directly from `subData.subcategories.find(s => s.subcategory === sub).total` — the same array the bars are drawn from — so the headline figure **always equals the tapped bar exactly**. The transaction list is the membership-filtered set of whole transactions (D2). Accept that for a transaction whose items span multiple subcategories of the same major, the row appears under each at its full amount, so the **sum of listed rows** may not penny-match the per-item bar total.
+**Decision**: Compute every subcategory amount — the header period total and each day's subtotal — as the **sum of the matching items' `effective_amount`** (the net-of-discount per-item figure now in the payload, D1). The filtered list is day-grouped (Goal 1, which days). The header total is this client-computed net sum (Goal 2, how much), which equals the bar for item-tagged spend. A transaction whose items span multiple subcategories of the same major contributes only its matching items' net amount to each — so day subtotals and the total reconcile.
 
 **Rationale**:
-- The bar totals come from `aggregateBySubcategory`, which apportions **per item** (`item.effective_amount`) with a remainder fallback. The transaction list shows **whole** transactions. These two granularities only coincide when a transaction's items all fall in one subcategory — which is the overwhelming majority.
-- This is **not a regression**: today's major-level drilldown already lists whole transactions against a per-item pie slice, so the same approximation already exists one level up. We are matching existing app behavior, not introducing a new inconsistency.
-- Sourcing the header number from the bar array guarantees the *headline* the user reads is always exact and self-consistent with the chart, even when the row sum drifts for mixed transactions.
+- The bar totals come from `aggregateBySubcategory`, which sums `item.effective_amount` per subcategory (plus a remainder/fallback path). Summing the same `effective_amount` client-side reproduces it for item-tagged spend.
+- Using `effective_amount` (not raw `amount`) means discounts/adjustments are already netted — the user's "how much did I spend" answer is the true net.
+- Day-grouping is already how the list renders (`HistoryGroup`/`DateSubGroup`); filtering to the subcategory directly answers "which days."
+
+**The one residual divergence**: a transaction tagged **only at the transaction level** (no item carries the `Major:Sub` tag) is apportioned by the bar via the remainder/`anyMatch` rule (`summary.ts:122–134`). The PWA does **not** re-implement that rule (it would duplicate fragile backend logic). Such transactions — rare in this app, which tags at item level (feature 026) — may diverge slightly from the bar.
 
 **Alternatives considered**:
-- *Per-item rows in the filtered list (penny-exact)*: rejected — a substantial change to the transaction list UI, inconsistent with every other list in the app, and out of scope. Flagged in plan.md "Known limitation" for sign-off.
+- *Source the header total from the bar array instead of computing it*: viable, but computing it from the same rows shown keeps the headline self-consistent with the day subtotals; for item-tagged spend the two agree anyway.
+- *Re-implement the remainder/fallback apportionment client-side for exactness*: rejected — duplicates backend logic for a rare case (Constitution I).
 
-**Spec impact**: FR-005 / SC-002 hold exactly for single-subcategory transactions and the `其他` bucket; the cross-subcategory case is the documented approximation above.
+**Spec impact**: FR-005 / SC-002 hold exactly for item-tagged spend and the `其他` bucket; transaction-level-only tags are the documented edge.
 
 ---
 
-## D4 — Active-bar indication and the header/clear UI (recharts)
+## D4 — Active indication (百葉窗 shade) and the header/clear UI
 
 **Decision**:
 - **Selection**: add `onClick` to the recharts `<Bar>` (fires with the datum); toggle `subDrilldown` (same name → clear).
-- **Active highlight**: render `<Cell>` children inside `<Bar>` (already the pattern used for the pie), colouring the selected subcategory's cell with the accent and dimming/normalising the rest — no extra DOM, recharts-native.
-- **Header**: when `subDrilldown` is set, the drilldown header shows a breadcrumb `Major › Subcategory` and the subcategory total (D3); a dedicated **clear control** (e.g. an `×` / "show all" affordance) sits in the header. Both the clear control and re-tapping the active bar clear the selection (spec clarification: *both*).
+- **Active indication — "百葉窗"/shade**: when a subcategory is selected, the **non-selected** bars are covered by a lightweight semi-transparent overlay that animates **down** (and retracts on clear), leaving the selected bar showing through. Realized as a CSS `transform`/opacity transition on an overlay (GPU-composited, 60fps on mobile) — explicitly **not** literal louvered slats, which add many animating elements for no real benefit. May be done via per-`<Cell>` `fillOpacity` transition or a positioned overlay layer over the chart with the selected bar excluded; the exact technique is an implementation detail.
+- **Header**: when `subDrilldown` is set, the drilldown header shows a breadcrumb `Major › Subcategory` and the net subcategory total (D3); a dedicated **clear control** ("show all" affordance) sits in the header. Both the clear control and re-tapping the active bar clear the selection (spec clarification: *both*).
 
-**Rationale**: recharts `<Bar onClick>` + `<Cell>` are already in the codebase (the pie uses `onClick` + `<Cell>`), so this reuses known-good patterns with no new library surface. The breadcrumb mirrors the existing back-button header row.
+**Rationale**: recharts `<Bar onClick>` + `<Cell>` are already in the codebase (the pie uses both), so selection reuses known-good patterns. The shade is the cheap realization of the user's 百葉窗 metaphor; the literal-slat version was considered and rejected on mobile-performance grounds. The breadcrumb mirrors the existing back-button header row.
 
-**Alternatives considered**: a separate filter chip row (like `FilterBar`) — rejected as heavier than needed; the bar + header already convey state.
+**Alternatives considered**: literal venetian-blind slats — rejected (heavier/jankier on mobile, no functional gain). A separate filter chip row (like `FilterBar`) — rejected as heavier than needed; the bar + header already convey state.
 
 ---
 

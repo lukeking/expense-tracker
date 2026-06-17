@@ -1,6 +1,6 @@
 # Phase 1 Data Model: Summary Subcategory Filter
 
-No database, schema, or API changes. This feature adds **ephemeral view state** and one derived **membership rule** in `SummaryScreen.tsx`. The entities below describe in-memory shapes only.
+No database or schema changes, and no new endpoint or query parameter. The **one** payload change: `GET /pwa/transactions` adds the existing `effective_amount` column to its `transaction_items(...)` projection, and the PWA's `TxItem` type gains `effective_amount: number | null`. Everything else below is **ephemeral view state** + derived rules in `SummaryScreen.tsx`.
 
 ## View State (component-local)
 
@@ -14,13 +14,25 @@ No database, schema, or API changes. This feature adds **ephemeral view state** 
 - At most one subcategory is selected at a time (selecting another replaces it — FR-003).
 - `subDrilldown` resets to `null` on: back to pie (`setDrilldown(null)`), selecting a different major, time-base change, period navigate, and period-picker select (FR-007) — i.e. everywhere `drilldown` is already reset today, plus the back action.
 
+## Payload shape change
+
+`TxItem` (PWA, `hooks/useSummary.ts`) gains `effective_amount`:
+
+```
+TxItem = { id, name, amount: number | null, effective_amount: number | null, tags: string[] }
+```
+
+`effective_amount` is the stored per-item net (discounts/adjustments already applied). Falls back to `amount` when null, mirroring the backend (`item.effective_amount ?? item.amount`).
+
 ## Derived data (no new fetch)
 
 | Name | Source | Use |
 |------|--------|-----|
-| Bar data | `subData.subcategories[]` (`{ subcategory, total, percentage }`) from existing `useSubcategoryData` | Renders the bars; also the **authoritative total** for the selected subcategory's header (D3). |
-| Major tx list | `txData.transactions[]` from existing `useTransactions(..., drilldown, ...)` | The rows to filter in memory. |
-| Filtered tx list | `txData.transactions.filter(tx => subDrilldown == null \|\| txInSubcategory(tx, drilldown, subDrilldown))` | Drives `groupTransactions(...)` and the history list. |
+| Bar data | `subData.subcategories[]` (`{ subcategory, total, percentage }`) from existing `useSubcategoryData` | Renders the bars (reference total for the selected subcategory). |
+| Major tx list | `txData.transactions[]` from existing `useTransactions(..., drilldown, ...)` | The rows to filter + sum in memory. |
+| Filtered tx list | `txData.transactions.filter(tx => subDrilldown == null \|\| txInSubcategory(tx, drilldown, subDrilldown))` | Day-grouped via `groupTransactions(...)` → the history list (Goal 1). |
+| Subcategory period total | `sum over filtered txs of subAmount(tx, drilldown, subDrilldown)` | The header headline figure (Goal 2). |
+| Day subtotal | `sum over the day's filtered txs of subAmount(...)` | Each day group's subtotal. |
 
 ## Membership rule (the testable core)
 
@@ -32,15 +44,25 @@ sub === '其他'  →  tags.some(t => t === major)
 otherwise       →  tags.some(t => t === `${major}:${sub}` || t.startsWith(`${major}:${sub}:`))
 ```
 
-- **Inputs**: a `TxRecord` (see `hooks/useSummary.ts`), the active `major` (`drilldown`), the active `sub` (`subDrilldown`).
-- **Output**: include the transaction in the filtered list iff `true`.
-- **`其他` bucket**: bare-major-tagged rows (no specific subcategory) — matches how `aggregateBySubcategory` buckets `其他`.
-- **Pure function**: no I/O; deterministic given inputs — suitable as the unit of the e2e assertion and any future unit test.
+## Net-amount rule (the amount each tx contributes to the subcategory)
+
+`subAmount(tx, major, sub)` → number. Sums the **matching items'** net amount; refunds negate.
+
+```
+sign  = tx.transaction_type === 'refund' ? -1 : 1
+items = tx.items.filter(i => itemInSubcategory(i, major, sub))   // same predicate, per item
+net   = items.reduce((s, i) => s + (i.effective_amount ?? i.amount ?? 0), 0)
+return sign * net
+```
+
+- **`其他` bucket**: items whose only `major`-tag is the bare major (no `Major:Sub`). Consistent with `aggregateBySubcategory`.
+- **Pure functions**: no I/O; deterministic — suitable as the unit of the e2e assertion and any future unit test.
+- **Known edge** (research D3): transactions tagged only at the tx level (no item carries the tag) contribute 0 here but are apportioned by the bar's remainder rule — minor, deliberately not reproduced.
 
 ## Presentation state (derived, no storage)
 
 | Derived value | Rule |
 |---------------|------|
-| Active bar | the bar whose `subcategory === subDrilldown` gets the accent `<Cell>` fill; others normal/dimmed. |
-| Header mode | `subDrilldown == null` → `Major` + major total; else → breadcrumb `Major › Sub` + that subcategory's total (from bar data). |
+| Active bar | the bar whose `subcategory === subDrilldown` shows through; the non-selected bars get the 百葉窗 semi-transparent shade overlay. |
+| Header mode | `subDrilldown == null` → `Major` + major total; else → breadcrumb `Major › Sub` + the net subcategory period total. |
 | Clear control visible | iff `subDrilldown != null`. |

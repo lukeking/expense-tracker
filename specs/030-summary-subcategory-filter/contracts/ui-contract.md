@@ -1,6 +1,6 @@
 # UI Contract: Summary Drilldown Subcategory Filter
 
-This app exposes no new programmatic API. Its external contract is the **drilldown interaction** — the states, transitions, and the membership predicate that an E2E test (and a human) can verify. Backend endpoints are unchanged.
+This app exposes no new endpoint or query parameter. The one backend change is additive to an existing response: `GET /pwa/transactions` now includes `effective_amount` on each item (`transaction_items(id, name, amount, effective_amount, tags)`). The feature's external contract is the **drilldown interaction** — the states, transitions, the membership predicate, and the net-amount rule that an E2E test (and a human) can verify.
 
 ## Interaction states
 
@@ -8,7 +8,7 @@ This app exposes no new programmatic API. Its external contract is the **drilldo
 |-------|-------------|----------------|--------------------|
 | **S0** Pie | `null` | `null` | Pie chart of majors + legend; full transaction history below. |
 | **S1** Major drilldown | `Major` | `null` | Back button + `Major` + major total; subcategory **bar chart**; tx list filtered to `Major`. |
-| **S2** Subcategory selected | `Major` | `Sub` | Breadcrumb `Major › Sub` + **Sub total** + **clear control**; the `Sub` bar is highlighted; tx list filtered to `Sub`. |
+| **S2** Subcategory selected | `Major` | `Sub` | Breadcrumb `Major › Sub` + **net Sub total** + **clear control**; non-selected bars get the 百葉窗 shade (the `Sub` bar shows through); tx list filtered to `Sub`, **day-grouped**, day subtotals = net Sub spend. |
 
 ## Transitions
 
@@ -24,12 +24,12 @@ This app exposes no new programmatic API. Its external contract is the **drilldo
 
 \* These already reset `drilldown` today; this feature adds `subDrilldown` to the same resets.
 
-## Filter contract (the assertion target)
+## Filter + amount contract (the assertion target)
 
 While in **S2**, the transaction list MUST equal:
 
 ```
-majorList.filter(tx => txInSubcategory(tx, Major, Sub))
+majorList.filter(tx => txInSubcategory(tx, Major, Sub))         // grouped by day
 ```
 
 where `majorList` is the list shown in **S1** and `txInSubcategory` is:
@@ -40,10 +40,18 @@ Sub === '其他' : tags.some(t => t === Major)
 else           : tags.some(t => t === `${Major}:${Sub}` || t.startsWith(`${Major}:${Sub}:`))
 ```
 
+and amounts MUST be the **net per-item sum** (refunds negate):
+
+```
+subAmount(tx) = sign(tx) * Σ over matching items of (item.effective_amount ?? item.amount ?? 0)
+header total  = Σ subAmount over the S2 list
+day subtotal  = Σ subAmount over that day's S2 rows
+```
+
 Guarantees:
 - **Subset**: the S2 list is always a subset of the S1 list (no row appears that wasn't already in the major list).
 - **Exhaustive switch/clear**: leaving S2 (clear or re-tap) restores exactly the S1 list.
-- **Header total**: the S2 headline total equals the tapped bar's value (sourced from the bar data array, not re-summed).
+- **Net amounts**: header total and day subtotals reconcile (both are sums of `subAmount`); they equal the subcategory's bar for item-tagged spend. Transaction-level-only tags are the documented edge (research D3).
 
 ## Composition with existing filters
 
