@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { TimeBase } from '../hooks/useSummary';
 import { timeBaseToRange } from '../hooks/useSummary';
+import { useT } from '../i18n';
 
 interface PeriodPickerProps {
   timeBase: 'week' | 'month' | 'year';
@@ -53,6 +54,7 @@ function offsetForYear(year: number): number {
 }
 
 export function PeriodPicker({ timeBase, currentOffset, onSelect, onClose }: PeriodPickerProps) {
+  const t = useT();
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth();
@@ -104,9 +106,9 @@ export function PeriodPicker({ timeBase, currentOffset, onSelect, onClose }: Per
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700">
           {step === 2 ? (
-            <button type="button" onClick={() => setStep(1)} className="text-blue-600 text-sm">← 返回</button>
+            <button type="button" onClick={() => setStep(1)} className="text-blue-600 text-sm">{t('common.back')}</button>
           ) : (
-            <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">選擇期間</span>
+            <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">{t('summary.selectPeriod')}</span>
           )}
           <button type="button" onClick={onClose} className="text-gray-400 dark:text-gray-500 text-lg leading-none">✕</button>
         </div>

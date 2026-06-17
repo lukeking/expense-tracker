@@ -1,11 +1,13 @@
 import { useState } from 'react';
+import { useT } from '../i18n';
+import type { MessageKey } from '../i18n';
 
-const PM_LABELS: Record<string, string> = {
-  credit_card: '信用卡',
-  cash: '現金',
-  prepaid_wallet: '儲值卡',
-  easy_card: '悠遊卡',
-  bank_account: '銀行帳戶',
+const PM_LABEL_KEYS: Record<string, MessageKey> = {
+  credit_card: 'payment.creditCard',
+  cash: 'payment.cash',
+  prepaid_wallet: 'payment.prepaidWalletShort',
+  easy_card: 'payment.easyCard',
+  bank_account: 'payment.bankAccount',
 };
 
 const TAG_SEARCH_THRESHOLD = 6; // show search input when more than this many tags
@@ -20,6 +22,7 @@ interface FilterBarProps {
 }
 
 export function FilterBar({ tags, paymentMethods, activeTag, activePayment, onTagChange, onPaymentChange }: FilterBarProps) {
+  const t = useT();
   const [tagSearch, setTagSearch] = useState('');
 
   if (tags.length === 0 && paymentMethods.length === 0) return null;
@@ -40,7 +43,7 @@ export function FilterBar({ tags, paymentMethods, activeTag, activePayment, onTa
                 type="text"
                 value={tagSearch}
                 onChange={(e) => setTagSearch(e.target.value)}
-                placeholder="搜尋標籤…"
+                placeholder={t('filter.searchTags')}
                 className="w-full pl-7 pr-3 py-1 text-xs rounded-full border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 outline-none focus:border-blue-400"
               />
               {tagSearch && (
@@ -56,7 +59,7 @@ export function FilterBar({ tags, paymentMethods, activeTag, activePayment, onTa
           )}
           <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
             {visibleTags.length === 0 ? (
-              <span className="text-xs text-gray-400 dark:text-gray-500 py-1">無符合標籤</span>
+              <span className="text-xs text-gray-400 dark:text-gray-500 py-1">{t('filter.noMatchingTags')}</span>
             ) : (
               visibleTags.map((t) => (
                 <button
@@ -89,7 +92,7 @@ export function FilterBar({ tags, paymentMethods, activeTag, activePayment, onTa
                   : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600'
               }`}
             >
-              {PM_LABELS[pm] ?? pm}
+              {PM_LABEL_KEYS[pm] ? t(PM_LABEL_KEYS[pm]) : pm}
             </button>
           ))}
         </div>

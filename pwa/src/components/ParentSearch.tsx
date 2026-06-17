@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { apiFetch } from '../api/client';
+import { useT } from '../i18n';
 
 export interface ParentSearchResult {
   id: string;
@@ -21,6 +22,7 @@ function debounce<T extends unknown[]>(fn: (...args: T) => void, ms: number) {
 }
 
 export function ParentSearch({ value, onSelect }: Props) {
+  const t = useT();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<ParentSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -94,22 +96,22 @@ export function ParentSearch({ value, onSelect }: Props) {
         onChange={handleInput}
         onFocus={() => setShowDropdown(true)}
         onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
-        placeholder="搜尋交易備註或品項…"
+        placeholder={t('parentSearch.placeholder')}
         className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
       />
       {showDropdown && query.trim() && (
         <div className="absolute z-10 top-full mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-md max-h-48 overflow-y-auto">
-          {loading && <p className="px-3 py-2 text-sm text-gray-400 dark:text-gray-500">搜尋中…</p>}
+          {loading && <p className="px-3 py-2 text-sm text-gray-400 dark:text-gray-500">{t('common.searching')}</p>}
           {!loading && results.length === 0 && searched && (
             <div className="px-3 py-2">
-              <p className="text-sm text-gray-500 dark:text-gray-400">近90天無結果</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('parentSearch.noResults90')}</p>
               {!allDays && (
                 <button
                   type="button"
                   onMouseDown={(e) => { e.preventDefault(); searchAll(); }}
                   className="text-sm text-blue-600 mt-1"
                 >
-                  搜尋更早的交易
+                  {t('parentSearch.searchEarlier')}
                 </button>
               )}
             </div>
@@ -122,7 +124,7 @@ export function ParentSearch({ value, onSelect }: Props) {
               className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-50 dark:border-gray-700 last:border-0"
             >
               <p className="text-sm text-gray-800 dark:text-gray-100 font-medium truncate">
-                {result.note ?? result.item_names[0] ?? result.tags[0] ?? '(無備註)'}
+                {result.note ?? result.item_names[0] ?? result.tags[0] ?? t('parentSearch.noNote')}
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 NT${result.amount} · {(() => { const d = new Date(result.transaction_at); const pad = (n: number) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`; })()}

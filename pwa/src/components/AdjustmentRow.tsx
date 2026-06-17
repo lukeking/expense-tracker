@@ -1,3 +1,6 @@
+import { useT } from '../i18n';
+import type { MessageKey } from '../i18n';
+
 export type AdjustmentKind = 'discount' | 'fee' | 'refund';
 export type AdjustmentMode = 'absolute' | 'percentage';
 
@@ -9,10 +12,10 @@ export interface AdjustmentRowData {
   note: string;
 }
 
-export const KIND_LABELS: Record<AdjustmentKind, string> = {
-  discount: '折扣',
-  fee: '手續費',
-  refund: '退款',
+export const KIND_LABEL_KEYS: Record<AdjustmentKind, MessageKey> = {
+  discount: 'adj.discount',
+  fee: 'adj.fee',
+  refund: 'adj.refund',
 };
 
 export function resolveAdjAmount(a: AdjustmentRowData, base: number): number | null {
@@ -29,6 +32,7 @@ interface Props {
 }
 
 export function AdjustmentRow({ adj, base, onChange, onRemove }: Props) {
+  const t = useT();
   const derivedAmount = resolveAdjAmount(adj, base);
 
   function toggleMode() {
@@ -54,8 +58,8 @@ export function AdjustmentRow({ adj, base, onChange, onRemove }: Props) {
         onChange={(e) => onChange({ ...adj, kind: e.target.value as AdjustmentKind })}
         className="border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shrink-0"
       >
-        {(Object.keys(KIND_LABELS) as AdjustmentKind[]).map((k) => (
-          <option key={k} value={k}>{KIND_LABELS[k]}</option>
+        {(Object.keys(KIND_LABEL_KEYS) as AdjustmentKind[]).map((k) => (
+          <option key={k} value={k}>{t(KIND_LABEL_KEYS[k])}</option>
         ))}
       </select>
 
@@ -71,7 +75,7 @@ export function AdjustmentRow({ adj, base, onChange, onRemove }: Props) {
         step={adj.mode === 'percentage' ? 1 : undefined}
         value={adj.value ?? ''}
         onChange={handleValueChange}
-        placeholder={adj.mode === 'absolute' ? '金額' : '折扣%'}
+        placeholder={adj.mode === 'absolute' ? t('adj.amountPlaceholder') : t('adj.percentPlaceholder')}
         className="w-20 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
       />
 
@@ -85,7 +89,7 @@ export function AdjustmentRow({ adj, base, onChange, onRemove }: Props) {
         type="text"
         value={adj.note}
         onChange={(e) => onChange({ ...adj, note: e.target.value })}
-        placeholder="備註（可不填）"
+        placeholder={t('adj.notePlaceholder')}
         className="flex-1 min-w-40 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
       />
 
@@ -93,7 +97,7 @@ export function AdjustmentRow({ adj, base, onChange, onRemove }: Props) {
         type="button"
         onClick={onRemove}
         className="text-gray-400 hover:text-red-500 shrink-0 text-lg leading-none"
-        aria-label="移除"
+        aria-label={t('common.remove')}
       >
         ×
       </button>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { apiFetch, ApiError } from '../api/client';
+import { useT } from '../i18n';
 
 export interface MatchedDetail {
   seller_name: string | null;
@@ -36,6 +37,7 @@ function fmtDate(iso: string): string {
 }
 
 export function AmbiguousInvoiceCard({ entry, onResolved, onManualLink }: { entry: AmbiguousEntry; onResolved: (r: MatchedDetail) => void; onManualLink: () => void }) {
+  const t = useT();
   const [selected, setSelected] = useState<string | null>(entry.candidates[0]?.id ?? null);
   const [replaceItems, setReplaceItems] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -52,7 +54,7 @@ export function AmbiguousInvoiceCard({ entry, onResolved, onManualLink }: { entr
       });
       onResolved(data.resolved);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : '連結失敗，請重試');
+      setError(err instanceof ApiError ? err.message : t('common.linkFailed'));
       setSubmitting(false);
     }
   }
@@ -61,16 +63,16 @@ export function AmbiguousInvoiceCard({ entry, onResolved, onManualLink }: { entr
     <div className="bg-white dark:bg-gray-800 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex flex-col gap-3">
       <div>
         <p className="text-sm font-semibold text-gray-900 dark:text-white">
-          {entry.seller_name || '未知商家'} · NT${entry.net_amount.toLocaleString()}
+          {entry.seller_name || t('import.unknownSeller')} · NT${entry.net_amount.toLocaleString()}
         </p>
         <p className="text-xs text-gray-500 dark:text-gray-400">
           {entry.invoice_number} · {entry.invoice_date}
-          {entry.candidate_source === 'forex' && <span className="ml-1 text-amber-600 dark:text-amber-400">（外幣近似）</span>}
+          {entry.candidate_source === 'forex' && <span className="ml-1 text-amber-600 dark:text-amber-400">{t('import.forexApprox')}</span>}
         </p>
       </div>
 
       {entry.candidates.length === 0 ? (
-        <p className="text-xs text-gray-400 dark:text-gray-500">目前無可連結的交易（候選可能已被其他發票連結）。</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500">{t('import.noCandidates')}</p>
       ) : (
         <div className="flex flex-col gap-2">
           {entry.candidates.map((cand) => (
@@ -101,7 +103,7 @@ export function AmbiguousInvoiceCard({ entry, onResolved, onManualLink }: { entr
         <>
           <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
             <input type="checkbox" checked={replaceItems} onChange={(e) => setReplaceItems(e.target.checked)} />
-            以發票項目取代既有項目
+            {t('import.replaceItems')}
           </label>
           {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
           <button
@@ -110,7 +112,7 @@ export function AmbiguousInvoiceCard({ entry, onResolved, onManualLink }: { entr
             disabled={!selected || submitting}
             className="bg-blue-600 text-white rounded-lg py-2 text-sm font-medium disabled:opacity-50"
           >
-            {submitting ? '處理中…' : '確認連結'}
+            {submitting ? t('common.processing') : t('import.confirmLink')}
           </button>
         </>
       )}
@@ -120,7 +122,7 @@ export function AmbiguousInvoiceCard({ entry, onResolved, onManualLink }: { entr
         onClick={onManualLink}
         className="text-xs text-blue-600 dark:text-blue-400 underline self-start"
       >
-        都不對？手動連結到其他交易
+        {t('import.noneMatch')}
       </button>
     </div>
   );

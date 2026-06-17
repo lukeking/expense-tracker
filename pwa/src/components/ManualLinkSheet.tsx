@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { apiFetch, ApiError } from '../api/client';
 import { BottomSheet } from './BottomSheet';
 import type { MatchedDetail } from './AmbiguousInvoiceCard';
+import { useT } from '../i18n';
 
 // Full unmatched-invoice payload, carried from the import response (FR-007: not
 // persisted until linked). Mirrors the backend UnmatchedInvoiceDetail.
@@ -57,6 +58,7 @@ export function ManualLinkSheet({
   onClose: () => void;
   onLinked: (resolved: MatchedDetail) => void;
 }) {
+  const t = useT();
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
@@ -81,7 +83,7 @@ export function ManualLinkSheet({
         );
         setCandidates(data.candidates);
       } catch {
-        setError('無法載入候選交易');
+        setError(t('import.loadCandidatesFailed'));
       } finally {
         setLoading(false);
       }
@@ -144,18 +146,18 @@ export function ManualLinkSheet({
       });
       onLinked(data.resolved);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : '連結失敗，請重試');
+      setError(err instanceof ApiError ? err.message : t('common.linkFailed'));
       setSubmitting(false);
     }
   }
 
   return (
-    <BottomSheet open onClose={onClose} title="手動連結發票">
+    <BottomSheet open onClose={onClose} title={t('import.manualLinkTitle')}>
       <div className="flex flex-col gap-4 p-4">
         {/* Invoice header */}
         <div>
           <p className="text-sm font-semibold text-gray-900 dark:text-white">
-            {invoice.seller_name || '未知商家'} · NT${invoice.net_amount.toLocaleString()}
+            {invoice.seller_name || t('import.unknownSeller')} · NT${invoice.net_amount.toLocaleString()}
           </p>
           <p className="text-xs text-gray-500 dark:text-gray-400">
             {invoice.invoice_number} · {invoice.invoice_date.slice(0, 10)}
@@ -169,18 +171,18 @@ export function ManualLinkSheet({
 
         {/* Transaction picker */}
         <div className="flex flex-col gap-2">
-          <label className="text-xs text-gray-500 dark:text-gray-400">選擇交易（±7 天）</label>
+          <label className="text-xs text-gray-500 dark:text-gray-400">{t('import.selectTx')}</label>
           <input
             type="text"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            placeholder="以備註或品項過濾…"
+            placeholder={t('import.filterPlaceholder')}
             className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
           />
           {loading ? (
-            <p className="text-xs text-gray-400 dark:text-gray-500">載入中…</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500">{t('common.loading')}</p>
           ) : filtered.length === 0 ? (
-            <p className="text-xs text-gray-400 dark:text-gray-500">範圍內沒有未連結的交易。</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500">{t('import.noUnlinkedInRange')}</p>
           ) : (
             <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
               {filtered.map((c) => (
@@ -208,7 +210,7 @@ export function ManualLinkSheet({
           )}
           {amountMismatch && (
             <p className="text-xs text-amber-600 dark:text-amber-400">
-              金額不符：發票 NT${invoice.net_amount.toLocaleString()} ↔ 交易 NT${selectedTx!.amount.toLocaleString()}
+              {t('import.amountMismatch', { inv: invoice.net_amount.toLocaleString(), tx: selectedTx!.amount.toLocaleString() })}
             </p>
           )}
         </div>
@@ -216,7 +218,7 @@ export function ManualLinkSheet({
         {/* Item selection */}
         {invoice.items.length > 0 && (
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-500 dark:text-gray-400">加入的發票品項（預設不加入）</label>
+            <label className="text-xs text-gray-500 dark:text-gray-400">{t('import.addInvoiceItems')}</label>
             {invoice.items.map((it, idx) => {
               const disabled = isDisabled(idx);
               return (
@@ -232,24 +234,24 @@ export function ManualLinkSheet({
                   />
                   <span className="text-gray-700 dark:text-gray-200">
                     {it.name} · NT${(it.amount ?? 0).toLocaleString()}
-                    {disabled && <span className="text-xs text-gray-400 dark:text-gray-500">（交易已有同名品項）</span>}
+                    {disabled && <span className="text-xs text-gray-400 dark:text-gray-500">{t('import.dupItemName')}</span>}
                   </span>
                 </label>
               );
             })}
             {itemSumMismatch && (
               <p className="text-xs text-amber-600 dark:text-amber-400">
-                品項金額（NT${(existingSum + checkedSum).toLocaleString()}）與付款金額（NT${selectedTx!.amount.toLocaleString()}）不符。
+                {t('import.itemSumMismatch', { items: (existingSum + checkedSum).toLocaleString(), paid: selectedTx!.amount.toLocaleString() })}
               </p>
             )}
           </div>
         )}
 
         {/* Per-item rename: point an invoice line at an existing item to replace its
-            name only (amount/標籤 unchanged). Distinct from the append checkboxes (US3). */}
+            name only (amount/tags unchanged). Distinct from the append checkboxes (US3). */}
         {selectedTx && selectedTx.items.length > 0 && invoice.items.length > 0 && (
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-500 dark:text-gray-400">重新命名既有品項（以發票品名取代，金額不變）</label>
+            <label className="text-xs text-gray-500 dark:text-gray-400">{t('import.renameItems')}</label>
             {selectedTx.items.map((exItem) => (
               <div key={exItem.id} className="flex items-center justify-between gap-2 text-sm">
                 <span className="text-gray-700 dark:text-gray-200 truncate">
@@ -260,7 +262,7 @@ export function ManualLinkSheet({
                   onChange={(e) => setRename(exItem.id, e.target.value)}
                   className="shrink-0 border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1 text-xs bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 >
-                  <option value="">不取代</option>
+                  <option value="">{t('import.noReplace')}</option>
                   {invoice.items.map((li, idx) => (
                     <option key={idx} value={idx}>{li.name}</option>
                   ))}
@@ -278,7 +280,7 @@ export function ManualLinkSheet({
           disabled={!selected || submitting}
           className="bg-blue-600 text-white rounded-lg py-2.5 text-sm font-medium disabled:opacity-50"
         >
-          {submitting ? '連結中…' : '確認連結'}
+          {submitting ? t('import.linking') : t('import.confirmLink')}
         </button>
       </div>
     </BottomSheet>

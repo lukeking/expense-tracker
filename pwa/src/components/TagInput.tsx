@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { useTags } from '../hooks/useTags';
+import { useT } from '../i18n';
 
 interface Props {
   value: string[];
@@ -7,7 +8,8 @@ interface Props {
   placeholder?: string;
 }
 
-export function TagInput({ value, onChange, placeholder = '新增標籤…' }: Props) {
+export function TagInput({ value, onChange, placeholder }: Props) {
+  const t = useT();
   const [input, setInput] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const { data: allTags = [] } = useTags();
@@ -71,7 +73,7 @@ export function TagInput({ value, onChange, placeholder = '新增標籤…' }: P
           onKeyDown={handleKeyDown}
           onFocus={() => setShowDropdown(true)}
           onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
-          placeholder={value.length === 0 ? placeholder : ''}
+          placeholder={value.length === 0 ? (placeholder ?? t('tag.placeholder')) : ''}
           className="flex-1 min-w-24 outline-none text-sm bg-transparent text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
         />
         {input.trim() && (

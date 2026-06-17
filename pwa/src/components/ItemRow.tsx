@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ItemCategorySheet } from './ItemCategorySheet';
 import { EXPLICIT_UNCATEGORIZED } from '../lib/itemCategory';
+import { useT } from '../i18n';
 
 export interface ItemRowData {
   id: string;
@@ -21,11 +22,12 @@ interface Props {
 }
 
 export function ItemRow({ item, inheritedTag, extraTags = [], onMax, onChange, onRemove }: Props) {
+  const t = useT();
   const [tagSheetOpen, setTagSheetOpen] = useState(false);
 
-  // B2: the sentinel is a deliberate decision — rendered like an override, as 其他.
+  // B2: the sentinel is a deliberate decision — rendered like an override, as the 'Other' label.
   const isSentinel = item.tagOverride === EXPLICIT_UNCATEGORIZED;
-  const displayTag = isSentinel ? '其他' : item.tagOverride ?? inheritedTag;
+  const displayTag = isSentinel ? t('item.uncategorized') : item.tagOverride ?? inheritedTag;
 
   function setAmount(val: number | null) {
     onChange({ ...item, amount: val, approxFlag: false });
@@ -71,16 +73,16 @@ export function ItemRow({ item, inheritedTag, extraTags = [], onMax, onChange, o
               ? 'border-blue-400 text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/30'
               : 'border-gray-200 dark:border-gray-600 text-gray-400 dark:text-gray-500'
           }`}
-          title={displayTag ?? '繼承分類'}
+          title={displayTag ?? t('item.inheritTag')}
         >
-          {isSentinel ? '其他' : item.tagOverride ?? (inheritedTag ? <span className="text-gray-300 dark:text-gray-600">{inheritedTag}</span> : '—')}
+          {isSentinel ? t('item.uncategorized') : item.tagOverride ?? (inheritedTag ? <span className="text-gray-300 dark:text-gray-600">{inheritedTag}</span> : '—')}
         </button>
 
         <input
           type="text"
           value={item.name}
           onChange={(e) => onChange({ ...item, name: e.target.value })}
-          placeholder="品項名稱"
+          placeholder={t('item.namePlaceholder')}
           className="flex-1 min-w-0 text-sm border-0 outline-none bg-transparent text-gray-900 dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-600"
         />
 
@@ -114,7 +116,7 @@ export function ItemRow({ item, inheritedTag, extraTags = [], onMax, onChange, o
             type="button"
             onClick={onRemove}
             className="flex-shrink-0 text-gray-400 dark:text-gray-500 text-lg leading-none ml-1"
-            aria-label="移除"
+            aria-label={t('common.remove')}
           >
             ✕
           </button>
@@ -127,7 +129,7 @@ export function ItemRow({ item, inheritedTag, extraTags = [], onMax, onChange, o
           type="text"
           value={item.note}
           onChange={(e) => onChange({ ...item, note: e.target.value })}
-          placeholder="備註"
+          placeholder={t('item.notePlaceholder')}
           maxLength={200}
           className="flex-1 text-xs border-0 outline-none bg-transparent text-gray-500 dark:text-gray-400 placeholder-gray-300 dark:placeholder-gray-600"
         />

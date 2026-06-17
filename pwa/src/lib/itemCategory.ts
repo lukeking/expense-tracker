@@ -3,14 +3,15 @@
 // only as a deliberate override, or as the explicit-uncategorized sentinel below.
 
 // Mirrors EXPLICIT_UNCATEGORIZED in backend/src/services/item-category.ts — a real
-// `:`-tag (untagged items inherit), bucketing to 其他. Never shown as a picker chip.
+// `:`-tag (untagged items inherit), bucketing to the 'Other' category. Never shown as a
+// picker chip. The value itself is a data sentinel (must match the backend), not UI chrome.
 export const EXPLICIT_UNCATEGORIZED = '其他:未分類';
 
 const hasCategory = (tags: string[]) => tags.some((t) => t.includes(':'));
 
 // An item is "uncategorized" when no category decision exists anywhere: no item
 // `:`-tag AND no tx category to inherit. The sentinel counts as categorized (it IS
-// a decision), so it never raises the ⚠ 未分類 flag.
+// a decision), so it never raises the uncategorized flag.
 export function isItemUncategorized(
   item: { tags: string[] },
   tx: { tags: string[] }
@@ -27,7 +28,7 @@ export type EffectiveCategorySource = 'override' | 'explicit-uncategorized' | 'i
 
 // Read-time derivation (data-model.md): own override → sentinel → inherited → none.
 // Must agree with the backend aggregation's implicit rule (item tag, else remainder
-// buckets under the tx tag, else 其他).
+// buckets under the tx tag, else the 'Other' bucket).
 export function effectiveItemCategory(
   item: { tags: string[] },
   tx: { tags: string[] }

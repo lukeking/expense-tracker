@@ -4,23 +4,18 @@ import { Suspense, lazy, useState } from 'react';
 import { queryClient } from './api/client';
 import { useApiKey } from './hooks/useAuth';
 import { ApiKeyPrompt } from './components/ApiKeyPrompt';
-import { SettingsProvider, useSettings } from './context/SettingsContext';
+import { SettingsProvider } from './context/SettingsContext';
 import { SettingsSheet } from './components/SettingsSheet';
+import { useT } from './i18n';
 
 const EntryScreen = lazy(() => import('./screens/EntryScreen').then((m) => ({ default: m.EntryScreen })));
 const SummaryScreen = lazy(() => import('./screens/SummaryScreen').then((m) => ({ default: m.SummaryScreen })));
 const BudgetScreen = lazy(() => import('./screens/BudgetScreen').then((m) => ({ default: m.BudgetScreen })));
 const ImportScreen = lazy(() => import('./screens/ImportScreen').then((m) => ({ default: m.ImportScreen })));
 
-const NAV_LABELS = {
-  zh: { entry: '記帳', summary: '統計', budget: '預算', import: '匯入', settings: '設定' },
-  en: { entry: 'Entry', summary: 'Summary', budget: 'Budget', import: 'Import', settings: 'Settings' },
-};
-
 function NavBar() {
-  const { lang } = useSettings();
+  const t = useT();
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const labels = NAV_LABELS[lang];
 
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     `flex flex-col items-center gap-0.5 py-2 flex-1 text-xs ${isActive ? 'text-blue-600' : 'text-gray-500 dark:text-gray-400'}`;
@@ -30,19 +25,19 @@ function NavBar() {
       <nav className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 flex safe-area-pb">
         <NavLink to="/" end className={linkClass}>
           <span className="text-xl">✏️</span>
-          <span>{labels.entry}</span>
+          <span>{t('nav.entry')}</span>
         </NavLink>
         <NavLink to="/summary" className={linkClass}>
           <span className="text-xl">📊</span>
-          <span>{labels.summary}</span>
+          <span>{t('nav.summary')}</span>
         </NavLink>
         <NavLink to="/budget" className={linkClass}>
           <span className="text-xl">💰</span>
-          <span>{labels.budget}</span>
+          <span>{t('nav.budget')}</span>
         </NavLink>
         <NavLink to="/import" className={linkClass}>
           <span className="text-xl">📂</span>
-          <span>{labels.import}</span>
+          <span>{t('nav.import')}</span>
         </NavLink>
         <button
           type="button"
@@ -50,7 +45,7 @@ function NavBar() {
           className="flex flex-col items-center gap-0.5 py-2 px-3 text-xs text-gray-500 dark:text-gray-400"
         >
           <span className="text-xl">⚙️</span>
-          <span>{labels.settings}</span>
+          <span>{t('nav.settings')}</span>
         </button>
       </nav>
       <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
@@ -59,10 +54,11 @@ function NavBar() {
 }
 
 function Layout() {
+  const t = useT();
   return (
     <div className="flex flex-col h-full bg-white dark:bg-gray-900">
       <div className="flex-1 overflow-hidden">
-        <Suspense fallback={<div className="h-full flex items-center justify-center text-gray-400 dark:text-gray-500">載入中…</div>}>
+        <Suspense fallback={<div className="h-full flex items-center justify-center text-gray-400 dark:text-gray-500">{t('common.loading')}</div>}>
           <Outlet />
         </Suspense>
       </div>

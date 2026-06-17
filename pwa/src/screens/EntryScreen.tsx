@@ -6,17 +6,23 @@ import type { CategorySelection } from '../components/CategoryPicker';
 import { TagInput } from '../components/TagInput';
 import { ItemRow } from '../components/ItemRow';
 import type { ItemRowData } from '../components/ItemRow';
-import { AdjustmentRow, KIND_LABELS, resolveAdjAmount } from '../components/AdjustmentRow';
+import { AdjustmentRow, KIND_LABEL_KEYS, resolveAdjAmount } from '../components/AdjustmentRow';
 import type { AdjustmentRowData } from '../components/AdjustmentRow';
 import { PaymentPills } from '../components/PaymentPills';
 import type { PaymentMethod } from '../components/PaymentPills';
 import { DescriptionSuggest } from '../components/DescriptionSuggest';
 import { ParentSearch } from '../components/ParentSearch';
 import type { ParentSearchResult } from '../components/ParentSearch';
+import { useT } from '../i18n';
+import type { MessageKey } from '../i18n';
 
 type Tab = 'expense' | 'fee' | 'refund';
 
-const TAB_LABELS: Record<Tab, string> = { expense: '支出', fee: '手續費', refund: '退款' };
+const TAB_LABEL_KEYS: Record<Tab, MessageKey> = {
+  expense: 'entry.tabExpense',
+  fee: 'entry.tabFee',
+  refund: 'entry.tabRefund',
+};
 const TABS: Tab[] = ['expense', 'fee', 'refund'];
 
 function deriveCategoryTag(sel: CategorySelection | null): string | null {
@@ -35,6 +41,7 @@ function newAdjustment(): AdjustmentRowData {
 // ─── Expense form ─────────────────────────────────────────────────────────────
 
 function ExpenseForm() {
+  const t = useT();
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('credit_card');
   const [category, setCategory] = useState<CategorySelection | null>(null);
@@ -93,7 +100,7 @@ function ExpenseForm() {
       }),
     onSuccess: () => {
       setAmount(''); setCategory(null); setFreeTags([]); setItems([newItem()]); setAdjustments([]); setNote(''); setShowAdj(false);
-      setToast('記錄成功！');
+      setToast(t('entry.toastExpenseSaved'));
       queryClient.invalidateQueries({ queryKey: ['summary'] });
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['tags'] });
@@ -155,7 +162,7 @@ function ExpenseForm() {
 
       {/* Amount */}
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">金額 (NTD)</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('entry.amountLabel')}</label>
         <div className="flex items-center gap-2">
           <input
             type="number"
@@ -170,7 +177,7 @@ function ExpenseForm() {
             type="button"
             onClick={() => setShowAdj((v) => !v)}
             className="flex-shrink-0 text-gray-400 dark:text-gray-500 px-1 pb-1 text-sm"
-            aria-label="折抵設定"
+            aria-label={t('entry.adjAria')}
           >
             {showAdj ? '▾' : '▸'}
           </button>
@@ -179,19 +186,19 @@ function ExpenseForm() {
 
       {/* Payment method */}
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">付款方式</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">{t('entry.paymentMethod')}</label>
         <PaymentPills value={paymentMethod} onChange={setPaymentMethod} />
       </div>
 
       {/* Category */}
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">分類</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">{t('entry.category')}</label>
         <CategoryPicker value={category} onChange={setCategory} />
       </div>
 
       {/* Free tags */}
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">標籤</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">{t('entry.tags')}</label>
         <TagInput value={freeTags} onChange={setFreeTags} />
       </div>
 
@@ -212,7 +219,7 @@ function ExpenseForm() {
             onClick={() => setAdjustments((prev) => [...prev, newAdjustment()])}
             className="mt-2 text-sm text-blue-600 flex items-center gap-1"
           >
-            ＋ 新增折抵
+            {t('entry.addAdjustment')}
           </button>
         </div>
       )}
@@ -220,7 +227,7 @@ function ExpenseForm() {
       {/* Items */}
       <div>
         <div className="flex items-center justify-between mb-1">
-          <label className="text-xs text-gray-500 dark:text-gray-400">品項明細</label>
+          <label className="text-xs text-gray-500 dark:text-gray-400">{t('entry.itemDetails')}</label>
           {items.length > 0 && (
             <span className="text-xs text-gray-500 dark:text-gray-400">
               NT${itemSum}
@@ -239,14 +246,14 @@ function ExpenseForm() {
           />
         ))}
         {items.length === 0 && (
-          <p className="text-xs text-orange-500 mt-1">請至少新增一個品項</p>
+          <p className="text-xs text-orange-500 mt-1">{t('entry.itemRequired')}</p>
         )}
         <button
           type="button"
           onClick={() => setItems((prev) => [...prev, newItem()])}
           className="mt-2 text-sm text-blue-600 flex items-center gap-1"
         >
-          ＋ 新增品項
+          {t('entry.addItem')}
         </button>
       </div>
 
@@ -254,7 +261,7 @@ function ExpenseForm() {
       {allItemsHaveAmount && items.length > 0 && (
         <div className="text-xs rounded-lg border border-gray-100 dark:border-gray-800 px-3 py-2 bg-gray-50 dark:bg-gray-800/50 space-y-0.5">
           <div className="flex justify-between text-gray-500 dark:text-gray-400">
-            <span>品項合計</span>
+            <span>{t('entry.itemSubtotal')}</span>
             <span>NT${itemSum}</span>
           </div>
           {adjustments.map((a) => {
@@ -263,16 +270,16 @@ function ExpenseForm() {
             const isDeduct = a.kind !== 'fee';
             return (
               <div key={a.id} className="flex justify-between text-gray-500 dark:text-gray-400">
-                <span>{KIND_LABELS[a.kind]}</span>
+                <span>{t(KIND_LABEL_KEYS[a.kind])}</span>
                 <span>{isDeduct ? '−' : '+'}NT${amt}</span>
               </div>
             );
           })}
           <div className={`flex justify-between font-semibold border-t border-gray-200 dark:border-gray-700 pt-1 ${paidDiff === 0 ? 'text-green-600 dark:text-green-400' : 'text-orange-500'}`}>
-            <span>計算實付</span>
+            <span>{t('entry.computedPaid')}</span>
             <span>
               NT${computedPaid}
-              {paidDiff !== 0 && ` ⚠ 差 NT$${Math.abs(paidDiff)}`}
+              {paidDiff !== 0 && t('entry.paidDiff', { n: Math.abs(paidDiff) })}
               {paidDiff === 0 && ' ✓'}
             </span>
           </div>
@@ -281,12 +288,12 @@ function ExpenseForm() {
 
       {/* Note */}
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">備註</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('entry.note')}</label>
         <input
           type="text"
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder="可不填"
+          placeholder={t('entry.notePlaceholder')}
           className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
         />
       </div>
@@ -301,7 +308,7 @@ function ExpenseForm() {
         disabled={mutation.isPending || !canSubmit}
         className="mt-auto bg-blue-600 text-white rounded-xl py-3 font-semibold disabled:opacity-50"
       >
-        {mutation.isPending ? '送出中…' : '送出'}
+        {mutation.isPending ? t('entry.submitting') : t('entry.submit')}
       </button>
     </form>
   );
@@ -310,6 +317,7 @@ function ExpenseForm() {
 // ─── Fee form ─────────────────────────────────────────────────────────────────
 
 function FeeForm() {
+  const t = useT();
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [parent, setParent] = useState<ParentSearchResult | null>(null);
@@ -323,13 +331,13 @@ function FeeForm() {
         method: 'POST',
         body: JSON.stringify({
           amount: amountVal,
-          description: description.trim() || '國外交易服務費',
+          description: description.trim() || t('entry.feeDescPlaceholder'),
           parent_transaction_id: parent?.id ?? null,
         }),
       }),
     onSuccess: () => {
       setAmount(''); setDescription(''); setParent(null);
-      setToast('手續費已記錄');
+      setToast(t('entry.toastFeeSaved'));
       setTimeout(() => setToast(''), 2000);
     },
   });
@@ -345,7 +353,7 @@ function FeeForm() {
         </div>
       )}
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">金額 (NTD)</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('entry.amountLabel')}</label>
         <input
           type="number" min="1" value={amount} onChange={(e) => setAmount(e.target.value)}
           placeholder="0" required
@@ -353,11 +361,11 @@ function FeeForm() {
         />
       </div>
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">說明</label>
-        <DescriptionSuggest value={description} onChange={setDescription} type="fee" placeholder="國外交易服務費" />
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('entry.description')}</label>
+        <DescriptionSuggest value={description} onChange={setDescription} type="fee" placeholder={t('entry.feeDescPlaceholder')} />
       </div>
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">連結原始交易（可選）</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">{t('entry.linkOriginal')}</label>
         <ParentSearch
           value={parent}
           onSelect={(result) => {
@@ -375,7 +383,7 @@ function FeeForm() {
         disabled={mutation.isPending || amountVal <= 0}
         className="mt-auto bg-blue-600 text-white rounded-xl py-3 font-semibold disabled:opacity-50"
       >
-        {mutation.isPending ? '送出中…' : '送出'}
+        {mutation.isPending ? t('entry.submitting') : t('entry.submit')}
       </button>
     </form>
   );
@@ -384,6 +392,7 @@ function FeeForm() {
 // ─── Refund form ──────────────────────────────────────────────────────────────
 
 function RefundForm() {
+  const t = useT();
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('credit_card');
@@ -405,7 +414,7 @@ function RefundForm() {
       }),
     onSuccess: () => {
       setAmount(''); setDescription(''); setParent(null);
-      setToast('退款已記錄');
+      setToast(t('entry.toastRefundSaved'));
       setTimeout(() => setToast(''), 2000);
     },
   });
@@ -421,7 +430,7 @@ function RefundForm() {
         </div>
       )}
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">金額 (NTD)</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('entry.amountLabel')}</label>
         <input
           type="number" min="1" value={amount} onChange={(e) => setAmount(e.target.value)}
           placeholder="0" required
@@ -429,15 +438,15 @@ function RefundForm() {
         />
       </div>
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">說明</label>
-        <DescriptionSuggest value={description} onChange={setDescription} type="refund" placeholder="如：訂單退款" required />
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('entry.description')}</label>
+        <DescriptionSuggest value={description} onChange={setDescription} type="refund" placeholder={t('entry.refundDescPlaceholder')} required />
       </div>
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">退款至</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">{t('entry.refundTo')}</label>
         <PaymentPills value={paymentMethod} onChange={setPaymentMethod} />
       </div>
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">連結原始交易（可選）</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">{t('entry.linkOriginal')}</label>
         <ParentSearch value={parent} onSelect={setParent} />
       </div>
       {mutation.error && <p className="text-red-600 text-sm">{(mutation.error as Error).message}</p>}
@@ -446,7 +455,7 @@ function RefundForm() {
         disabled={mutation.isPending || amountVal <= 0 || !description.trim()}
         className="mt-auto bg-blue-600 text-white rounded-xl py-3 font-semibold disabled:opacity-50"
       >
-        {mutation.isPending ? '送出中…' : '送出'}
+        {mutation.isPending ? t('entry.submitting') : t('entry.submit')}
       </button>
     </form>
   );
@@ -455,21 +464,22 @@ function RefundForm() {
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export function EntryScreen() {
+  const t = useT();
   const [tab, setTab] = useState<Tab>('expense');
 
   return (
     <div className="flex flex-col h-full">
       <div className="flex border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-        {TABS.map((t) => (
+        {TABS.map((tb) => (
           <button
-            key={t}
+            key={tb}
             type="button"
-            onClick={() => setTab(t)}
+            onClick={() => setTab(tb)}
             className={`flex-1 py-3 text-sm font-medium transition-colors ${
-              tab === t ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 dark:text-gray-400'
+              tab === tb ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 dark:text-gray-400'
             }`}
           >
-            {TAB_LABELS[t]}
+            {t(TAB_LABEL_KEYS[tb])}
           </button>
         ))}
       </div>

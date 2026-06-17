@@ -7,11 +7,12 @@ import { TagInput } from './TagInput';
 import { ItemRow } from './ItemRow';
 import type { ItemRowData } from './ItemRow';
 import { EXPLICIT_UNCATEGORIZED } from '../lib/itemCategory';
-import { AdjustmentRow, KIND_LABELS, resolveAdjAmount } from './AdjustmentRow';
+import { AdjustmentRow, KIND_LABEL_KEYS, resolveAdjAmount } from './AdjustmentRow';
 import type { AdjustmentRowData, AdjustmentKind } from './AdjustmentRow';
 import { PaymentPills } from './PaymentPills';
 import type { PaymentMethod } from './PaymentPills';
 import { EditHistorySection } from './EditHistorySection';
+import { useT } from '../i18n';
 
 type EditDiff = {
   header?: Record<string, { before: unknown; after: unknown }>;
@@ -95,6 +96,7 @@ function newAdjustment(): AdjustmentRowData {
 // ─── Edit form (inner) ────────────────────────────────────────────────────────
 
 function EditExpenseFormInner({ tx, onClose }: { tx: TxDetail; onClose: () => void }) {
+  const t = useT();
   // B2: the tx-level :-tag is the authoritative category; item :-tags are overrides.
   // Fall back to item-level only for un-migrated legacy data whose category still
   // lives on the items (FR-012 mixed-shape reads).
@@ -214,13 +216,13 @@ function EditExpenseFormInner({ tx, onClose }: { tx: TxDetail; onClose: () => vo
     >
       {/* Consumption time (read-only for now) */}
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">消費時間</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('edit.consumptionTime')}</label>
         <p className="text-sm text-gray-600 dark:text-gray-300">{formatDateTime(tx.transaction_at)}</p>
       </div>
 
       {/* Amount */}
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">金額 (NTD)</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('entry.amountLabel')}</label>
         <div className="flex items-center gap-2">
           <input
             type="number"
@@ -235,7 +237,7 @@ function EditExpenseFormInner({ tx, onClose }: { tx: TxDetail; onClose: () => vo
             type="button"
             onClick={() => setShowAdj((v) => !v)}
             className="flex-shrink-0 text-gray-400 dark:text-gray-500 px-1 pb-1 text-sm"
-            aria-label="折抵設定"
+            aria-label={t('entry.adjAria')}
           >
             {showAdj ? '▾' : '▸'}
           </button>
@@ -244,19 +246,19 @@ function EditExpenseFormInner({ tx, onClose }: { tx: TxDetail; onClose: () => vo
 
       {/* Payment method */}
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">付款方式</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">{t('entry.paymentMethod')}</label>
         <PaymentPills value={paymentMethod} onChange={setPaymentMethod} />
       </div>
 
       {/* Category */}
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">分類</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">{t('entry.category')}</label>
         <CategoryPicker value={category} onChange={setCategory} />
       </div>
 
       {/* Free tags */}
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">標籤</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">{t('entry.tags')}</label>
         <TagInput value={freeTags} onChange={setFreeTags} />
       </div>
 
@@ -277,7 +279,7 @@ function EditExpenseFormInner({ tx, onClose }: { tx: TxDetail; onClose: () => vo
             onClick={() => setAdjustments((prev) => [...prev, newAdjustment()])}
             className="mt-2 text-sm text-blue-600 flex items-center gap-1"
           >
-            ＋ 新增折抵
+            {t('entry.addAdjustment')}
           </button>
         </div>
       )}
@@ -285,7 +287,7 @@ function EditExpenseFormInner({ tx, onClose }: { tx: TxDetail; onClose: () => vo
       {/* Items */}
       <div>
         <div className="flex items-center justify-between mb-1">
-          <label className="text-xs text-gray-500 dark:text-gray-400">品項明細</label>
+          <label className="text-xs text-gray-500 dark:text-gray-400">{t('entry.itemDetails')}</label>
           {items.length > 0 && (
             <span className="text-xs text-gray-500 dark:text-gray-400">NT${itemSum}</span>
           )}
@@ -306,7 +308,7 @@ function EditExpenseFormInner({ tx, onClose }: { tx: TxDetail; onClose: () => vo
           onClick={() => setItems((prev) => [...prev, newItem()])}
           className="mt-2 text-sm text-blue-600 flex items-center gap-1"
         >
-          ＋ 新增品項
+          {t('entry.addItem')}
         </button>
       </div>
 
@@ -314,7 +316,7 @@ function EditExpenseFormInner({ tx, onClose }: { tx: TxDetail; onClose: () => vo
       {allItemsHaveAmount && items.length > 0 && (
         <div className="text-xs rounded-lg border border-gray-100 dark:border-gray-800 px-3 py-2 bg-gray-50 dark:bg-gray-800/50 space-y-0.5">
           <div className="flex justify-between text-gray-500 dark:text-gray-400">
-            <span>品項合計</span>
+            <span>{t('entry.itemSubtotal')}</span>
             <span>NT${itemSum}</span>
           </div>
           {adjustments.map((a) => {
@@ -323,16 +325,16 @@ function EditExpenseFormInner({ tx, onClose }: { tx: TxDetail; onClose: () => vo
             const isDeduct = a.kind !== 'fee';
             return (
               <div key={a.id} className="flex justify-between text-gray-500 dark:text-gray-400">
-                <span>{KIND_LABELS[a.kind]}</span>
+                <span>{t(KIND_LABEL_KEYS[a.kind])}</span>
                 <span>{isDeduct ? '−' : '+'}NT${amt}</span>
               </div>
             );
           })}
           <div className={`flex justify-between font-semibold border-t border-gray-200 dark:border-gray-700 pt-1 ${paidDiff === 0 ? 'text-green-600 dark:text-green-400' : 'text-orange-500'}`}>
-            <span>計算實付</span>
+            <span>{t('entry.computedPaid')}</span>
             <span>
               NT${computedPaid}
-              {paidDiff !== 0 && ` ⚠ 差 NT$${Math.abs(paidDiff)}`}
+              {paidDiff !== 0 && t('entry.paidDiff', { n: Math.abs(paidDiff) })}
               {paidDiff === 0 && ' ✓'}
             </span>
           </div>
@@ -341,12 +343,12 @@ function EditExpenseFormInner({ tx, onClose }: { tx: TxDetail; onClose: () => vo
 
       {/* Note */}
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">備註</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('entry.note')}</label>
         <input
           type="text"
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder="可不填"
+          placeholder={t('entry.notePlaceholder')}
           className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
         />
       </div>
@@ -364,7 +366,7 @@ function EditExpenseFormInner({ tx, onClose }: { tx: TxDetail; onClose: () => vo
         disabled={mutation.isPending || !canSubmit}
         className="mt-auto bg-blue-600 text-white rounded-xl py-3 font-semibold disabled:opacity-50"
       >
-        {mutation.isPending ? '儲存中…' : '儲存'}
+        {mutation.isPending ? t('edit.saving') : t('edit.save')}
       </button>
     </form>
   );
@@ -373,6 +375,7 @@ function EditExpenseFormInner({ tx, onClose }: { tx: TxDetail; onClose: () => vo
 // ─── EditExpenseSheet (overlay wrapper) ──────────────────────────────────────
 
 export function EditExpenseSheet({ txId, onClose }: { txId: string; onClose: () => void }) {
+  const t = useT();
   const { data: tx, isLoading, error } = useQuery({
     queryKey: ['tx-detail', txId],
     queryFn: () => apiFetch<TxDetail>(`/pwa/transactions/${txId}`),
@@ -387,19 +390,19 @@ export function EditExpenseSheet({ txId, onClose }: { txId: string; onClose: () 
           onClick={onClose}
           className="text-blue-600 text-sm"
         >
-          ← 返回
+          {t('common.back')}
         </button>
-        <span className="font-semibold text-gray-800 dark:text-gray-100 flex-1">編輯支出</span>
+        <span className="font-semibold text-gray-800 dark:text-gray-100 flex-1">{t('edit.title')}</span>
       </div>
       <div className="flex-1 overflow-hidden">
         {isLoading && (
           <div className="h-full flex items-center justify-center text-gray-400 dark:text-gray-500">
-            載入中…
+            {t('common.loading')}
           </div>
         )}
         {error && (
           <div className="h-full flex items-center justify-center text-red-500 text-sm px-4">
-            載入失敗：{(error as Error).message}
+            {t('edit.loadFailed', { msg: (error as Error).message })}
           </div>
         )}
         {tx && <EditExpenseFormInner tx={tx} onClose={onClose} />}
