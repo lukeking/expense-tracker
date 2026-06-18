@@ -11,6 +11,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { ItemCategorySheet } from '../components/ItemCategorySheet';
 import { assignItemCategory } from '../api/client';
 import { itemCategoryTag, effectiveItemCategory } from '../lib/itemCategory';
+import { txInSubcategory, itemInSubcategory, subAmount } from '../lib/subcategory';
 import { useT } from '../i18n';
 
 const COLOURS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
@@ -53,6 +54,16 @@ function groupTransactions(txs: TxRecord[], base: TimeBase): { label: string; it
     .map(([label, items]) => ({ label, items }));
 }
 
+// Feature 030: when a subcategory bar is selected, every amount shown in the drilldown
+// list (rows, day subtotals, header) is the net subcategory portion (matching items'
+// effective_amount) rather than the whole-transaction amount.
+type SubFilter = { major: string; sub: string } | null;
+
+function txSignedAmount(tx: TxRecord, subFilter: SubFilter): number {
+  if (subFilter) return subAmount(tx, subFilter.major, subFilter.sub); // already refund-signed
+  return tx.transaction_type === 'refund' ? -tx.amount : tx.amount;
+}
+
 function txLabel(tx: TxRecord): string {
   const note = tx.note;
   const itemTags = tx.items?.flatMap((i) => i.tags ?? []) ?? [];
@@ -63,13 +74,18 @@ function txLabel(tx: TxRecord): string {
   return label;
 }
 
-function TxEntry({ tx, parentMap, onEdit }: { tx: TxRecord; parentMap: Map<string, TxRecord>; onEdit?: (id: string) => void }) {
+function TxEntry({ tx, parentMap, subFilter, onEdit }: { tx: TxRecord; parentMap: Map<string, TxRecord>; subFilter?: SubFilter; onEdit?: (id: string) => void }) {
   const qc = useQueryClient();
   const t = useT();
   // Feature 026: the item being categorized inline from the Summary list.
   const [catItem, setCatItem] = useState<{ itemId: string; value: string | null } | null>(null);
   const canCategorize = tx.transaction_type === 'expense';
   const inheritedTag = tx.tags.find((t) => t.includes(':')) ?? null;
+  // Feature 030: under a subcategory filter, show only the matching item lines and the
+  // net subcategory amount for the row; otherwise the whole transaction.
+  const filter = subFilter ?? null;
+  const displayItems = filter ? tx.items.filter((i) => itemInSubcategory(i, filter.major, filter.sub)) : tx.items;
+  const rowMagnitude = filter ? Math.abs(subAmount(tx, filter.major, filter.sub)) : tx.amount;
 
   async function assignCategory(catTag: string | null) {
     if (!catItem) return;
@@ -103,7 +119,7 @@ function TxEntry({ tx, parentMap, onEdit }: { tx: TxRecord; parentMap: Map<strin
             </button>
           )}
           <span className={`font-medium ${tx.transaction_type === 'refund' ? 'text-green-600' : 'text-gray-800 dark:text-gray-100'}`}>
-            {tx.transaction_type === 'refund' ? `-${formatMoney(tx.amount)}` : formatMoney(tx.amount)}
+            {tx.transaction_type === 'refund' ? `-${formatMoney(rowMagnitude)}` : formatMoney(rowMagnitude)}
           </span>
         </span>
       </div>
@@ -117,10 +133,11 @@ function TxEntry({ tx, parentMap, onEdit }: { tx: TxRecord; parentMap: Map<strin
             : t('summary.actualCharge', { date: localDt(tx.created_at) })}
         </p>
       )}
-      {tx.items.length > 0 && (
+      {displayItems.length > 0 && (
         <div className="mt-1 space-y-0.5 pl-2">
-          {tx.items.map((item) => {
+          {displayItems.map((item) => {
             const cat = itemCategoryTag(item);
+            const itemAmt = filter ? (item.effective_amount ?? item.amount) : item.amount;
             // B2 (FR-011): show the effective category — blue = own decision
             // (override / sentinel-as-'Other'), pale gray = inherited live from the tx,
             // amber ⚠ = no decision anywhere.
@@ -137,7 +154,7 @@ function TxEntry({ tx, parentMap, onEdit }: { tx: TxRecord; parentMap: Map<strin
                     <span className="text-amber-600 dark:text-amber-400">{t('summary.uncategorized')}</span>
                   ) : null}
                 </span>
-                {item.amount !== null && <span className="text-gray-400 dark:text-gray-500">NT${item.amount}</span>}
+                {itemAmt !== null && <span className="text-gray-400 dark:text-gray-500">NT${itemAmt}</span>}
               </>
             );
             return canCategorize ? (
@@ -170,9 +187,9 @@ function TxEntry({ tx, parentMap, onEdit }: { tx: TxRecord; parentMap: Map<strin
   );
 }
 
-function DateSubGroup({ dateLabel, items, parentMap, onEdit }: { dateLabel: string; items: TxRecord[]; parentMap: Map<string, TxRecord>; onEdit?: (id: string) => void }) {
+function DateSubGroup({ dateLabel, items, parentMap, subFilter, onEdit }: { dateLabel: string; items: TxRecord[]; parentMap: Map<string, TxRecord>; subFilter?: SubFilter; onEdit?: (id: string) => void }) {
   const [open, setOpen] = useState(false);
-  const total = items.reduce((s, t) => s + (t.transaction_type === 'refund' ? -t.amount : t.amount), 0);
+  const total = items.reduce((s, t) => s + txSignedAmount(t, subFilter ?? null), 0);
   return (
     <div className="border-t border-gray-50 dark:border-gray-800">
       <button
@@ -185,16 +202,16 @@ function DateSubGroup({ dateLabel, items, parentMap, onEdit }: { dateLabel: stri
       </button>
       {open && (
         <div className="ml-4 border-l-2 border-gray-200 dark:border-gray-700 mb-1">
-          {items.map((tx) => <TxEntry key={tx.id} tx={tx} parentMap={parentMap} onEdit={onEdit} />)}
+          {items.map((tx) => <TxEntry key={tx.id} tx={tx} parentMap={parentMap} subFilter={subFilter} onEdit={onEdit} />)}
         </div>
       )}
     </div>
   );
 }
 
-function HistoryGroup({ label, items, parentMap, showDateSubs, onEdit }: { label: string; items: TxRecord[]; parentMap: Map<string, TxRecord>; showDateSubs?: boolean; onEdit?: (id: string) => void }) {
+function HistoryGroup({ label, items, parentMap, showDateSubs, subFilter, onEdit }: { label: string; items: TxRecord[]; parentMap: Map<string, TxRecord>; showDateSubs?: boolean; subFilter?: SubFilter; onEdit?: (id: string) => void }) {
   const [open, setOpen] = useState(false);
-  const total = items.reduce((s, t) => s + (t.transaction_type === 'refund' ? -t.amount : t.amount), 0);
+  const total = items.reduce((s, t) => s + txSignedAmount(t, subFilter ?? null), 0);
 
   const dateGroups = showDateSubs ? (() => {
     const map = new Map<string, TxRecord[]>();
@@ -220,8 +237,8 @@ function HistoryGroup({ label, items, parentMap, showDateSubs, onEdit }: { label
       {open && (
         <div className="pb-2">
           {dateGroups
-            ? dateGroups.map(([d, txs]) => <DateSubGroup key={d} dateLabel={d} items={txs} parentMap={parentMap} onEdit={onEdit} />)
-            : items.map((tx) => <TxEntry key={tx.id} tx={tx} parentMap={parentMap} onEdit={onEdit} />)}
+            ? dateGroups.map(([d, txs]) => <DateSubGroup key={d} dateLabel={d} items={txs} parentMap={parentMap} subFilter={subFilter} onEdit={onEdit} />)
+            : items.map((tx) => <TxEntry key={tx.id} tx={tx} parentMap={parentMap} subFilter={subFilter} onEdit={onEdit} />)}
         </div>
       )}
     </div>
@@ -274,13 +291,23 @@ export function SummaryScreen() {
   const [tag, setTag] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<string | null>(null);
   const [drilldown, setDrilldown] = useState<string | null>(null);
+  const [subDrilldown, setSubDrilldown] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [editingTxId, setEditingTxId] = useState<string | null>(null);
+
+  // Feature 030: a subcategory selection is only meaningful inside a major drilldown, so
+  // it resets to null wherever the major drilldown itself resets (FR-007), plus when
+  // drilling into a different major.
+  const handleDrilldown = (major: string) => {
+    setDrilldown(major);
+    setSubDrilldown(null);
+  };
 
   const handleTimeBaseChange = (base: TimeBase) => {
     setTimeBase(base);
     setOffset(0);
     setDrilldown(null);
+    setSubDrilldown(null);
     // filters preserved per FR-010
   };
 
@@ -289,6 +316,7 @@ export function SummaryScreen() {
     setTag(null);
     setPaymentMethod(null);
     setDrilldown(null);
+    setSubDrilldown(null);
   };
 
   const handlePickerSelect = (newOffset: number) => {
@@ -297,6 +325,7 @@ export function SummaryScreen() {
     setPaymentMethod(null);
     setPickerOpen(false);
     setDrilldown(null);
+    setSubDrilldown(null);
   };
 
   const { data: summaryData, isLoading: summaryLoading } = useSummaryData(timeBase, offset, tag, paymentMethod);
@@ -333,8 +362,15 @@ export function SummaryScreen() {
   const allFiltered = timeBase === 'all' && (!!tag || !!paymentMethod || !!drilldown);
 
   const txs = txData?.transactions ?? [];
-  const groups = groupTransactions(txs, timeBase);
+  // Feature 030: a selected subcategory narrows the already-loaded major list in memory
+  // (composition with the active tag/payment/period holds — they're baked into `txs`).
+  const subFilter: SubFilter = drilldown && subDrilldown ? { major: drilldown, sub: subDrilldown } : null;
+  const filteredTxs = subFilter ? txs.filter((tx) => txInSubcategory(tx, subFilter.major, subFilter.sub)) : txs;
+  const groups = groupTransactions(filteredTxs, timeBase);
+  // parentMap spans the full major list so a refund's parent still resolves even when the
+  // parent itself falls outside the selected subcategory.
   const parentMap = new Map(txs.map((tx) => [tx.id, tx]));
+  const subTotal = subFilter ? filteredTxs.reduce((s, tx) => s + subAmount(tx, subFilter.major, subFilter.sub), 0) : 0;
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
@@ -369,11 +405,24 @@ export function SummaryScreen() {
         /* ── Drilldown view ── */
         <div>
           <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-100 dark:border-gray-700">
-            <button type="button" onClick={() => setDrilldown(null)} className="text-blue-600 text-sm">
+            <button type="button" onClick={() => { setDrilldown(null); setSubDrilldown(null); }} className="text-blue-600 text-sm">
               {t('common.back')}
             </button>
-            <span className="font-semibold text-gray-800 dark:text-gray-100">{drilldown}</span>
-            {subData && <span className="ml-auto text-sm text-gray-500 dark:text-gray-400">{formatMoney(subData.total)}</span>}
+            <span className="font-semibold text-gray-800 dark:text-gray-100">
+              {subDrilldown ? `${drilldown} › ${subDrilldown}` : drilldown}
+            </span>
+            <span className="ml-auto text-sm text-gray-500 dark:text-gray-400">
+              {subDrilldown ? formatMoney(subTotal) : subData ? formatMoney(subData.total) : null}
+            </span>
+            {subDrilldown && (
+              <button
+                type="button"
+                onClick={() => setSubDrilldown(null)}
+                className="text-sm text-blue-600 whitespace-nowrap"
+              >
+                ✕ {t('summary.showAll')}
+              </button>
+            )}
           </div>
           {subLoading ? (
             <div className="p-8 text-center text-gray-400 dark:text-gray-500">{t('common.loading')}</div>
@@ -388,7 +437,35 @@ export function SummaryScreen() {
                   <XAxis type="number" hide />
                   <YAxis type="category" dataKey="name" width={72} tick={{ fontSize: 12 }} />
                   <Tooltip formatter={(v) => formatMoney(Number(v))} />
-                  <Bar dataKey="total" fill="#3b82f6" radius={[0, 4, 4, 0]} minPointSize={6} barSize={24} />
+                  <Bar
+                    dataKey="total"
+                    radius={[0, 4, 4, 0]}
+                    minPointSize={6}
+                    barSize={24}
+                    cursor="pointer"
+                    isAnimationActive={false}
+                    onClick={(d: { name?: string; payload?: { name?: string } }) => {
+                      const sub = d?.payload?.name ?? d?.name;
+                      // Toggle: re-tapping the active bar clears the selection (FR-006a);
+                      // tapping a different bar replaces it (FR-003).
+                      if (sub) setSubDrilldown((cur) => (cur === sub ? null : sub));
+                    }}
+                  >
+                    {subData.subcategories.map((s) => {
+                      // Shade (venetian-blind style) the non-selected bars when a
+                      // subcategory is selected, so the selected one shows through; the CSS
+                      // transition animates it down on select and back on clear (FR-008).
+                      const shaded = subDrilldown !== null && subDrilldown !== s.subcategory;
+                      return (
+                        <Cell
+                          key={s.subcategory}
+                          fill="#3b82f6"
+                          fillOpacity={shaded ? 0.25 : 1}
+                          style={{ transition: 'fill-opacity 300ms ease' }}
+                        />
+                      );
+                    })}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -417,7 +494,7 @@ export function SummaryScreen() {
                     cy="52%"
                     outerRadius={85}
                     dataKey="value"
-                    onClick={(entry) => setDrilldown(entry.name as string)}
+                    onClick={(entry) => handleDrilldown(entry.name as string)}
                     cursor="pointer"
                     label={({ name, percent }) => `${name} ${Math.round((percent as number) * 100)}%`}
                     labelLine={false}
@@ -434,7 +511,7 @@ export function SummaryScreen() {
                   <button
                     key={c.category}
                     type="button"
-                    onClick={() => setDrilldown(c.category)}
+                    onClick={() => handleDrilldown(c.category)}
                     className="flex items-center gap-2 w-full py-1.5 text-sm"
                   >
                     <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: COLOURS[i % COLOURS.length] }} />
@@ -470,6 +547,7 @@ export function SummaryScreen() {
               items={g.items}
               parentMap={parentMap}
               showDateSubs={timeBase === 'year' || timeBase === 'all'}
+              subFilter={subFilter}
               onEdit={setEditingTxId}
             />
           ))

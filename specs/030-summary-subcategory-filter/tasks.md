@@ -26,8 +26,8 @@ Web app: PWA front-end in `pwa/`, CF Worker backend in `backend/`, Playwright E2
 
 **Purpose**: Expose the net per-item amount the feature reads. No new dependencies (in-house only).
 
-- [ ] T001 Add `effective_amount` to the `transaction_items(...)` select projection (and the local `TxRow` interface) in `GET /pwa/transactions` — backend/src/handlers/pwa.ts
-- [ ] T002 [P] Add `effective_amount: number | null` to the `TxItem` interface — pwa/src/hooks/useSummary.ts
+- [X] T001 Add `effective_amount` to the `transaction_items(...)` select projection (and the local `TxRow` interface) in `GET /pwa/transactions` — backend/src/handlers/pwa.ts
+- [X] T002 [P] Add `effective_amount: number | null` to the `TxItem` interface — pwa/src/hooks/useSummary.ts
 
 ---
 
@@ -37,8 +37,8 @@ Web app: PWA front-end in `pwa/`, CF Worker backend in `backend/`, Playwright E2
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T003 [P] Create pure helpers in pwa/src/lib/subcategory.ts: `itemInSubcategory(item, major, sub)`, `txInSubcategory(tx, major, sub)` (membership — `其他` = bare-major tag; else `Major:Sub` / `Major:Sub:` prefix), and `subAmount(tx, major, sub)` (refund-aware net sum of matching items' `effective_amount ?? amount`) per data-model.md
-- [ ] T004 [P] Extend the worker test to assert `GET /pwa/transactions` returns `effective_amount` on each item — backend/tests/handlers/pwa-transactions-category.test.ts
+- [X] T003 [P] Create pure helpers in pwa/src/lib/subcategory.ts: `itemInSubcategory(item, major, sub)`, `txInSubcategory(tx, major, sub)` (membership — `其他` = bare-major tag; else `Major:Sub` / `Major:Sub:` prefix), and `subAmount(tx, major, sub)` (refund-aware net sum of matching items' `effective_amount ?? amount`) per data-model.md
+- [X] T004 [P] Extend the worker test to assert `GET /pwa/transactions` returns `effective_amount` on each item — backend/tests/handlers/pwa-transactions-category.test.ts
 
 **Checkpoint**: Net-amount data is available end-to-end and the helpers exist — user stories can begin.
 
@@ -50,11 +50,11 @@ Web app: PWA front-end in `pwa/`, CF Worker backend in `backend/`, Playwright E2
 
 **Independent Test**: Drill into a major with ≥2 subcategories, tap one bar → the list shows only that subcategory's transactions grouped by day; the header shows the net subcategory total; each day's subtotal and the header total are net and reconcile.
 
-- [ ] T005 [US1] Add `subDrilldown: string | null` state to `SummaryScreen` and reset it to `null` in `handleTimeBaseChange`, `handleNavigate`, `handlePickerSelect`, the drilldown back button, and on drilling into a different major (FR-007) — pwa/src/screens/SummaryScreen.tsx
-- [ ] T006 [US1] Add `onClick` to the subcategory `<Bar>` to set `subDrilldown` to the tapped subcategory (select); switching to another bar replaces the selection (FR-001, FR-003) — pwa/src/screens/SummaryScreen.tsx
-- [ ] T007 [US1] When `subDrilldown` is set, filter `txData.transactions` with `txInSubcategory(...)` before `groupTransactions(...)` so the history list day-groups to the subcategory (including the `其他` bucket) (FR-002). Note: the input list is the already-composed major list (`useTransactions(..., drilldown, tag, paymentMethod)`), so composition with the active tag/payment/period filters (FR-004) holds by construction. — pwa/src/screens/SummaryScreen.tsx
-- [ ] T008 [US1] Thread the active `drilldown`/`subDrilldown` into the drilldown header, the day groups, and the transaction rows so that when a subcategory is active: the header headline total, each day subtotal, **each transaction row's amount, and the matching item-line amounts** are all the net subcategory portion via `subAmount(...)` / `effective_amount` (not the whole-transaction amount) (FR-005, FR-009) — pwa/src/screens/SummaryScreen.tsx
-- [ ] T009 [P] [US1] E2E smoke: drill into a major, tap a subcategory bar → assert the list narrows + is day-grouped, the header shows the net subcategory total, tapping a different bar swaps the selection, **the day subtotals sum to the header total (SC-002 reconciliation)**, and **with an active tag/payment filter the subcategory still narrows within it (FR-004 composition)** — e2e/tests/view-summary.spec.ts
+- [X] T005 [US1] Add `subDrilldown: string | null` state to `SummaryScreen` and reset it to `null` in `handleTimeBaseChange`, `handleNavigate`, `handlePickerSelect`, the drilldown back button, and on drilling into a different major (FR-007) — pwa/src/screens/SummaryScreen.tsx
+- [X] T006 [US1] Add `onClick` to the subcategory `<Bar>` to set `subDrilldown` to the tapped subcategory (select); switching to another bar replaces the selection (FR-001, FR-003) — pwa/src/screens/SummaryScreen.tsx
+- [X] T007 [US1] When `subDrilldown` is set, filter `txData.transactions` with `txInSubcategory(...)` before `groupTransactions(...)` so the history list day-groups to the subcategory (including the `其他` bucket) (FR-002). Note: the input list is the already-composed major list (`useTransactions(..., drilldown, tag, paymentMethod)`), so composition with the active tag/payment/period filters (FR-004) holds by construction. — pwa/src/screens/SummaryScreen.tsx
+- [X] T008 [US1] Thread the active `drilldown`/`subDrilldown` into the drilldown header, the day groups, and the transaction rows so that when a subcategory is active: the header headline total, each day subtotal, **each transaction row's amount, and the matching item-line amounts** are all the net subcategory portion via `subAmount(...)` / `effective_amount` (not the whole-transaction amount) (FR-005, FR-009) — pwa/src/screens/SummaryScreen.tsx
+- [X] T009 [P] [US1] E2E smoke: drill into a major, tap a subcategory bar → assert the list narrows + is day-grouped, the header shows the net subcategory total, tapping a different bar swaps the selection, **the day subtotals sum to the header total (SC-002 reconciliation)**, and **with an active tag/payment filter the subcategory still narrows within it (FR-004 composition)** — e2e/tests/view-summary.spec.ts
 
 **Checkpoint**: US1 is fully functional — the filter answers both goals. MVP demoable.
 
@@ -66,10 +66,10 @@ Web app: PWA front-end in `pwa/`, CF Worker backend in `backend/`, Playwright E2
 
 **Independent Test**: With a subcategory filter active, re-tap the active bar → full major list returns; re-select, then tap the clear control → full major list returns; neither clears any active tag/payment filter.
 
-- [ ] T010 [US2] Make the `<Bar>` onClick a toggle — tapping the already-selected subcategory clears `subDrilldown` (FR-006a) — pwa/src/screens/SummaryScreen.tsx
-- [ ] T011 [US2] Add i18n key (e.g. `summary.showAll`) to both catalogs, matching wording (zh: 全部 / en: All) — pwa/src/i18n/zh.ts and pwa/src/i18n/en.ts
-- [ ] T012 [US2] Render a dedicated clear control in the drilldown header, visible only while `subDrilldown` is set, that clears the selection (FR-006b), using the T011 label — pwa/src/screens/SummaryScreen.tsx
-- [ ] T013 [US2] Extend the E2E smoke: assert both clear paths (re-tap active bar, and the clear control) restore the full major-category list — e2e/tests/view-summary.spec.ts
+- [X] T010 [US2] Make the `<Bar>` onClick a toggle — tapping the already-selected subcategory clears `subDrilldown` (FR-006a) — pwa/src/screens/SummaryScreen.tsx
+- [X] T011 [US2] Add i18n key (e.g. `summary.showAll`) to both catalogs, matching wording (zh: 全部 / en: All) — pwa/src/i18n/zh.ts and pwa/src/i18n/en.ts
+- [X] T012 [US2] Render a dedicated clear control in the drilldown header, visible only while `subDrilldown` is set, that clears the selection (FR-006b), using the T011 label — pwa/src/screens/SummaryScreen.tsx
+- [X] T013 [US2] Extend the E2E smoke: assert both clear paths (re-tap active bar, and the clear control) restore the full major-category list — e2e/tests/view-summary.spec.ts
 
 **Checkpoint**: US1 + US2 work — filter can be set and cleared two ways.
 
@@ -81,9 +81,9 @@ Web app: PWA front-end in `pwa/`, CF Worker backend in `backend/`, Playwright E2
 
 **Independent Test**: With a subcategory filter active, the non-selected bars are visibly shaded (selected bar shows through) and the header reads `Major › Sub` with the net total; clearing reverts the shade and the header.
 
-- [ ] T014 [US3] Apply the 百葉窗 shade to the non-selected bars when a subcategory is selected — a lightweight semi-transparent overlay (per-`<Cell>` `fillOpacity` transition or an overlay layer) that animates down on select and retracts on clear, leaving the selected bar showing through (FR-008) — pwa/src/screens/SummaryScreen.tsx
-- [ ] T015 [US3] Restructure the drilldown header into a breadcrumb (Major › Subcategory) with the net subcategory total when selected, reverting to the major + major total on clear (FR-009) — pwa/src/screens/SummaryScreen.tsx
-- [ ] T016 [US3] Extend the E2E smoke: assert the breadcrumb (Major › Sub) + net total appear and the non-selected bars are shaded while filtered, and both revert on clear — e2e/tests/view-summary.spec.ts
+- [X] T014 [US3] Apply the 百葉窗 shade to the non-selected bars when a subcategory is selected — a lightweight semi-transparent overlay (per-`<Cell>` `fillOpacity` transition or an overlay layer) that animates down on select and retracts on clear, leaving the selected bar showing through (FR-008) — pwa/src/screens/SummaryScreen.tsx
+- [X] T015 [US3] Restructure the drilldown header into a breadcrumb (Major › Subcategory) with the net subcategory total when selected, reverting to the major + major total on clear (FR-009) — pwa/src/screens/SummaryScreen.tsx
+- [X] T016 [US3] Extend the E2E smoke: assert the breadcrumb (Major › Sub) + net total appear and the non-selected bars are shaded while filtered, and both revert on clear — e2e/tests/view-summary.spec.ts
 
 **Checkpoint**: All three stories functional and independently verifiable.
 
@@ -91,9 +91,9 @@ Web app: PWA front-end in `pwa/`, CF Worker backend in `backend/`, Playwright E2
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T017 [P] Run `cd backend && pnpm test`, `cd pwa && pnpm exec tsc -b`, and `cd pwa && pnpm i18n:check`; fix any failures (type/key-parity/worker test)
+- [X] T017 [P] Run `cd backend && pnpm test`, `cd pwa && pnpm exec tsc -b`, and `cd pwa && pnpm i18n:check`; fix any failures (type/key-parity/worker test)
 - [ ] T018 Run the quickstart.md manual verification on the dev build (Vite :5300), including the discounted-item net check and the `其他` bucket
-- [ ] T019 [P] Confirm no regression to the unfiltered major-level drilldown and the all-time/period views, and that the result matches the quickstart.md mockup
+- [X] T019 [P] Confirm no regression to the unfiltered major-level drilldown and the all-time/period views, and that the result matches the quickstart.md mockup
 
 ---
 

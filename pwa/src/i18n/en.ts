@@ -89,6 +89,7 @@ export const en: Messages = {
   'summary.selectPeriod': 'Select period',
   'summary.total': 'Total',
   'summary.txHistory': 'Transactions',
+  'summary.showAll': 'All',
   'summary.noExpenses': 'No expenses this period',
   'summary.noSubcategoryData': 'No subcategory data this period',
   'summary.noTransactions': 'No transactions this period',

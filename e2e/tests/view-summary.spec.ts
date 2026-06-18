@@ -26,3 +26,104 @@ test('drilling into a category filters the view to that category', async ({ page
   await expect(page.getByText('← 返回')).toBeVisible();
   await expect(page.getByText(money(BASELINE_TOTALS.byMajor['食']), { exact: true }).first()).toBeVisible(); // NT$350 header, not the 410 grand
 });
+
+// Feature 030 (US1) — tapping a subcategory bar narrows the drilldown list to that
+// subcategory, day-grouped, with the header showing its net total. 食 has two
+// item-tagged subcategories: 午餐 (NT$250) and 早餐 (NT$100).
+test('tapping a subcategory bar filters the drilldown to that subcategory', async ({ page }) => {
+  await page.goto('/#/summary');
+  await page.getByRole('button', { name: '全部', exact: true }).click();
+
+  // Drill into 食 (350 = 午餐 250 + 早餐 100).
+  await page.getByRole('button', { name: /食/ }).first().click();
+  await expect(page.getByText('← 返回')).toBeVisible();
+  await expect(page.getByText(money(350), { exact: true }).first()).toBeVisible();
+
+  // Two subcategory bars, sorted by total desc: nth(0) = 午餐 (250), nth(1) = 早餐 (100).
+  const bars = page.locator('.recharts-bar-rectangle');
+  await expect(bars).toHaveCount(2);
+
+  // Tap 午餐 → header shows the net subcategory total; the major total (350) and the
+  // other subcategory (100) drop out of the list.
+  await bars.nth(0).click();
+  await expect(page.getByText(money(250), { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(money(350), { exact: true })).toHaveCount(0);
+  await expect(page.getByText(money(100), { exact: true })).toHaveCount(0);
+
+  // Tap a different bar (早餐) → selection replaces, not stacks (FR-003).
+  await bars.nth(1).click();
+  await expect(page.getByText(money(100), { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(money(250), { exact: true })).toHaveCount(0);
+
+  // Day-grouped: expanding the month group reveals the subcategory's day (SC-002 — with
+  // one tx the single day subtotal equals the header total, both NT$100).
+  await page.getByRole('button', { name: /2026\/03/ }).click();
+  await expect(page.getByText('03/05', { exact: true })).toBeVisible(); // 早餐 tx day
+});
+
+// Feature 030 (FR-004) — the subcategory filter composes with an active payment-method
+// filter: credit_card leaves only the lunch tx (午餐, 250) within 食.
+test('subcategory filter composes with an active payment-method filter', async ({ page }) => {
+  await page.goto('/#/summary');
+  await page.getByRole('button', { name: '全部', exact: true }).click();
+
+  await page.getByRole('button', { name: '信用卡', exact: true }).click(); // credit_card only
+
+  await page.getByRole('button', { name: /食/ }).first().click();
+  // Only 午餐 survives the payment filter, so a single bar remains.
+  const bars = page.locator('.recharts-bar-rectangle');
+  await expect(bars).toHaveCount(1);
+
+  await bars.nth(0).click();
+  await expect(page.getByText(money(250), { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(money(100), { exact: true })).toHaveCount(0);
+});
+
+// Feature 030 (US2, FR-006) — the subcategory filter clears two ways: re-tapping the
+// active bar, and the dedicated clear control. Both restore the full major-category list
+// (the major total NT$350 returns).
+test('clearing the subcategory filter restores the full major list (both ways)', async ({ page }) => {
+  await page.goto('/#/summary');
+  await page.getByRole('button', { name: '全部', exact: true }).click();
+
+  await page.getByRole('button', { name: /食/ }).first().click();
+  const bars = page.locator('.recharts-bar-rectangle');
+  await expect(bars).toHaveCount(2);
+
+  // Select 午餐 → filtered (major total gone); re-tap the same bar → cleared (350 back).
+  await bars.nth(0).click();
+  await expect(page.getByText(money(350), { exact: true })).toHaveCount(0);
+  await bars.nth(0).click();
+  await expect(page.getByText(money(350), { exact: true }).first()).toBeVisible();
+
+  // Select again → filtered; tap the clear control (✕ 全部) → cleared (350 back).
+  await bars.nth(0).click();
+  await expect(page.getByText(money(350), { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: '✕ 全部', exact: true }).click();
+  await expect(page.getByText(money(350), { exact: true }).first()).toBeVisible();
+});
+
+// Feature 030 (US3, FR-008/FR-009) — the active subcategory is obvious: the header
+// becomes a breadcrumb (Major › Sub) with the net total, and the non-selected bars take
+// the shade. Both revert on clear.
+test('the active subcategory shows a breadcrumb header and shades the other bars', async ({ page }) => {
+  await page.goto('/#/summary');
+  await page.getByRole('button', { name: '全部', exact: true }).click();
+
+  await page.getByRole('button', { name: /食/ }).first().click();
+  const bars = page.locator('.recharts-bar-rectangle');
+  await expect(bars).toHaveCount(2);
+  // No shade before a subcategory is selected.
+  await expect(page.locator('.recharts-rectangle[fill-opacity="0.25"]')).toHaveCount(0);
+
+  // Select 午餐 → breadcrumb + net total; the other bar (早餐) is shaded.
+  await bars.nth(0).click();
+  await expect(page.getByText('食 › 午餐')).toBeVisible();
+  await expect(page.getByText(money(250), { exact: true }).first()).toBeVisible();
+  await expect(page.locator('.recharts-rectangle[fill-opacity="0.25"]')).toHaveCount(1);
+
+  // Clear → breadcrumb reverts to the major and the shade retracts.
+  await page.getByRole('button', { name: '✕ 全部', exact: true }).click();
+  await expect(page.getByText('食 › 午餐')).toHaveCount(0);
+  await expect(page.locator('.recharts-rectangle[fill-opacity="0.25"]')).toHaveCount(0);
+});

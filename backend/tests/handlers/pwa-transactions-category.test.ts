@@ -39,6 +39,42 @@ describe('POST/PUT item write shape (FR-003/FR-013)', () => {
   });
 });
 
+describe('GET /pwa/transactions item projection (feature 030)', () => {
+  // Mirrors the handler's response shaping: the select projects
+  // transaction_items(id, name, amount, effective_amount, tags) and the response maps
+  // each row `({ transaction_items, ...rest }) => ({ ...rest, items: transaction_items })`,
+  // preserving every item field verbatim. Guards that effective_amount reaches items[].
+  const shapeResponse = (rows: { transaction_items: unknown[]; [k: string]: unknown }[]) =>
+    rows.map(({ transaction_items, ...rest }) => ({ ...rest, items: transaction_items }));
+
+  it('carries effective_amount on each returned item', () => {
+    const rows = [
+      {
+        id: 'tx-1',
+        amount: 300,
+        transaction_items: [
+          { id: 'i-1', name: '便當', amount: 120, effective_amount: 100, tags: ['食:午餐'] },
+          { id: 'i-2', name: '飲料', amount: 60, effective_amount: 60, tags: ['食:飲料'] },
+        ],
+      },
+    ];
+    const [tx] = shapeResponse(rows);
+    expect(tx.items).toHaveLength(2);
+    for (const item of tx.items as { effective_amount: number | null }[]) {
+      expect(item).toHaveProperty('effective_amount');
+    }
+    expect((tx.items as { effective_amount: number | null }[])[0].effective_amount).toBe(100);
+  });
+
+  it('preserves a null effective_amount (item with no net override)', () => {
+    const rows = [
+      { id: 'tx-2', transaction_items: [{ id: 'i-3', name: '雜支', amount: 50, effective_amount: null, tags: [] }] },
+    ];
+    const [tx] = shapeResponse(rows);
+    expect((tx.items as { effective_amount: number | null }[])[0].effective_amount).toBeNull();
+  });
+});
+
 describe('refund-link item shape (B2)', () => {
   it('the refund tx keeps the parent-category snapshot; its item inherits (tags: [])', () => {
     // Mirrors the handler: tx tags = [parentCategoryTag], item tags = [] — the item

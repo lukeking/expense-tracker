@@ -89,6 +89,7 @@ export const zh = {
   'summary.selectPeriod': '選擇期間',
   'summary.total': '總計',
   'summary.txHistory': '交易記錄',
+  'summary.showAll': '全部',
   'summary.noExpenses': '此期間無支出記錄',
   'summary.noSubcategoryData': '此期間無子分類資料',
   'summary.noTransactions': '此期間無交易',

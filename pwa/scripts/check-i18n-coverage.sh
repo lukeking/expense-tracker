@@ -9,12 +9,14 @@
 #     the nav row is hidden in all-time mode) — spec Q2.
 #   - EXPLICIT_UNCATEGORIZED ('其他:未分類') and the 'Other' bucket value it derives —
 #     a data sentinel that must mirror the backend, not UI chrome — spec Q1.
+#   - OTHER_SUBCATEGORY ('其他') in lib/subcategory.ts — the same 'Other' bucket sentinel,
+#     compared against the backend's subcategory label (feature 030), not UI chrome.
 set -euo pipefail
 cd "$(dirname "$0")/.."   # -> pwa/
 
 hits=$(grep -rnP '[\x{4e00}-\x{9fff}]' src --include='*.tsx' --include='*.ts' \
   | grep -v '^src/i18n/' \
-  | grep -vE "MONTH_NAMES|MONTH_LABELS|label: '全部'|EXPLICIT_UNCATEGORIZED|explicit-uncategorized" \
+  | grep -vE "MONTH_NAMES|MONTH_LABELS|label: '全部'|EXPLICIT_UNCATEGORIZED|explicit-uncategorized|OTHER_SUBCATEGORY" \
   || true)
 
 if [ -n "$hits" ]; then

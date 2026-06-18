@@ -342,7 +342,7 @@ pwaRouter.get('/transactions', async (c) => {
   let query = supabase
     .from('transactions')
     .select(
-      'id, amount, transaction_type, payment_method, tags, note, transaction_at, created_at, parent_transaction_id, transaction_items(id, name, amount, tags)',
+      'id, amount, transaction_type, payment_method, tags, note, transaction_at, created_at, parent_transaction_id, transaction_items(id, name, amount, effective_amount, tags)',
       { count: 'exact' }
     )
     .gte('transaction_at', from)
@@ -358,7 +358,7 @@ pwaRouter.get('/transactions', async (c) => {
   interface TxRow {
     id: string; amount: number; transaction_type: string; payment_method: string;
     tags: string[]; note: string | null; transaction_at: string; created_at: string; parent_transaction_id: string | null;
-    transaction_items: { id: string; name: string; amount: number | null; tags: string[] }[];
+    transaction_items: { id: string; name: string; amount: number | null; effective_amount: number | null; tags: string[] }[];
   }
   let transactions = (data ?? []) as TxRow[];
 
