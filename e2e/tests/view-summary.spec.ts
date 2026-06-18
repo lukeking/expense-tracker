@@ -103,6 +103,25 @@ test('clearing the subcategory filter restores the full major list (both ways)',
   await expect(page.getByText(money(350), { exact: true }).first()).toBeVisible();
 });
 
+// Feature 030 (FR-001) — the whole row band is clickable, not just the coloured bar.
+// Clicking the empty right-hand side of a short bar's row still selects it (regression
+// for tapping the light-grey area of a small bar).
+test('clicking the empty part of a row selects that subcategory', async ({ page }) => {
+  await page.goto('/#/summary');
+  await page.getByRole('button', { name: '全部', exact: true }).click();
+  await page.getByRole('button', { name: /食/ }).first().click();
+
+  const surface = page.locator('.recharts-surface').first();
+  await expect(surface).toBeVisible();
+  const box = (await surface.boundingBox())!;
+  // 食 has two rows: 午餐 (top, long bar) and 早餐 (bottom, short bar). Click far right of
+  // the 早餐 row — well past its short bar — to prove the band, not just the bar, selects.
+  await surface.click({ position: { x: box.width - 20, y: box.height * 0.75 } });
+
+  await expect(page.getByText('食 › 早餐')).toBeVisible();
+  await expect(page.getByText(money(100), { exact: true }).first()).toBeVisible();
+});
+
 // Feature 030 (US3, FR-008/FR-009) — the active subcategory is obvious: the header
 // becomes a breadcrumb (Major › Sub) with the net total, and the non-selected bars take
 // the shade. Both revert on clear.

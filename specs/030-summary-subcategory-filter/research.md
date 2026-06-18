@@ -59,6 +59,8 @@ function txInSubcategory(tx, major, sub):
 
 **Spec impact**: FR-005 / SC-002 hold exactly for item-tagged spend and the `其他` bucket; transaction-level-only tags are the documented edge.
 
+**Correction (implementation, 2026-06-18)**: this decision's premise — that item-level tagging dominates and tx-level-only is a *rare* edge — was wrong. Under feature 027 (B2) the tx-level category is the source of truth and items **inherit** it (most items carry no own `major:` tag), so the "tx-level-only" case is the **common** case. Computing from matching item tags alone returned **NT$0** for nearly every real transaction. `subAmount` was therefore changed to a **faithful port of `aggregateBySubcategory`** (matched items + remainder/fallback), so amounts reconcile with the bar for all cases. The remaining edge is now only the displayed per-item breakdown in rare mixed-tag transactions (the row total is authoritative).
+
 ---
 
 ## D4 — Active indication (百葉窗 shade) and the header/clear UI
