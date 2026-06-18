@@ -98,6 +98,7 @@ export interface TxItem {
   id: string;
   name: string;
   amount: number | null;
+  effective_amount: number | null;
   tags: string[];
 }
 
