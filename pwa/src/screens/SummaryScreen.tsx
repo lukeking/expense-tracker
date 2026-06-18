@@ -84,7 +84,7 @@ function TxEntry({ tx, parentMap, subFilter, onEdit }: { tx: TxRecord; parentMap
   // Feature 030: under a subcategory filter, show only the matching item lines and the
   // net subcategory amount for the row; otherwise the whole transaction.
   const filter = subFilter ?? null;
-  const displayItems = filter ? tx.items.filter((i) => itemInSubcategory(i, filter.major, filter.sub)) : tx.items;
+  const displayItems = filter ? tx.items.filter((i) => itemInSubcategory(i, tx, filter.major, filter.sub)) : tx.items;
   const rowMagnitude = filter ? Math.abs(subAmount(tx, filter.major, filter.sub)) : tx.amount;
 
   async function assignCategory(catTag: string | null) {
@@ -427,12 +427,19 @@ export function SummaryScreen() {
           {subLoading ? (
             <div className="p-8 text-center text-gray-400 dark:text-gray-500">{t('common.loading')}</div>
           ) : subData && subData.subcategories.length > 0 ? (
-            <div className="px-4 py-3">
+            <div className="px-4 py-3 cursor-pointer">
               <ResponsiveContainer width="100%" height={subData.subcategories.length * 44}>
                 <BarChart
                   data={subData.subcategories.map((s) => ({ name: s.subcategory, total: s.total }))}
                   layout="vertical"
                   margin={{ left: 0, right: 16, top: 0, bottom: 0 }}
+                  // Click anywhere in a row's band (not just the coloured bar) to select that
+                  // subcategory — `activeLabel` is the row under the cursor (FR-001/FR-003);
+                  // re-selecting the active one clears it (FR-006a).
+                  onClick={(state: { activeLabel?: string }) => {
+                    const sub = state?.activeLabel;
+                    if (sub) setSubDrilldown((cur) => (cur === sub ? null : sub));
+                  }}
                 >
                   <XAxis type="number" hide />
                   <YAxis type="category" dataKey="name" width={72} tick={{ fontSize: 12 }} />
@@ -442,14 +449,7 @@ export function SummaryScreen() {
                     radius={[0, 4, 4, 0]}
                     minPointSize={6}
                     barSize={24}
-                    cursor="pointer"
                     isAnimationActive={false}
-                    onClick={(d: { name?: string; payload?: { name?: string } }) => {
-                      const sub = d?.payload?.name ?? d?.name;
-                      // Toggle: re-tapping the active bar clears the selection (FR-006a);
-                      // tapping a different bar replaces it (FR-003).
-                      if (sub) setSubDrilldown((cur) => (cur === sub ? null : sub));
-                    }}
                   >
                     {subData.subcategories.map((s) => {
                       // Shade (venetian-blind style) the non-selected bars when a

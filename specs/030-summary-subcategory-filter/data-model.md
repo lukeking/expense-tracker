@@ -34,30 +34,33 @@ TxItem = { id, name, amount: number | null, effective_amount: number | null, tag
 | Subcategory period total | `sum over filtered txs of subAmount(tx, drilldown, subDrilldown)` | The header headline figure (Goal 2). |
 | Day subtotal | `sum over the day's filtered txs of subAmount(...)` | Each day group's subtotal. |
 
-## Membership rule (the testable core)
-
-`txInSubcategory(tx, major, sub)` → boolean. Operates on rows already known to belong to `major`.
-
-```
-tags  = [...tx.tags, ...tx.items.flatMap(i => i.tags)]
-sub === '其他'  →  tags.some(t => t === major)
-otherwise       →  tags.some(t => t === `${major}:${sub}` || t.startsWith(`${major}:${sub}:`))
-```
-
 ## Net-amount rule (the amount each tx contributes to the subcategory)
 
-`subAmount(tx, major, sub)` → number. Sums the **matching items'** net amount; refunds negate.
+`subAmount(tx, major, sub)` → number. A **faithful port of the backend `aggregateBySubcategory` per-transaction logic** so the client figures reconcile with the bar chart. This MUST mirror the backend because the app tags at the **transaction level** and items **inherit** that category (feature 027 B2) — most items carry no `major:` tag of their own, so a naive "sum items whose own tag matches" reads 0 for the common case.
 
 ```
-sign  = tx.transaction_type === 'refund' ? -1 : 1
-items = tx.items.filter(i => itemInSubcategory(i, major, sub))   // same predicate, per item
-net   = items.reduce((s, i) => s + (i.effective_amount ?? i.amount ?? 0), 0)
-return sign * net
+sign       = tx.transaction_type === 'refund' ? -1 : 1
+matchedSum = Σ effective_amount over items with an own `major:` tag
+contrib    = Σ effective_amount over those whose sub === sub
+remainder  = tx.amount − matchedSum                         // inherited / untagged / itemless spend
+  if a `major:` tag exists on the tx (else any item):       // fallback
+      add remainder to that tag's sub
+  else if any `major`-prefixed tag exists:                  // bare-major / anyMatch
+      add remainder to the 其他 bucket
+return sign * contrib
 ```
 
-- **`其他` bucket**: items whose only `major`-tag is the bare major (no `Major:Sub`). Consistent with `aggregateBySubcategory`.
+- **`其他` bucket**: trailing `major:` (empty sub), bare-major fallback, or (drilling into the `其他` major) plain-tag items. Consistent with `aggregateBySubcategory`.
+- **Net**: matched items use `effective_amount` (discounts already folded out); the remainder uses `tx.amount` (the paid amount, into which `effective_amount`s sum), so the figure is net.
+
+## Membership rule (the list)
+
+`txInSubcategory(tx, major, sub)` → `subAmount(tx, major, sub) !== 0`. A row appears in the subcategory's day-grouped list iff it has a non-zero net contribution — keeping the list and the amounts consistent (no NT$0 rows).
+
+`itemInSubcategory(item, tx, major, sub)` → boolean, used to pick which **item lines** to show under the filter: the item's own `major:` tag if it has one, otherwise the category **inherited** from the tx (`itemSubcategory`).
+
 - **Pure functions**: no I/O; deterministic — suitable as the unit of the e2e assertion and any future unit test.
-- **Known edge** (research D3): transactions tagged only at the tx level (no item carries the tag) contribute 0 here but are apportioned by the bar's remainder rule — minor, deliberately not reproduced.
+- **Residual**: the displayed item-line breakdown (own-or-inherited per item) can differ slightly from the row total in rare mixed-tag transactions; the row total (`subAmount`) is authoritative and matches the bar.
 
 ## Presentation state (derived, no storage)
 

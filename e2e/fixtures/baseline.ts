@@ -38,7 +38,9 @@ export const BASELINE_TRANSACTIONS: BaselineTx[] = [
     tags: ['食:午餐'],
     note: 'baseline lunch',
     transaction_at: '2026-03-12T12:30:00Z',
-    items: [{ name: '便當', amount: 250, tags: ['食:午餐'] }],
+    // Item inherits the tx-level category (feature 027 B2 — no own tag). Exercises the
+    // subAmount remainder/fallback path that tx-level-tagged spend relies on (feature 030).
+    items: [{ name: '便當', amount: 250, tags: [] }],
   },
   {
     amount: 60,
