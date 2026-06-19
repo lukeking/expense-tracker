@@ -107,9 +107,14 @@ export function aggregateBySubcategory(
       if (effectiveAmt == null) continue;
       const categoryTag = item.tags.find((t) => t.startsWith(prefix)) ?? null;
       if (!categoryTag) {
-        // When drilling into '其他', items with no category tag (plain tags only)
-        // belong to subcategory '其他'.
-        if (category === '其他' && !item.tags.some((t) => t.includes(':'))) {
+        // Drilling into 其他: an untagged item is passive 其他:其他 spend — but only when
+        // its TRANSACTION is also uncategorised. In a categorised tx the item inherits
+        // that category (B2), so it must NOT leak into 其他.
+        if (
+          category === '其他' &&
+          !item.tags.some((t) => t.includes(':')) &&
+          !tx.tags.some((t) => t.includes(':'))
+        ) {
           map.set('其他', (map.get('其他') ?? 0) + sign * effectiveAmt);
           matchedSum += effectiveAmt;
         }
@@ -126,6 +131,10 @@ export function aggregateBySubcategory(
       if (fallbackTag) {
         const subcategory = fallbackTag.split(':').slice(1).join(':') || '其他';
         map.set(subcategory, (map.get(subcategory) ?? 0) + sign * remainder);
+      } else if (category === '其他' && !tx.tags.some((t) => t.includes(':'))) {
+        // A category-less tx's unlabelled remainder is 其他:其他 spend — mirrors how
+        // aggregateByCategory routes the remainder of uncategorised txs into 其他.
+        map.set('其他', (map.get('其他') ?? 0) + sign * remainder);
       } else {
         const anyMatch = tx.tags.find((t) => t.split(':')[0] === category)
           ?? items.flatMap((i) => i.tags).find((t) => t.split(':')[0] === category);

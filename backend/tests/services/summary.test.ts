@@ -219,6 +219,31 @@ describe('aggregateBySubcategory', () => {
     expect(result[0].total).toBe(80);
   });
 
+  it('itemless uncategorised tx → full amount under 其他:其他', () => {
+    const txs = [{ amount: 100, tags: [], transaction_items: [] }];
+    const result = aggregateBySubcategory(txs, '其他');
+    expect(result).toEqual([{ subcategory: '其他', total: 100 }]);
+  });
+
+  it('categorised tx with inherited (untagged) items does NOT leak into 其他', () => {
+    // B2: tx-level category is the source of truth; items inherit it untagged.
+    const txs = [{ amount: 200, tags: ['食:早餐'], transaction_items: [{ amount: 200, tags: [] }] }];
+    expect(aggregateBySubcategory(txs, '其他')).toEqual([]);
+    expect(aggregateBySubcategory(txs, '食')).toEqual([{ subcategory: '早餐', total: 200 }]);
+  });
+
+  it('其他 subcategory totals reconcile with the major 其他 total', () => {
+    const txs = [
+      { amount: 100, tags: [], transaction_items: [] },                               // uncategorised, itemless → 其他
+      { amount: 200, tags: ['食:早餐'], transaction_items: [{ amount: 200, tags: [] }] }, // categorised → 食, not 其他
+      { amount: 80, tags: [], transaction_items: [{ amount: 80, tags: ['三商巧福'] }] },  // uncategorised plain tag → 其他
+    ];
+    const majorOther = aggregateByCategory(txs).find((c) => c.category === '其他')?.total;
+    const subTotal = aggregateBySubcategory(txs, '其他').reduce((s, t) => s + t.total, 0);
+    expect(majorOther).toBe(180);
+    expect(subTotal).toBe(majorOther);
+  });
+
   it('multi-colon tag → subcategory is everything after first colon', () => {
     const txs = [txSingle(300, '食:港式:飲茶')];
     const result = aggregateBySubcategory(txs, '食');
