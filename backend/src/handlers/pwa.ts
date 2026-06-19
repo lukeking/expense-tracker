@@ -365,10 +365,20 @@ pwaRouter.get('/transactions', async (c) => {
   if (category) {
     const matchesCategory = (tags: string[]) =>
       tags.some((t) => t === category || t.startsWith(`${category}:`));
-    transactions = transactions.filter((tx) =>
+    const hasMatch = (tx: TxRow) =>
       tx.transaction_items.some((item) => matchesCategory(item.tags)) ||
-      matchesCategory(tx.tags)
-    );
+      matchesCategory(tx.tags);
+    if (category === '其他') {
+      // 其他 is the catch-all: besides txs explicitly tagged 其他/其他:*, it also owns
+      // every transaction with no category tag anywhere — which a positive tag match
+      // can't see — mirroring aggregateByCategory's remainder→其他 routing.
+      const hasAnyCategoryTag = (tx: TxRow) =>
+        tx.tags.some((t) => t.includes(':')) ||
+        tx.transaction_items.some((item) => item.tags.some((t) => t.includes(':')));
+      transactions = transactions.filter((tx) => hasMatch(tx) || !hasAnyCategoryTag(tx));
+    } else {
+      transactions = transactions.filter(hasMatch);
+    }
   }
   if (tag) transactions = transactions.filter((tx) => txHasPlainTag(tx, tag));
 

@@ -11,7 +11,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { ItemCategorySheet } from '../components/ItemCategorySheet';
 import { assignItemCategory } from '../api/client';
 import { itemCategoryTag, effectiveItemCategory } from '../lib/itemCategory';
-import { txInSubcategory, itemInSubcategory, subAmount } from '../lib/subcategory';
+import { txInSubcategory, itemInSubcategory, subAmount, txInMajor } from '../lib/subcategory';
 import { useT } from '../i18n';
 
 const COLOURS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
@@ -328,6 +328,19 @@ export function SummaryScreen() {
     setSubDrilldown(null);
   };
 
+  // Feature 030: a tag / payment filter re-scopes the subcategory chart, so a selected
+  // subcategory can vanish from the filtered data — leaving the header, bars and list
+  // disagreeing. Clear the stale selection; the major drilldown is kept so the user keeps
+  // filtering the same major in place.
+  const handleTagChange = (t: string | null) => {
+    setTag(t);
+    setSubDrilldown(null);
+  };
+  const handlePaymentChange = (pm: string | null) => {
+    setPaymentMethod(pm);
+    setSubDrilldown(null);
+  };
+
   const { data: summaryData, isLoading: summaryLoading } = useSummaryData(timeBase, offset, tag, paymentMethod);
   const { data: subData, isLoading: subLoading } = useSubcategoryData(drilldown, timeBase, offset, tag, paymentMethod);
   const { data: txData } = useTransactions(timeBase, offset, drilldown, tag, paymentMethod);
@@ -338,9 +351,15 @@ export function SummaryScreen() {
   // plus the full payment-method list.
   const { data: allPlainTags } = useTags();
   const { data: allTxData } = useTransactions(timeBase, offset);
+  // Scope the chip pools so no selection can dead-end to an empty view: by the drilled-into
+  // major, and by the *other* active filter (the tag pool drops tags with no spend under the
+  // active payment, and vice versa). The active selection itself is always kept in its pool
+  // so it stays clearable even when it falls outside that scope (e.g. set before drilling).
   const availableTags = useMemo(() => {
     if (timeBase === 'all') return allPlainTags ?? [];
-    const txs = allTxData?.transactions ?? [];
+    let txs = allTxData?.transactions ?? [];
+    if (drilldown) txs = txs.filter((tx) => txInMajor(tx, drilldown));
+    if (paymentMethod) txs = txs.filter((tx) => tx.payment_method === paymentMethod);
     const set = new Set<string>();
     for (const tx of txs) {
       for (const t of tx.tags) { if (!t.includes(':')) set.add(t); }
@@ -348,14 +367,19 @@ export function SummaryScreen() {
         for (const t of item.tags) { if (!t.includes(':')) set.add(t); }
       }
     }
+    if (tag) set.add(tag);
     return Array.from(set).sort();
-  }, [timeBase, allPlainTags, allTxData]);
+  }, [timeBase, allPlainTags, allTxData, drilldown, tag, paymentMethod]);
 
   const availablePaymentMethods = useMemo(() => {
     if (timeBase === 'all') return ALL_PAYMENT_METHODS;
-    const txs = allTxData?.transactions ?? [];
-    return Array.from(new Set(txs.map((tx) => tx.payment_method))).sort();
-  }, [timeBase, allTxData]);
+    let txs = allTxData?.transactions ?? [];
+    if (drilldown) txs = txs.filter((tx) => txInMajor(tx, drilldown));
+    if (tag) txs = txs.filter((tx) => tx.tags.includes(tag) || tx.items.some((i) => i.tags.includes(tag)));
+    const set = new Set(txs.map((tx) => tx.payment_method));
+    if (paymentMethod) set.add(paymentMethod);
+    return Array.from(set).sort();
+  }, [timeBase, allTxData, drilldown, tag, paymentMethod]);
 
   // Under the all-time view, an active filter/drilldown switches the history from the lazy per-period
   // list to a single filtered, month-grouped list.
@@ -397,8 +421,8 @@ export function SummaryScreen() {
         paymentMethods={availablePaymentMethods}
         activeTag={tag}
         activePayment={paymentMethod}
-        onTagChange={setTag}
-        onPaymentChange={setPaymentMethod}
+        onTagChange={handleTagChange}
+        onPaymentChange={handlePaymentChange}
       />
 
       {drilldown ? (
@@ -428,46 +452,64 @@ export function SummaryScreen() {
             <div className="p-8 text-center text-gray-400 dark:text-gray-500">{t('common.loading')}</div>
           ) : subData && subData.subcategories.length > 0 ? (
             <div className="px-4 py-3 cursor-pointer">
-              <ResponsiveContainer width="100%" height={subData.subcategories.length * 44}>
-                <BarChart
-                  data={subData.subcategories.map((s) => ({ name: s.subcategory, total: s.total }))}
-                  layout="vertical"
-                  margin={{ left: 0, right: 16, top: 0, bottom: 0 }}
-                  // Click anywhere in a row's band (not just the coloured bar) to select that
-                  // subcategory — `activeLabel` is the row under the cursor (FR-001/FR-003);
-                  // re-selecting the active one clears it (FR-006a).
-                  onClick={(state: { activeLabel?: string }) => {
-                    const sub = state?.activeLabel;
-                    if (sub) setSubDrilldown((cur) => (cur === sub ? null : sub));
-                  }}
-                >
-                  <XAxis type="number" hide />
-                  <YAxis type="category" dataKey="name" width={72} tick={{ fontSize: 12 }} />
-                  <Tooltip formatter={(v) => formatMoney(Number(v))} />
-                  <Bar
-                    dataKey="total"
-                    radius={[0, 4, 4, 0]}
-                    minPointSize={6}
-                    barSize={24}
-                    isAnimationActive={false}
+              <div className="relative">
+                <ResponsiveContainer width="100%" height={subData.subcategories.length * 44}>
+                  <BarChart
+                    data={subData.subcategories.map((s) => ({ name: s.subcategory, total: s.total }))}
+                    layout="vertical"
+                    // Right margin reserves the fixed amount column (the overlay below).
+                    margin={{ left: 0, right: 76, top: 0, bottom: 0 }}
+                    // Click anywhere in a row's band (not just the coloured bar) to select that
+                    // subcategory — `activeLabel` is the row under the cursor (FR-001/FR-003);
+                    // re-selecting the active one clears it (FR-006a).
+                    onClick={(state: { activeLabel?: string }) => {
+                      const sub = state?.activeLabel;
+                      if (sub) setSubDrilldown((cur) => (cur === sub ? null : sub));
+                    }}
                   >
-                    {subData.subcategories.map((s) => {
-                      // Shade (venetian-blind style) the non-selected bars when a
-                      // subcategory is selected, so the selected one shows through; the CSS
-                      // transition animates it down on select and back on clear (FR-008).
-                      const shaded = subDrilldown !== null && subDrilldown !== s.subcategory;
-                      return (
-                        <Cell
-                          key={s.subcategory}
-                          fill="#3b82f6"
-                          fillOpacity={shaded ? 0.25 : 1}
-                          style={{ transition: 'fill-opacity 300ms ease' }}
-                        />
-                      );
-                    })}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+                    <XAxis type="number" hide />
+                    <YAxis type="category" dataKey="name" width={72} tick={{ fontSize: 12 }} />
+                    <Bar
+                      dataKey="total"
+                      radius={[0, 4, 4, 0]}
+                      minPointSize={6}
+                      barSize={24}
+                      isAnimationActive={false}
+                    >
+                      {subData.subcategories.map((s) => {
+                        // Shade (venetian-blind style) the non-selected bars when a
+                        // subcategory is selected, so the selected one shows through; the CSS
+                        // transition animates it down on select and back on clear (FR-008).
+                        const shaded = subDrilldown !== null && subDrilldown !== s.subcategory;
+                        return (
+                          <Cell
+                            key={s.subcategory}
+                            fill="#3b82f6"
+                            fillOpacity={shaded ? 0.25 : 1}
+                            style={{ transition: 'fill-opacity 300ms ease' }}
+                          />
+                        );
+                      })}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+                {/* Always-visible subtotal, right-aligned in a fixed column. The rows are equal
+                    flex divisions of the same height as the chart, so each aligns with its bar;
+                    pointer-events-none keeps the whole row tappable. Dims in sync with shading. */}
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex w-[76px] flex-col">
+                  {subData.subcategories.map((s) => {
+                    const shaded = subDrilldown !== null && subDrilldown !== s.subcategory;
+                    return (
+                      <div
+                        key={s.subcategory}
+                        className={`flex flex-1 items-center justify-end pr-1 text-xs tabular-nums text-gray-600 transition-opacity duration-300 dark:text-gray-300 ${shaded ? 'opacity-25' : 'opacity-100'}`}
+                      >
+                        {formatMoney(s.total)}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           ) : (
             <div className="p-8 text-center text-gray-400 dark:text-gray-500">{t('summary.noSubcategoryData')}</div>

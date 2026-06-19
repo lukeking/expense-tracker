@@ -75,6 +75,49 @@ describe('GET /pwa/transactions item projection (feature 030)', () => {
   });
 });
 
+describe('GET /pwa/transactions?category filter predicate', () => {
+  // Mirrors the handler's inline category filter (pwa.ts). 其他 is the catch-all: it
+  // additionally owns every transaction with no category tag anywhere — which a positive
+  // tag match cannot see — mirroring aggregateByCategory's remainder→其他 routing.
+  interface Tx { tags: string[]; items: { tags: string[] }[] }
+  const inCategory = (tx: Tx, category: string) => {
+    const matchesCategory = (tags: string[]) =>
+      tags.some((t) => t === category || t.startsWith(`${category}:`));
+    const hasMatch = tx.items.some((i) => matchesCategory(i.tags)) || matchesCategory(tx.tags);
+    if (category === '其他') {
+      const hasAnyCategoryTag =
+        tx.tags.some((t) => t.includes(':')) ||
+        tx.items.some((i) => i.tags.some((t) => t.includes(':')));
+      return hasMatch || !hasAnyCategoryTag;
+    }
+    return hasMatch;
+  };
+
+  const uncategorised: Tx = { tags: [], items: [] };
+  const uncategorisedItems: Tx = { tags: [], items: [{ tags: ['三商巧福'] }] };
+  const explicitOther: Tx = { tags: [], items: [{ tags: ['其他:電信費'] }] };
+  const categorised: Tx = { tags: ['食:早餐'], items: [{ tags: [] }] };
+
+  it('其他 includes uncategorised txs (no tag anywhere) — the reverse-predicate fix', () => {
+    expect(inCategory(uncategorised, '其他')).toBe(true);
+    expect(inCategory(uncategorisedItems, '其他')).toBe(true);
+  });
+
+  it('其他 includes txs explicitly tagged 其他:*', () => {
+    expect(inCategory(explicitOther, '其他')).toBe(true);
+  });
+
+  it('其他 excludes txs assigned to a named category', () => {
+    expect(inCategory(categorised, '其他')).toBe(false);
+  });
+
+  it('a named category still matches only its own positive tags', () => {
+    expect(inCategory(categorised, '食')).toBe(true);
+    expect(inCategory(uncategorised, '食')).toBe(false);
+    expect(inCategory(explicitOther, '食')).toBe(false);
+  });
+});
+
 describe('refund-link item shape (B2)', () => {
   it('the refund tx keeps the parent-category snapshot; its item inherits (tags: [])', () => {
     // Mirrors the handler: tx tags = [parentCategoryTag], item tags = [] — the item
