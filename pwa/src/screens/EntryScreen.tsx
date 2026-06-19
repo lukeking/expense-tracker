@@ -152,7 +152,7 @@ function ExpenseForm() {
   return (
     <form
       onSubmit={(e) => { e.preventDefault(); if (canSubmit) mutation.mutate(); }}
-      className="flex flex-col gap-4 p-4 overflow-y-auto h-full"
+      className="flex flex-col h-full"
     >
       {toast && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-green-600 text-white px-4 py-2 rounded-full text-sm z-50">
@@ -160,6 +160,7 @@ function ExpenseForm() {
         </div>
       )}
 
+      <div className="flex-1 overflow-y-auto flex flex-col gap-4 p-4">
       {/* Amount */}
       <div>
         <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('entry.amountLabel')}</label>
@@ -298,18 +299,21 @@ function ExpenseForm() {
         />
       </div>
 
-      {/* Errors */}
-      {mutation.error && (
-        <p className="text-red-600 text-sm">{(mutation.error as Error).message}</p>
-      )}
+      </div>
 
-      <button
-        type="submit"
-        disabled={mutation.isPending || !canSubmit}
-        className="mt-auto bg-blue-600 text-white rounded-xl py-3 font-semibold disabled:opacity-50"
-      >
-        {mutation.isPending ? t('entry.submitting') : t('entry.submit')}
-      </button>
+      {/* Pinned submit footer */}
+      <div className="p-4 pt-3 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+        {mutation.error && (
+          <p className="text-red-600 text-sm mb-2">{(mutation.error as Error).message}</p>
+        )}
+        <button
+          type="submit"
+          disabled={mutation.isPending || !canSubmit}
+          className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold disabled:opacity-50"
+        >
+          {mutation.isPending ? t('entry.submitting') : t('entry.submit')}
+        </button>
+      </div>
     </form>
   );
 }
@@ -345,13 +349,14 @@ function FeeForm() {
   return (
     <form
       onSubmit={(e) => { e.preventDefault(); if (amountVal > 0) mutation.mutate(); }}
-      className="flex flex-col gap-4 p-4 overflow-y-auto h-full"
+      className="flex flex-col h-full"
     >
       {toast && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-green-600 text-white px-4 py-2 rounded-full text-sm z-50">
           {toast}
         </div>
       )}
+      <div className="flex-1 overflow-y-auto flex flex-col gap-4 p-4">
       <div>
         <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('entry.amountLabel')}</label>
         <input
@@ -377,14 +382,19 @@ function FeeForm() {
           }}
         />
       </div>
-      {mutation.error && <p className="text-red-600 text-sm">{(mutation.error as Error).message}</p>}
-      <button
-        type="submit"
-        disabled={mutation.isPending || amountVal <= 0}
-        className="mt-auto bg-blue-600 text-white rounded-xl py-3 font-semibold disabled:opacity-50"
-      >
-        {mutation.isPending ? t('entry.submitting') : t('entry.submit')}
-      </button>
+      </div>
+
+      {/* Pinned submit footer */}
+      <div className="p-4 pt-3 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+        {mutation.error && <p className="text-red-600 text-sm mb-2">{(mutation.error as Error).message}</p>}
+        <button
+          type="submit"
+          disabled={mutation.isPending || amountVal <= 0}
+          className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold disabled:opacity-50"
+        >
+          {mutation.isPending ? t('entry.submitting') : t('entry.submit')}
+        </button>
+      </div>
     </form>
   );
 }
@@ -422,13 +432,14 @@ function RefundForm() {
   return (
     <form
       onSubmit={(e) => { e.preventDefault(); if (amountVal > 0 && description.trim()) mutation.mutate(); }}
-      className="flex flex-col gap-4 p-4 overflow-y-auto h-full"
+      className="flex flex-col h-full"
     >
       {toast && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-green-600 text-white px-4 py-2 rounded-full text-sm z-50">
           {toast}
         </div>
       )}
+      <div className="flex-1 overflow-y-auto flex flex-col gap-4 p-4">
       <div>
         <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('entry.amountLabel')}</label>
         <input
@@ -449,14 +460,19 @@ function RefundForm() {
         <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">{t('entry.linkOriginal')}</label>
         <ParentSearch value={parent} onSelect={setParent} />
       </div>
-      {mutation.error && <p className="text-red-600 text-sm">{(mutation.error as Error).message}</p>}
-      <button
-        type="submit"
-        disabled={mutation.isPending || amountVal <= 0 || !description.trim()}
-        className="mt-auto bg-blue-600 text-white rounded-xl py-3 font-semibold disabled:opacity-50"
-      >
-        {mutation.isPending ? t('entry.submitting') : t('entry.submit')}
-      </button>
+      </div>
+
+      {/* Pinned submit footer */}
+      <div className="p-4 pt-3 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+        {mutation.error && <p className="text-red-600 text-sm mb-2">{(mutation.error as Error).message}</p>}
+        <button
+          type="submit"
+          disabled={mutation.isPending || amountVal <= 0 || !description.trim()}
+          className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold disabled:opacity-50"
+        >
+          {mutation.isPending ? t('entry.submitting') : t('entry.submit')}
+        </button>
+      </div>
     </form>
   );
 }
