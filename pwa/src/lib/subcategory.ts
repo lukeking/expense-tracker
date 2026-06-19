@@ -37,8 +37,14 @@ export function itemSubcategory(item: SubItem, tx: SubTx, major: string): string
   if (own) return subOf(own, major);
   const inherited = majorTag(tx.tags, major);
   if (inherited) return subOf(inherited, major);
-  // Drilling into the top-level Other major: plain-tag items bucket into Other.
-  if (major === OTHER_SUBCATEGORY && !item.tags.some((t) => t.includes(':'))) return OTHER_SUBCATEGORY;
+  // Drilling into the top-level Other major: an untagged item buckets into Other only
+  // when its transaction is also uncategorised (a categorised tx's items inherit it, B2).
+  if (
+    major === OTHER_SUBCATEGORY &&
+    !item.tags.some((t) => t.includes(':')) &&
+    !tx.tags.some((t) => t.includes(':'))
+  )
+    return OTHER_SUBCATEGORY;
   return null;
 }
 
@@ -61,8 +67,14 @@ export function subAmount(tx: SubTx, major: string, sub: string): number {
     if (eff == null) continue;
     const ownTag = item.tags.find((t) => t.startsWith(prefix)) ?? null;
     if (!ownTag) {
-      // Drilling into Other: plain-tag items bucket into Other and count as matched.
-      if (major === OTHER_SUBCATEGORY && !item.tags.some((t) => t.includes(':'))) {
+      // Drilling into Other: an untagged item buckets into Other and counts as matched —
+      // but only when its transaction is also uncategorised (else it inherits that
+      // category, B2, and must not leak into Other).
+      if (
+        major === OTHER_SUBCATEGORY &&
+        !item.tags.some((t) => t.includes(':')) &&
+        !tx.tags.some((t) => t.includes(':'))
+      ) {
         matchedSum += eff;
         if (sub === OTHER_SUBCATEGORY) contrib += eff;
       }
@@ -79,6 +91,10 @@ export function subAmount(tx: SubTx, major: string, sub: string): number {
       null;
     if (fallbackTag) {
       if (subOf(fallbackTag, major) === sub) contrib += remainder;
+    } else if (major === OTHER_SUBCATEGORY && !tx.tags.some((t) => t.includes(':'))) {
+      // A category-less tx's unlabelled remainder is Other:Other spend (mirrors the
+      // backend aggregateBySubcategory) — covers untagged and itemless transactions.
+      if (sub === OTHER_SUBCATEGORY) contrib += remainder;
     } else {
       const anyMatch =
         tx.tags.find((t) => t.split(':')[0] === major) ??
@@ -94,4 +110,20 @@ export function subAmount(tx: SubTx, major: string, sub: string): number {
 // contribution there — which also keeps the list and the amounts consistent (no NT$0 rows).
 export function txInSubcategory(tx: SubTx, major: string, sub: string): boolean {
   return subAmount(tx, major, sub) !== 0;
+}
+
+interface MajorTx { tags: string[]; items: { tags: string[] }[] }
+
+// Whether a transaction belongs to `major` — mirrors the backend GET /pwa/transactions
+// category filter, including Other's reverse predicate (a category-less tx belongs to Other).
+// Used to scope the filter-bar tag/payment pools to the major currently drilled into.
+export function txInMajor(tx: MajorTx, major: string): boolean {
+  const matches = (tags: string[]) => tags.some((t) => t === major || t.startsWith(`${major}:`));
+  if (matches(tx.tags) || tx.items.some((i) => matches(i.tags))) return true;
+  if (major === OTHER_SUBCATEGORY) {
+    const hasCategoryTag =
+      tx.tags.some((t) => t.includes(':')) || tx.items.some((i) => i.tags.some((t) => t.includes(':')));
+    return !hasCategoryTag;
+  }
+  return false;
 }
