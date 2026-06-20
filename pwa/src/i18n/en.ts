@@ -60,7 +60,7 @@ export const en: Messages = {
 
   'tag.placeholder': 'Add tag…',
 
-  'item.uncategorized': 'Other',
+  'item.uncategorized': 'Uncategorized',
   'item.inheritTag': 'Inherit category',
   'item.namePlaceholder': 'Item name',
   'item.notePlaceholder': 'Note',
@@ -94,6 +94,7 @@ export const en: Messages = {
   'summary.noSubcategoryData': 'No subcategory data this period',
   'summary.noTransactions': 'No transactions this period',
   'summary.uncategorized': ' ⚠ Uncategorized',
+  'summary.pending': '⚠ Pending',
   'summary.linkedOriginal': 'Linked to original transaction',
   'summary.actualRefund': 'refunded on {date}',
   'summary.actualCharge': 'charged on {date}',
@@ -195,7 +196,7 @@ export const en: Messages = {
   'itemCat.searchCategory': 'Search categories…',
   'itemCat.inheritMajor': 'Inherit main category ({tag})',
   'itemCat.noCategory': 'No category (follow main)',
-  'itemCat.setOther': 'Set as "Other" (no category)',
+  'itemCat.setOther': 'Set as uncategorized (no category)',
   'itemCat.noMatch': 'No matching categories',
   'itemCat.wholeMajor': '{major} (whole)',
 

@@ -38,7 +38,7 @@ import {
 import { getBudgetProgress } from '../services/budget';
 import { runImportPipeline, computeConfidence, applyInvoiceItems, selectExactDiscountCandidates, selectForexCandidates } from '../services/invoice-matcher';
 import { decodeCSVBuffer, parseCSVRows, groupInvoices, RowLimitError } from '../services/csv-parser';
-import { aggregateByCategory, aggregateBySubcategory } from '../services/summary';
+import { aggregateByCategory, aggregateBySubcategory, classify, categoryTotal } from '../services/summary';
 import { mergeItemCategoryTag, itemWriteTags } from '../services/item-category';
 
 interface PwaEnv { Bindings: Env }
@@ -293,13 +293,11 @@ pwaRouter.get('/summary/subcategories', async (c) => {
   if (paymentMethod) txs = txs.filter((tx) => tx.payment_method === paymentMethod);
   if (tag) txs = txs.filter((tx) => txHasPlainTag(tx, tag));
 
-  const rawTotals = aggregateBySubcategory(enrichRefundTags(txs), major);
-  const total = txs
-    .filter((tx) => {
-      const allTags = [...tx.tags, ...tx.transaction_items.flatMap((i) => i.tags)];
-      return allTags.some((t) => t === major || t.startsWith(`${major}:`));
-    })
-    .reduce((s, tx) => s + (tx.transaction_type === 'refund' ? -tx.amount : tx.amount), 0);
+  const enriched = enrichRefundTags(txs);
+  const rawTotals = aggregateBySubcategory(enriched, major);
+  // Header total uses the SAME classification as the bars, so they reconcile by
+  // construction (feature 031) — no more drilldown header ≠ Σ bars for 其他/未分類.
+  const total = categoryTotal(enriched, major);
   const subcategories = rawTotals.map((t) => ({
     subcategory: t.subcategory,
     total: t.total,
@@ -363,22 +361,10 @@ pwaRouter.get('/transactions', async (c) => {
   let transactions = (data ?? []) as TxRow[];
 
   if (category) {
-    const matchesCategory = (tags: string[]) =>
-      tags.some((t) => t === category || t.startsWith(`${category}:`));
-    const hasMatch = (tx: TxRow) =>
-      tx.transaction_items.some((item) => matchesCategory(item.tags)) ||
-      matchesCategory(tx.tags);
-    if (category === '其他') {
-      // 其他 is the catch-all: besides txs explicitly tagged 其他/其他:*, it also owns
-      // every transaction with no category tag anywhere — which a positive tag match
-      // can't see — mirroring aggregateByCategory's remainder→其他 routing.
-      const hasAnyCategoryTag = (tx: TxRow) =>
-        tx.tags.some((t) => t.includes(':')) ||
-        tx.transaction_items.some((item) => item.tags.some((t) => t.includes(':')));
-      transactions = transactions.filter((tx) => hasMatch(tx) || !hasAnyCategoryTag(tx));
-    } else {
-      transactions = transactions.filter(hasMatch);
-    }
+    // A tx belongs to `category` iff classify routes any of its spend there — so 未分類
+    // and 其他 are ordinary majors with no special reverse-predicate (feature 031). Same
+    // classification the summary bars use, so the list and the bars always agree.
+    transactions = transactions.filter((tx) => classify(tx).some((c) => c.major === category));
   }
   if (tag) transactions = transactions.filter((tx) => txHasPlainTag(tx, tag));
 

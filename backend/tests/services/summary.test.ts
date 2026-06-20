@@ -76,25 +76,25 @@ describe('aggregateByCategory', () => {
     expect(result.find((t) => t.category === '行')?.total).toBe(200);
   });
 
-  it('no items → full amount under 其他', () => {
+  it('no items → full amount under 未分類', () => {
     const txs = [{ amount: 100, tags: [], transaction_items: [] }];
     const result = aggregateByCategory(txs);
     expect(result).toHaveLength(1);
-    expect(result[0].category).toBe('其他');
+    expect(result[0].category).toBe('未分類');
     expect(result[0].total).toBe(100);
   });
 
-  it('item with plain tag (no colon) → amount goes to 其他', () => {
+  it('item with plain tag (no colon) → amount goes to 未分類', () => {
     const txs = [{ amount: 80, tags: [], transaction_items: [{ amount: 80, tags: ['三商巧福'] }] }];
     const result = aggregateByCategory(txs);
-    expect(result[0].category).toBe('其他');
+    expect(result[0].category).toBe('未分類');
     expect(result[0].total).toBe(80);
   });
 
-  it('item with null amount → full transaction amount falls to 其他', () => {
+  it('item with null amount → full transaction amount falls to 未分類', () => {
     const txs = [{ amount: 120, tags: [], transaction_items: [{ amount: null as unknown as number, tags: ['食:午餐'] }] }];
     const result = aggregateByCategory(txs);
-    expect(result[0].category).toBe('其他');
+    expect(result[0].category).toBe('未分類');
     expect(result[0].total).toBe(120);
   });
 
@@ -133,12 +133,12 @@ describe('aggregateByCategory', () => {
       txSingle(400, 'C:x'),
       txSingle(300, 'D:x'),
       txSingle(200, 'E:x'),
-      { amount: 100, tags: [], transaction_items: [] }, // natural 其他
+      { amount: 100, tags: [], transaction_items: [] }, // natural 未分類
     ];
     const result = aggregateByCategory(txs);
     expect(result).toHaveLength(6);
     expect(result.find((t) => t.category === 'E')?.total).toBe(200);
-    expect(result.find((t) => t.category === '其他')?.total).toBe(100);
+    expect(result.find((t) => t.category === '未分類')?.total).toBe(100);
   });
 
   it('exactly 5 categories → returns all 5', () => {
@@ -212,17 +212,16 @@ describe('aggregateBySubcategory', () => {
     expect(result.find((t) => t.subcategory === '晚餐')?.total).toBe(150);
   });
 
-  it('plain tag (no colon) → subcategory is 其他', () => {
+  it('untagged tx with a plain tag → 未分類, not 其他', () => {
     const txs = [{ amount: 80, tags: [], transaction_items: [{ amount: 80, tags: ['三商巧福'] }] }];
-    const result = aggregateBySubcategory(txs, '其他');
-    expect(result[0].subcategory).toBe('其他');
-    expect(result[0].total).toBe(80);
+    expect(aggregateBySubcategory(txs, '其他')).toEqual([]);
+    expect(aggregateBySubcategory(txs, '未分類')).toEqual([{ subcategory: '未分類', total: 80 }]);
   });
 
-  it('itemless uncategorised tx → full amount under 其他:其他', () => {
+  it('itemless uncategorised tx → full amount under 未分類', () => {
     const txs = [{ amount: 100, tags: [], transaction_items: [] }];
-    const result = aggregateBySubcategory(txs, '其他');
-    expect(result).toEqual([{ subcategory: '其他', total: 100 }]);
+    expect(aggregateBySubcategory(txs, '其他')).toEqual([]);
+    expect(aggregateBySubcategory(txs, '未分類')).toEqual([{ subcategory: '未分類', total: 100 }]);
   });
 
   it('categorised tx with inherited (untagged) items does NOT leak into 其他', () => {
@@ -232,16 +231,16 @@ describe('aggregateBySubcategory', () => {
     expect(aggregateBySubcategory(txs, '食')).toEqual([{ subcategory: '早餐', total: 200 }]);
   });
 
-  it('其他 subcategory totals reconcile with the major 其他 total', () => {
+  it('未分類 subcategory totals reconcile with the major 未分類 total', () => {
     const txs = [
-      { amount: 100, tags: [], transaction_items: [] },                               // uncategorised, itemless → 其他
-      { amount: 200, tags: ['食:早餐'], transaction_items: [{ amount: 200, tags: [] }] }, // categorised → 食, not 其他
-      { amount: 80, tags: [], transaction_items: [{ amount: 80, tags: ['三商巧福'] }] },  // uncategorised plain tag → 其他
+      { amount: 100, tags: [], transaction_items: [] },                               // uncategorised, itemless → 未分類
+      { amount: 200, tags: ['食:早餐'], transaction_items: [{ amount: 200, tags: [] }] }, // categorised → 食
+      { amount: 80, tags: [], transaction_items: [{ amount: 80, tags: ['三商巧福'] }] },  // uncategorised plain tag → 未分類
     ];
-    const majorOther = aggregateByCategory(txs).find((c) => c.category === '其他')?.total;
-    const subTotal = aggregateBySubcategory(txs, '其他').reduce((s, t) => s + t.total, 0);
-    expect(majorOther).toBe(180);
-    expect(subTotal).toBe(majorOther);
+    const majorUncat = aggregateByCategory(txs).find((c) => c.category === '未分類')?.total;
+    const subTotal = aggregateBySubcategory(txs, '未分類').reduce((s, t) => s + t.total, 0);
+    expect(majorUncat).toBe(180);
+    expect(subTotal).toBe(majorUncat);
   });
 
   it('multi-colon tag → subcategory is everything after first colon', () => {
@@ -353,8 +352,8 @@ describe('aggregateByCategory — item categorization (feature 026)', () => {
     transaction_items: [{ amount: 100, effective_amount: null, tags: itemTags }],
   });
 
-  it('uncategorized invoice item → 其他', () => {
-    expect(aggregateByCategory([txWith([])])).toEqual([{ category: '其他', total: 100 }]);
+  it('uncategorized invoice item → 未分類', () => {
+    expect(aggregateByCategory([txWith([])])).toEqual([{ category: '未分類', total: 100 }]);
   });
 
   it('after assigning 飲食:零食 → counted under 飲食, not 其他', () => {
@@ -369,7 +368,7 @@ describe('aggregateByCategory — item categorization (feature 026)', () => {
     expect(sum([txWith(['飲食:零食'])])).toBe(sum([txWith([])]));
   });
 
-  it('partial: one of two items categorized → remainder stays in 其他', () => {
+  it('partial: one of two items categorized → remainder stays in 未分類', () => {
     const tx = {
       amount: 100,
       tags: ['全家'],
@@ -380,7 +379,7 @@ describe('aggregateByCategory — item categorization (feature 026)', () => {
     };
     const result = aggregateByCategory([tx]);
     expect(result.find((t) => t.category === '飲食')?.total).toBe(60);
-    expect(result.find((t) => t.category === '其他')?.total).toBe(40);
+    expect(result.find((t) => t.category === '未分類')?.total).toBe(40);
   });
 });
 
@@ -400,9 +399,9 @@ describe('aggregateByCategory — tx-level category for itemless transactions (B
     expect(aggregateByCategory([tx]).find((t) => t.category === '食')?.total).toBe(120);
   });
 
-  it('itemless tx with only a plain tag stays in 其他', () => {
+  it('itemless tx with only a plain tag stays in 未分類', () => {
     const tx = { amount: 120, tags: ['愛滿滿早餐坊'], transaction_items: [] };
-    expect(aggregateByCategory([tx])).toEqual([{ category: '其他', total: 120 }]);
+    expect(aggregateByCategory([tx])).toEqual([{ category: '未分類', total: 120 }]);
   });
 });
 
@@ -451,35 +450,33 @@ describe('aggregateByCategory — B2 shape equivalence (FR-008)', () => {
     expect(grand(after)).toBe(grand(before));
   });
 
-  it('explicit-uncategorized sentinel buckets to 其他 despite the tx category', () => {
+  it('explicit-uncategorized sentinel buckets to 未分類, not the tx category (feature 031)', () => {
     const tx = {
       amount: 100,
       tags: ['食:雜貨'],
       transaction_items: [
         { amount: 60, tags: [] },                 // inherits 食
-        { amount: 40, tags: ['其他:未分類'] },     // deliberate 其他
+        { amount: 40, tags: ['其他:未分類'] },     // sentinel → 未分類
       ],
     };
     expect(aggregateByCategory([tx])).toEqual([
       { category: '食', total: 60 },
-      { category: '其他', total: 40 },
+      { category: '未分類', total: 40 },
     ]);
   });
 });
 
-describe('aggregateBySubcategory — sentinel drill-down (B2)', () => {
-  it('the sentinel appears as 未分類 under 其他, distinct from the passive remainder', () => {
+describe('aggregateBySubcategory — sentinel + passive both resolve to 未分類 (feature 031)', () => {
+  it('an untagged tx’s sentinel item and passive remainder both land in 未分類', () => {
     const tx = {
       amount: 100,
       tags: [],
       transaction_items: [
-        { amount: 40, tags: ['其他:未分類'] },  // deliberate 其他
-        { amount: 60, tags: [] },               // passive (no decision anywhere)
+        { amount: 40, tags: ['其他:未分類'] },  // sentinel → 未分類
+        { amount: 60, tags: [] },               // passive → 未分類
       ],
     };
-    expect(aggregateBySubcategory([tx], '其他')).toEqual([
-      { subcategory: '其他', total: 60 },
-      { subcategory: '未分類', total: 40 },
-    ]);
+    expect(aggregateBySubcategory([tx], '其他')).toEqual([]);
+    expect(aggregateBySubcategory([tx], '未分類')).toEqual([{ subcategory: '未分類', total: 100 }]);
   });
 });

@@ -1,10 +1,73 @@
 import type { SummaryPeriod, CategoryTotal, SubcategoryTotal } from '../types';
+import { EXPLICIT_UNCATEGORIZED } from './item-category';
 
 interface TxForSummary {
   amount: number;
   transaction_type?: string;
   tags: string[];
   transaction_items: { amount: number | null; effective_amount?: number | null; tags: string[] }[];
+}
+
+// The two synthetic (non-catalog) buckets. 未分類 = no category decision anywhere
+// (passive untagged remainder, or the deliberate sentinel); 其他 = a real
+// "miscellaneous" category the user actively picks (其他:其他 / 其他:子類).
+export const UNCATEGORIZED = '未分類';
+const OTHER = '其他';
+
+export interface CategoryContribution {
+  major: string;
+  sub: string;
+  amount: number; // signed (refund negated)
+  itemIndex: number | null; // null = the transaction-level remainder, not an item line
+}
+
+// (major, sub) for a `:`-category tag. A bare `Major:` (no sub) buckets under 其他;
+// the explicit-uncategorized sentinel resolves to 未分類 (decision: it IS "no category").
+function tagBuckets(tag: string): { major: string; sub: string } {
+  if (tag === EXPLICIT_UNCATEGORIZED) return { major: UNCATEGORIZED, sub: UNCATEGORIZED };
+  return { major: tag.split(':')[0], sub: tag.split(':').slice(1).join(':') || OTHER };
+}
+
+// THE single source of truth for how a transaction's money splits across categories.
+// Every Summary slice (category bar, subcategory bar, header total, transaction-list
+// category filter) derives from this, so they reconcile by construction. Only items that
+// carry their OWN `:`-tag contribute directly (an over-tagged item's amount is trusted as
+// given); items with no own tag inherit the tx category via the leftover `remainder`,
+// which follows the tx's tag — or 未分類 when the tx itself is uncategorized. The split
+// from the legacy logic is exactly that last fallback (was 其他).
+export function classify(tx: TxForSummary): CategoryContribution[] {
+  const sign = tx.transaction_type === 'refund' ? -1 : 1;
+  const items = tx.transaction_items ?? [];
+  const txTag = tx.tags.find((t) => t.includes(':')) ?? null;
+  const out: CategoryContribution[] = [];
+  let covered = 0;
+  items.forEach((item, idx) => {
+    const eff = item.effective_amount ?? item.amount;
+    if (eff == null) return; // amount-less item: decorative, never moves money
+    const ownTag = item.tags.find((t) => t.includes(':')) ?? null;
+    if (!ownTag) return; // no own category → inherits via the remainder below
+    covered += eff;
+    const { major, sub } = tagBuckets(ownTag);
+    out.push({ major, sub, amount: sign * eff, itemIndex: idx });
+  });
+  const remainder = tx.amount - covered;
+  if (remainder > 0) {
+    const { major, sub } = txTag ? tagBuckets(txTag) : { major: UNCATEGORIZED, sub: UNCATEGORIZED };
+    out.push({ major, sub, amount: sign * remainder, itemIndex: null });
+  }
+  return out;
+}
+
+// A major's total = the sum of its contributions = the sum of its subcategory bars, so
+// the drilldown header and bars can never disagree (the bug this replaces).
+export function categoryTotal(transactions: TxForSummary[], major: string): number {
+  let total = 0;
+  for (const tx of transactions) {
+    for (const c of classify(tx)) {
+      if (c.major === major) total += c.amount;
+    }
+  }
+  return total;
 }
 
 export function periodToDateRange(period: SummaryPeriod): { start: Date; end: Date } {
@@ -42,25 +105,8 @@ export function aggregateByCategory(
 ): CategoryTotal[] {
   const map = new Map<string, number>();
   for (const tx of transactions) {
-    const sign = tx.transaction_type === 'refund' ? -1 : 1;
-    const items = tx.transaction_items ?? [];
-    let categorisedSum = 0;
-    for (const item of items) {
-      const effectiveAmt = item.effective_amount ?? item.amount;
-      if (effectiveAmt == null) continue;
-      const categoryTag = item.tags.find((t) => t.includes(':')) ?? null;
-      if (!categoryTag) continue;
-      const category = categoryTag.split(':')[0];
-      map.set(category, (map.get(category) ?? 0) + sign * effectiveAmt);
-      categorisedSum += effectiveAmt;
-    }
-    const remainder = tx.amount - categorisedSum;
-    if (remainder > 0) {
-      // Only use transaction-level category tags for fallback; item-level tags
-      // are irrelevant when items have no amounts (null) or didn't cover the tx.
-      const fallbackTag = tx.tags.find((t) => t.includes(':'));
-      const bucket = fallbackTag ? fallbackTag.split(':')[0] : '其他';
-      map.set(bucket, (map.get(bucket) ?? 0) + sign * remainder);
+    for (const c of classify(tx)) {
+      map.set(c.major, (map.get(c.major) ?? 0) + c.amount);
     }
   }
 
@@ -97,49 +143,10 @@ export function aggregateBySubcategory(
   category: string
 ): SubcategoryTotal[] {
   const map = new Map<string, number>();
-  const prefix = `${category}:`;
   for (const tx of transactions) {
-    const sign = tx.transaction_type === 'refund' ? -1 : 1;
-    const items = tx.transaction_items ?? [];
-    let matchedSum = 0;
-    for (const item of items) {
-      const effectiveAmt = item.effective_amount ?? item.amount;
-      if (effectiveAmt == null) continue;
-      const categoryTag = item.tags.find((t) => t.startsWith(prefix)) ?? null;
-      if (!categoryTag) {
-        // Drilling into 其他: an untagged item is passive 其他:其他 spend — but only when
-        // its TRANSACTION is also uncategorised. In a categorised tx the item inherits
-        // that category (B2), so it must NOT leak into 其他.
-        if (
-          category === '其他' &&
-          !item.tags.some((t) => t.includes(':')) &&
-          !tx.tags.some((t) => t.includes(':'))
-        ) {
-          map.set('其他', (map.get('其他') ?? 0) + sign * effectiveAmt);
-          matchedSum += effectiveAmt;
-        }
-        continue;
-      }
-      const subcategory = categoryTag.split(':').slice(1).join(':') || '其他';
-      map.set(subcategory, (map.get(subcategory) ?? 0) + sign * effectiveAmt);
-      matchedSum += effectiveAmt;
-    }
-    const remainder = tx.amount - matchedSum;
-    if (remainder > 0) {
-      const fallbackTag = tx.tags.find((t) => t.startsWith(prefix))
-        ?? items.flatMap((i) => i.tags).find((t) => t.startsWith(prefix));
-      if (fallbackTag) {
-        const subcategory = fallbackTag.split(':').slice(1).join(':') || '其他';
-        map.set(subcategory, (map.get(subcategory) ?? 0) + sign * remainder);
-      } else if (category === '其他' && !tx.tags.some((t) => t.includes(':'))) {
-        // A category-less tx's unlabelled remainder is 其他:其他 spend — mirrors how
-        // aggregateByCategory routes the remainder of uncategorised txs into 其他.
-        map.set('其他', (map.get('其他') ?? 0) + sign * remainder);
-      } else {
-        const anyMatch = tx.tags.find((t) => t.split(':')[0] === category)
-          ?? items.flatMap((i) => i.tags).find((t) => t.split(':')[0] === category);
-        if (anyMatch) map.set('其他', (map.get('其他') ?? 0) + sign * remainder);
-      }
+    for (const c of classify(tx)) {
+      if (c.major !== category) continue;
+      map.set(c.sub, (map.get(c.sub) ?? 0) + c.amount);
     }
   }
   return Array.from(map.entries())
