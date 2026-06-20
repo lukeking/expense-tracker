@@ -11,3 +11,5 @@ instead of reconstructing the logic from code each session:
 - `docs/transaction-adjustments-design.md` — adjustments + `effective_amount` allocation
   (original design; see its banner for what diverged at build time).
 - `docs/data-model-philosophy.md` — why the schema is shaped the way it is.
+- `docs/invoice-matching-marketplace-multi-invoice.md` — **deferred**: marketplace one-payment/
+  N-invoices; matcher is 1:1; approach (b) is currently blocked. Read before touching invoice matching.
