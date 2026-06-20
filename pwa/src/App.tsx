@@ -1,6 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createHashRouter, RouterProvider, NavLink, Outlet } from 'react-router-dom';
-import { Suspense, lazy, useState, type ComponentType } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import { queryClient } from './api/client';
 import { useApiKey } from './hooks/useAuth';
 import { ApiKeyPrompt } from './components/ApiKeyPrompt';
@@ -8,30 +8,10 @@ import { SettingsProvider } from './context/SettingsContext';
 import { SettingsSheet } from './components/SettingsSheet';
 import { useT } from './i18n';
 
-// A failed dynamic import after a redeploy means the open page references chunk
-// hashes that no longer exist on the server. Reload once to pull the fresh
-// build; if the retry still fails, surface the real error to the boundary.
-function lazyWithRetry(factory: () => Promise<{ default: ComponentType<any> }>) {
-  return lazy(async (): Promise<{ default: ComponentType<any> }> => {
-    try {
-      const mod = await factory();
-      window.sessionStorage.removeItem('chunk-reloaded');
-      return mod;
-    } catch (err) {
-      if (!window.sessionStorage.getItem('chunk-reloaded')) {
-        window.sessionStorage.setItem('chunk-reloaded', '1');
-        window.location.reload();
-        return { default: () => null };
-      }
-      throw err;
-    }
-  });
-}
-
-const EntryScreen = lazyWithRetry(() => import('./screens/EntryScreen').then((m) => ({ default: m.EntryScreen })));
-const SummaryScreen = lazyWithRetry(() => import('./screens/SummaryScreen').then((m) => ({ default: m.SummaryScreen })));
-const BudgetScreen = lazyWithRetry(() => import('./screens/BudgetScreen').then((m) => ({ default: m.BudgetScreen })));
-const ImportScreen = lazyWithRetry(() => import('./screens/ImportScreen').then((m) => ({ default: m.ImportScreen })));
+const EntryScreen = lazy(() => import('./screens/EntryScreen').then((m) => ({ default: m.EntryScreen })));
+const SummaryScreen = lazy(() => import('./screens/SummaryScreen').then((m) => ({ default: m.SummaryScreen })));
+const BudgetScreen = lazy(() => import('./screens/BudgetScreen').then((m) => ({ default: m.BudgetScreen })));
+const ImportScreen = lazy(() => import('./screens/ImportScreen').then((m) => ({ default: m.ImportScreen })));
 
 function NavBar() {
   const t = useT();
