@@ -34,7 +34,7 @@ export function effectiveItemCategory(
   tx: { tags: string[] }
 ): { tag: string | null; source: EffectiveCategorySource } {
   const own = itemCategoryTag(item);
-  if (own === EXPLICIT_UNCATEGORIZED) return { tag: '其他', source: 'explicit-uncategorized' };
+  if (own === EXPLICIT_UNCATEGORIZED) return { tag: '未分類', source: 'explicit-uncategorized' };
   if (own !== null) return { tag: own, source: 'override' };
   const inherited = tx.tags.find((t) => t.includes(':')) ?? null;
   if (inherited !== null) return { tag: inherited, source: 'inherited' };

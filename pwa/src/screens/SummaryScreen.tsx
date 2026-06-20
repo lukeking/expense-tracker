@@ -11,10 +11,14 @@ import { useQueryClient } from '@tanstack/react-query';
 import { ItemCategorySheet } from '../components/ItemCategorySheet';
 import { assignItemCategory } from '../api/client';
 import { itemCategoryTag, effectiveItemCategory } from '../lib/itemCategory';
-import { txInSubcategory, itemInSubcategory, subAmount, txInMajor } from '../lib/subcategory';
+import { txInSubcategory, itemInSubcategory, subAmount, txInMajor, UNCATEGORIZED } from '../lib/subcategory';
 import { useT } from '../i18n';
 
 const COLOURS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
+// The UNCATEGORIZED bucket is a "needs triage" bucket, not a real category — gray, pinned last.
+const UNCATEGORIZED_COLOUR = '#9ca3af';
+const categoryColour = (category: string, idx: number) =>
+  category === UNCATEGORIZED ? UNCATEGORIZED_COLOUR : COLOURS[idx % COLOURS.length];
 
 // The all-time view doesn't bulk-load transactions, so its payment-method chips come from this full
 // list rather than being derived from the in-view rows (as week/month/year do).
@@ -346,6 +350,15 @@ export function SummaryScreen() {
   const { data: txData } = useTransactions(timeBase, offset, drilldown, tag, paymentMethod);
   const { data: periods } = useTransactionPeriods(timeBase);
 
+  // UNCATEGORIZED is pinned after the real categories (it's a triage bucket, not a category).
+  const orderedCategories = useMemo(() => {
+    const cats = summaryData?.categories ?? [];
+    return [
+      ...cats.filter((c) => c.category !== UNCATEGORIZED),
+      ...cats.filter((c) => c.category === UNCATEGORIZED),
+    ];
+  }, [summaryData]);
+
   // Filter-bar chips. week/month/year derive them from the period's transactions;
   // the all-time view (which doesn't bulk-load transactions) uses the lightweight /tags endpoint
   // plus the full payment-method list.
@@ -395,6 +408,11 @@ export function SummaryScreen() {
   // parent itself falls outside the selected subcategory.
   const parentMap = new Map(txs.map((tx) => [tx.id, tx]));
   const subTotal = subFilter ? filteredTxs.reduce((s, tx) => s + subAmount(tx, subFilter.major, subFilter.sub), 0) : 0;
+  // The UNCATEGORIZED major (and any major whose only subcategory is the self-named catch-all)
+  // has no real breakdown — a single bar that just duplicates the header and yields a redundant
+  // "X > X". Suppress the subcategory chart there; the transaction list below still shows the rows.
+  const subcats = subData?.subcategories ?? [];
+  const showSubChart = subcats.length > 0 && !(subcats.length === 1 && subcats[0].subcategory === drilldown);
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
@@ -450,7 +468,7 @@ export function SummaryScreen() {
           </div>
           {subLoading ? (
             <div className="p-8 text-center text-gray-400 dark:text-gray-500">{t('common.loading')}</div>
-          ) : subData && subData.subcategories.length > 0 ? (
+          ) : subData && showSubChart ? (
             <div className="px-4 py-3 cursor-pointer">
               <div className="relative">
                 <ResponsiveContainer width="100%" height={subData.subcategories.length * 44}>
@@ -511,9 +529,9 @@ export function SummaryScreen() {
                 </div>
               </div>
             </div>
-          ) : (
+          ) : subcats.length === 0 ? (
             <div className="p-8 text-center text-gray-400 dark:text-gray-500">{t('summary.noSubcategoryData')}</div>
-          )}
+          ) : null}
         </div>
       ) : (
         /* ── Main view ── */
@@ -531,7 +549,7 @@ export function SummaryScreen() {
               <ResponsiveContainer width="100%" height={240}>
                 <PieChart margin={{ top: 20, right: 20, bottom: 0, left: 20 }}>
                   <Pie
-                    data={summaryData.categories.map((c) => ({ name: c.category, value: c.total }))}
+                    data={orderedCategories.map((c) => ({ name: c.category, value: c.total }))}
                     cx="50%"
                     cy="52%"
                     outerRadius={85}
@@ -541,27 +559,31 @@ export function SummaryScreen() {
                     label={({ name, percent }) => `${name} ${Math.round((percent as number) * 100)}%`}
                     labelLine={false}
                   >
-                    {summaryData.categories.map((_, i) => (
-                      <Cell key={i} fill={COLOURS[i % COLOURS.length]} />
+                    {orderedCategories.map((c, i) => (
+                      <Cell key={i} fill={categoryColour(c.category, i)} />
                     ))}
                   </Pie>
                   <Tooltip formatter={(v) => formatMoney(Number(v))} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="px-4 pb-2">
-                {summaryData.categories.map((c, i) => (
-                  <button
-                    key={c.category}
-                    type="button"
-                    onClick={() => handleDrilldown(c.category)}
-                    className="flex items-center gap-2 w-full py-1.5 text-sm"
-                  >
-                    <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: COLOURS[i % COLOURS.length] }} />
-                    <span className="flex-1 text-left text-gray-700 dark:text-gray-200">{c.category}</span>
-                    <span className="text-gray-500 dark:text-gray-400">{c.percentage}%</span>
-                    <span className="font-medium text-gray-800 dark:text-gray-100">{formatMoney(c.total)}</span>
-                  </button>
-                ))}
+                {orderedCategories.map((c, i) => {
+                  const isUncat = c.category === UNCATEGORIZED;
+                  return (
+                    <button
+                      key={c.category}
+                      type="button"
+                      onClick={() => handleDrilldown(c.category)}
+                      className={`flex items-center gap-2 w-full py-1.5 text-sm ${isUncat ? 'border-t border-gray-100 dark:border-gray-700 mt-1 pt-2.5' : ''}`}
+                    >
+                      <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: categoryColour(c.category, i) }} />
+                      <span className={`flex-1 text-left ${isUncat ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-200'}`}>{c.category}</span>
+                      {isUncat && <span className="text-amber-600 dark:text-amber-400 text-xs">{t('summary.pending')}</span>}
+                      <span className="text-gray-500 dark:text-gray-400">{c.percentage}%</span>
+                      <span className={`font-medium ${isUncat ? 'text-gray-500 dark:text-gray-400' : 'text-gray-800 dark:text-gray-100'}`}>{formatMoney(c.total)}</span>
+                    </button>
+                  );
+                })}
               </div>
             </>
           )}

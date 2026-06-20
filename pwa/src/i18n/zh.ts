@@ -60,7 +60,7 @@ export const zh = {
 
   'tag.placeholder': '新增標籤…',
 
-  'item.uncategorized': '其他',
+  'item.uncategorized': '未分類',
   'item.inheritTag': '繼承分類',
   'item.namePlaceholder': '品項名稱',
   'item.notePlaceholder': '備註',
@@ -94,6 +94,7 @@ export const zh = {
   'summary.noSubcategoryData': '此期間無子分類資料',
   'summary.noTransactions': '此期間無交易',
   'summary.uncategorized': ' ⚠ 未分類',
+  'summary.pending': '⚠ 待分類',
   'summary.linkedOriginal': '已連結原始交易',
   'summary.actualRefund': '於 {date} 實際退款',
   'summary.actualCharge': '於 {date} 實際計費',
@@ -195,7 +196,7 @@ export const zh = {
   'itemCat.searchCategory': '搜尋分類…',
   'itemCat.inheritMajor': '繼承主分類（{tag}）',
   'itemCat.noCategory': '不分類（跟隨主分類）',
-  'itemCat.setOther': '設為「其他」（不歸入任何分類）',
+  'itemCat.setOther': '設為「未分類」（不歸入任何分類）',
   'itemCat.noMatch': '沒有符合的分類',
   'itemCat.wholeMajor': '{major}（整體）',
 
