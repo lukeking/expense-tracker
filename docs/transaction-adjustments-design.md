@@ -2,6 +2,29 @@
 
 **Status**: Living design doc. Captures architectural decisions reached through discussion before they are formalised in a feature spec (anticipated: spec 016).
 
+> **Implementation status (post-build reconcile).** This is the *original proposal*. What
+> shipped matches it for **discount + `effective_amount`** — the `transaction_adjustments`
+> table, proportional per-item allocation, and the trust-the-paid-total rule all landed as
+> written. It **diverges on one point**: the migration plan below (step 4) to *fold standalone
+> `fee`/`refund` transactions into adjustments and delete them* was **not** carried out. Both
+> mechanisms coexist by design.
+>
+> **Why the fold-and-delete was dropped** (rationale evident from the implementation, recorded
+> here so it isn't re-litigated): step 4's deletion was really aimed at the old
+> *fake-refund-as-discount* workaround — and that need was genuinely solved by the new
+> `discount` adjustment. A standalone `fee`/`refund` **transaction**, however, expresses things
+> an adjustment structurally cannot:
+> - a separate event with its **own `created_at`** (the real date) while still booking to the
+>   parent's period via `transaction_at` alignment — an adjustment only ever shares the parent's
+>   timestamp;
+> - its **own `payment_method`** and an independent lifecycle (an adjustment cascade-deletes with
+>   its parent);
+> - a refund/fee that is **not tied to any parent** at all (unlinked).
+>
+> So discount *became* an adjustment; fee/refund *kept* the transaction form. Current behaviour
+> and the "which one do I use" decision guide live in
+> [`refund-fee-adjustment-vs-transaction.md`](./refund-fee-adjustment-vs-transaction.md).
+
 **Scope**: How discount, fee, refund, and point-credit-style modifiers attach to a transaction, and how per-item amounts flow through to summary aggregations without distortion.
 
 ---
