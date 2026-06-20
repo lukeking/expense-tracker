@@ -62,6 +62,10 @@ ambiguous across same-day orders, false-match-prone).
    of per-invoice amount equality.
 4. **Multi-select manual-link UX** in the unmatched/ambiguous queue.
 
+***Not* required: the item-categorization prompt flow.** It is already per-tx and handles multiple
+items per transaction, so the N invoices' merged line items flow through the existing sheet
+unchanged — (b) needs no new item-categorization UX.
+
 **Recording-habit prerequisite for (b):** record the full payment (incl. shipping) as **one** tx;
 don't carve 運費 into a separate fee tx. Then `sum(invoices) = tx.amount`, and 運費 arrives as an
 item line — which also settles the earlier fee-tx-vs-adjustment debate (it's neither; it's a line
