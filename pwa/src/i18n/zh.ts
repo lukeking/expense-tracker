@@ -181,6 +181,8 @@ export const zh = {
 
   'edit.consumptionTime': '消費時間',
   'edit.title': '編輯支出',
+  'edit.titleFee': '編輯手續費',
+  'edit.titleRefund': '編輯退款',
   'edit.saving': '儲存中…',
   'edit.save': '儲存',
   'edit.loadFailed': '載入失敗：{msg}',

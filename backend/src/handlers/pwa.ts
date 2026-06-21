@@ -697,7 +697,7 @@ pwaRouter.get('/parent-search', async (c) => {
 // ─── POST /pwa/fee ───────────────────────────────────────────────────────────
 
 pwaRouter.post('/fee', async (c) => {
-  interface Body { amount: number; description: string; parent_transaction_id?: string | null }
+  interface Body { amount: number; description: string; payment_method?: string; category_tag?: string | null; parent_transaction_id?: string | null }
   let body: Body;
   try {
     body = await c.req.json<Body>();
@@ -705,12 +705,20 @@ pwaRouter.post('/fee', async (c) => {
     return c.json({ error: 'INVALID_PAYLOAD' }, 400);
   }
 
-  const { amount, description, parent_transaction_id } = body;
+  const { amount, description, payment_method = 'credit_card', category_tag = null, parent_transaction_id } = body;
   if (!Number.isInteger(amount) || amount <= 0) {
     return c.json({ error: 'INVALID_AMOUNT', message: 'amount must be a positive integer' }, 400);
   }
   if (!description || typeof description !== 'string' || !description.trim()) {
     return c.json({ error: 'MISSING_DESCRIPTION', message: 'description is required' }, 400);
+  }
+  if (!PAYMENT_METHODS.includes(payment_method as PaymentMethod)) {
+    return c.json({ error: 'INVALID_PAYMENT_METHOD', message: `payment_method must be one of: ${PAYMENT_METHODS.join(', ')}` }, 400);
+  }
+  // A category is only ever the `主:子` shape; a colon-less value is rejected (see the
+  // major-only fix on the expense form). null = leave the fee uncategorized (未分類).
+  if (category_tag != null && !category_tag.includes(':')) {
+    return c.json({ error: 'INVALID_CATEGORY_TAG', message: 'category_tag must be a 主:子 tag or null' }, 400);
   }
 
   const supabase = getSupabaseClient(c.env);
@@ -731,8 +739,8 @@ pwaRouter.post('/fee', async (c) => {
 
   const tx = await insertTransaction(supabase, {
     amount,
-    payment_method: 'credit_card',
-    tags: [],
+    payment_method: payment_method as PaymentMethod,
+    tags: category_tag ? [category_tag] : [],
     note,
     transaction_type: 'fee',
     transaction_at,
@@ -809,6 +817,55 @@ pwaRouter.post('/refund', async (c) => {
   await insertTransactionItems(supabase, tx.id, [{ name: description || `退款`, amount, tags: [] }]);
 
   return c.json({ id: tx.id, amount: tx.amount, transaction_at: tx.transaction_at }, 201);
+});
+
+// ─── PATCH /pwa/transactions/:id — simple edit for fee/refund (single-line tx) ──
+// Fee/refund have no items/adjustments/reconciliation, so they don't go through the
+// expense PUT editor. This edits amount / description / payment_method / category and
+// keeps the single line-item in sync. parent link + transaction_at are left untouched.
+
+pwaRouter.patch('/transactions/:id', async (c) => {
+  const txId = c.req.param('id');
+  interface Body { amount: number; payment_method: string; category_tag?: string | null; description: string }
+  let body: Body;
+  try {
+    body = await c.req.json<Body>();
+  } catch {
+    return c.json({ error: 'INVALID_PAYLOAD', message: 'Invalid JSON' }, 400);
+  }
+
+  const { amount, payment_method, category_tag = null, description } = body;
+  if (!Number.isInteger(amount) || amount <= 0)
+    return c.json({ error: 'INVALID_AMOUNT', message: 'amount must be a positive integer' }, 400);
+  if (!PAYMENT_METHODS.includes(payment_method as PaymentMethod))
+    return c.json({ error: 'INVALID_PAYMENT_METHOD', message: `payment_method must be one of: ${PAYMENT_METHODS.join(', ')}` }, 400);
+  if (category_tag != null && !category_tag.includes(':'))
+    return c.json({ error: 'INVALID_CATEGORY_TAG', message: 'category_tag must be a 主:子 tag or null' }, 400);
+  if (!description || typeof description !== 'string' || !description.trim())
+    return c.json({ error: 'MISSING_DESCRIPTION', message: 'description is required' }, 400);
+
+  const supabase = getSupabaseClient(c.env);
+  const { data: tx, error: txErr } = await supabase
+    .from('transactions')
+    .select('id, transaction_type')
+    .eq('id', txId)
+    .single();
+  if (txErr || !tx) return c.json({ error: 'NOT_FOUND', message: 'Transaction not found' }, 404);
+  if (tx.transaction_type !== 'fee' && tx.transaction_type !== 'refund')
+    return c.json({ error: 'NOT_SIMPLE_TX', message: 'Only fee or refund transactions use this endpoint' }, 403);
+
+  const note = description.trim();
+  const { error: updErr } = await supabase
+    .from('transactions')
+    .update({ amount, payment_method, tags: category_tag ? [category_tag] : [], note })
+    .eq('id', txId);
+  if (updErr) return c.json({ error: 'DB_ERROR', message: updErr.message }, 500);
+
+  const { error: delErr } = await supabase.from('transaction_items').delete().eq('transaction_id', txId);
+  if (delErr) return c.json({ error: 'DB_ERROR', message: delErr.message }, 500);
+  await insertTransactionItems(supabase, txId, [{ name: note, amount, tags: [] }]);
+
+  return c.json({ id: txId, amount }, 200);
 });
 
 // ─── POST /pwa/import ────────────────────────────────────────────────────────

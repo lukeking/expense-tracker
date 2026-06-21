@@ -181,6 +181,8 @@ export const en: Messages = {
 
   'edit.consumptionTime': 'Consumption time',
   'edit.title': 'Edit expense',
+  'edit.titleFee': 'Edit fee',
+  'edit.titleRefund': 'Edit refund',
   'edit.saving': 'Saving…',
   'edit.save': 'Save',
   'edit.loadFailed': 'Load failed: {msg}',
