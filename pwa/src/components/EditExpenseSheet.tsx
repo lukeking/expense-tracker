@@ -215,8 +215,9 @@ function EditExpenseFormInner({ tx, onClose }: { tx: TxDetail; onClose: () => vo
   return (
     <form
       onSubmit={(e) => { e.preventDefault(); if (canSubmit) mutation.mutate(); }}
-      className="flex flex-col gap-4 p-4 overflow-y-auto h-full"
+      className="flex flex-col h-full"
     >
+      <div className="flex-1 overflow-y-auto flex flex-col gap-4 p-4">
       {/* Consumption time (read-only for now) */}
       <div>
         <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('edit.consumptionTime')}</label>
@@ -361,19 +362,21 @@ function EditExpenseFormInner({ tx, onClose }: { tx: TxDetail; onClose: () => vo
 
       {/* Edit history */}
       <EditHistorySection history={tx.history} />
+      </div>
 
-      {/* Save error */}
-      {mutation.error && (
-        <p className="text-red-600 text-sm">{(mutation.error as Error).message}</p>
-      )}
-
-      <button
-        type="submit"
-        disabled={mutation.isPending || !canSubmit}
-        className="mt-auto bg-blue-600 text-white rounded-xl py-3 font-semibold disabled:opacity-50"
-      >
-        {mutation.isPending ? t('edit.saving') : t('edit.save')}
-      </button>
+      {/* Pinned submit footer */}
+      <div className="p-4 pt-3 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+        {mutation.error && (
+          <p className="text-red-600 text-sm mb-2">{(mutation.error as Error).message}</p>
+        )}
+        <button
+          type="submit"
+          disabled={mutation.isPending || !canSubmit}
+          className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold disabled:opacity-50"
+        >
+          {mutation.isPending ? t('edit.saving') : t('edit.save')}
+        </button>
+      </div>
     </form>
   );
 }
