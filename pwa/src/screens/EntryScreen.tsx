@@ -26,8 +26,11 @@ const TAB_LABEL_KEYS: Record<Tab, MessageKey> = {
 const TABS: Tab[] = ['expense', 'fee', 'refund'];
 
 function deriveCategoryTag(sel: CategorySelection | null): string | null {
-  if (!sel) return null;
-  return sel.subcategory ? `${sel.major}:${sel.subcategory}` : sel.major;
+  // A category is only complete as `主:子`. A major-only selection must NOT emit a
+  // bare, colon-less tag — that categorizes nothing and leaks into plain tags on
+  // re-read. Treat it as "no category"; the form blocks submit until a sub is picked.
+  if (!sel || !sel.subcategory) return null;
+  return `${sel.major}:${sel.subcategory}`;
 }
 
 function newItem(): ItemRowData {
@@ -53,6 +56,7 @@ function ExpenseForm() {
   const [toast, setToast] = useState('');
 
   const categoryTag = deriveCategoryTag(category);
+  const categoryIncomplete = category !== null && category.subcategory === null;
   const nonNullAmounts = items.filter((i) => i.amount !== null).map((i) => i.amount as number);
   const itemSum = nonNullAmounts.reduce((s, a) => s + a, 0);
   const amountVal = parseInt(amount, 10) || 0;
@@ -147,7 +151,7 @@ function ExpenseForm() {
     };
   }
 
-  const canSubmit = amountVal > 0 && items.length > 0;
+  const canSubmit = amountVal > 0 && items.length > 0 && !categoryIncomplete;
 
   return (
     <form
@@ -195,6 +199,9 @@ function ExpenseForm() {
       <div>
         <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">{t('entry.category')}</label>
         <CategoryPicker value={category} onChange={setCategory} />
+        {categoryIncomplete && (
+          <p className="text-xs text-orange-500 mt-1">{t('category.subRequired')}</p>
+        )}
       </div>
 
       {/* Free tags */}

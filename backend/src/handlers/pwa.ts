@@ -170,10 +170,12 @@ pwaRouter.post('/expense', async (c) => {
   }
 
   const { amount, payment_method, category_tag, free_tags: rawTags = [], note, items = [], adjustments = [] } = body;
-  const free_tags = rawTags
-    .map((t) => t.replace(/^[#\s]+|[#\s]+$/g, ''))
-    .filter(Boolean)
-    .filter((t) => !t.includes(':'));
+  const free_tags = [...new Set(
+    rawTags
+      .map((t) => t.replace(/^[#\s]+|[#\s]+$/g, ''))
+      .filter(Boolean)
+      .filter((t) => !t.includes(':'))
+  )];
 
   if (!Number.isInteger(amount) || amount <= 0) {
     return c.json({ error: 'INVALID_AMOUNT', message: 'amount must be a positive integer' }, 400);
@@ -493,10 +495,12 @@ pwaRouter.put('/transactions/:id', async (c) => {
   }
 
   const { amount, payment_method, category_tag, free_tags: rawTags = [], note, items = [], adjustments = [] } = body;
-  const free_tags = rawTags
-    .map((t) => t.replace(/^[#\s]+|[#\s]+$/g, ''))
-    .filter(Boolean)
-    .filter((t) => !t.includes(':'));
+  const free_tags = [...new Set(
+    rawTags
+      .map((t) => t.replace(/^[#\s]+|[#\s]+$/g, ''))
+      .filter(Boolean)
+      .filter((t) => !t.includes(':'))
+  )];
 
   if (!Number.isInteger(amount) || amount <= 0)
     return c.json({ error: 'INVALID_AMOUNT', message: 'amount must be a positive integer' }, 400);
