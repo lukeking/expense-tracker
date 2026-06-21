@@ -4,8 +4,11 @@
 because this distinction keeps coming up. Complements
 [`transaction-adjustments-design.md`](./transaction-adjustments-design.md) — note that the
 design doc's migration plan (step 4) intended to *fold standalone fee/refund transactions
-into adjustments and delete them*. **That did not happen.** Both mechanisms exist on purpose,
-which is the source of the recurring confusion this doc resolves.
+into adjustments and delete them*. **That did not become the standing design** — both
+mechanisms exist on purpose, which is the source of the recurring confusion this doc resolves.
+*One historical exception:* migration **016 step C3** (`c3ConvertFeeRefundTransactions`) did
+run that fold once, on parent-linked rows, which silently stranded some refunds — see
+[Pitfall: a refund/fee adjustment doesn't subtract on its own](#pitfall-a-refundfee-adjustment-doesnt-subtract-on-its-own).
 
 **Scope**: when a fee or refund should be a `transaction_adjustments` row vs. a standalone
 transaction with `transaction_type ∈ {fee, refund}`.
@@ -122,6 +125,30 @@ refund transaction) will subtract twice. Pick one:
 
 ---
 
+## Pitfall: a `refund`/`fee` adjustment doesn't subtract on its own
+
+An adjustment row is **descriptive of an already-net amount**, not a mutator that subtracts.
+Totals flow from the parent's `amount` (the net paid) redistributed into `effective_amount`,
+and:
+
+- `effective_amount` is reduced **only by `discount` adjustments** (`computeEffectiveShares` /
+  `fetchDiscountSumsByTransaction`, `kind = 'discount'`). `fee`/`refund` adjustments never touch it.
+- `classify()` (`backend/src/services/summary.ts`) only applies a sign to refund/fee
+  **transactions** — it never reads `transaction_adjustments`.
+
+So a refund entered on the **entry form** works only because the user types the **net** paid
+`amount` (`SUM(items) − refund = paid`); the adjustment row just annotates the split. By
+contrast, a `refund`/`fee` adjustment **added to an existing transaction without lowering its
+`amount`** is **completely inert** — it moves no total and shows in no slice. The refund
+silently vanishes.
+
+This is exactly what happened to the 高鐵 reimbursements: migration **016 step C3** turned each
+parent-linked refund *transaction* (which had been subtracting via sign) into a `kind='refund'`
+adjustment and deleted the original — but never lowered the parents' `amount`/`effective_amount`,
+so those refunds stopped counting. Recovery: re-materialise them as refund **transactions**
+(linked), which subtract via sign again — *don't* leave a `refund` adjustment expecting it to
+subtract. (See also [Pitfall: don't double-count](#pitfall-dont-double-count) — the inverse trap.)
+
 ## Code map
 
 | Concern | Location |
@@ -133,4 +160,6 @@ refund transaction) will subtract twice. Pick one:
 | `transaction_at` alignment | the `parent_transaction_id` branch in the two handlers above |
 | Refund category enrichment | `enrichRefundTags` (`backend/src/handlers/pwa.ts`) |
 | Summary signs / 未分類 routing | `classify()` (`backend/src/services/summary.ts`) |
+| `effective_amount` nets **only `discount`** adjustments | `fetchDiscountSumsByTransaction`, `computeEffectiveShares` (`backend/src/db/queries.ts`) |
+| Historical fold (016 C3) that stranded parent-linked refunds | `c3ConvertFeeRefundTransactions` (`backend/scripts/migrate-016.ts`) |
 | Entry-form reconciliation (`SUM(items) − discount − refund + fee = paid`) | `pwa/src/screens/EntryScreen.tsx` |
