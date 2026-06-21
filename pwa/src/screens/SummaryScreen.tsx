@@ -7,6 +7,7 @@ import { useSummaryData, useSubcategoryData, useTransactions, useTransactionPeri
 import type { TimeBase, TxRecord, PeriodData } from '../hooks/useSummary';
 import { useTags } from '../hooks/useTags';
 import { EditExpenseSheet } from '../components/EditExpenseSheet';
+import { EditFeeRefundSheet } from '../components/EditFeeRefundSheet';
 import { useQueryClient } from '@tanstack/react-query';
 import { ItemCategorySheet } from '../components/ItemCategorySheet';
 import { assignItemCategory } from '../api/client';
@@ -78,7 +79,7 @@ function txLabel(tx: TxRecord): string {
   return label;
 }
 
-function TxEntry({ tx, parentMap, subFilter, onEdit }: { tx: TxRecord; parentMap: Map<string, TxRecord>; subFilter?: SubFilter; onEdit?: (id: string) => void }) {
+function TxEntry({ tx, parentMap, subFilter, onEdit }: { tx: TxRecord; parentMap: Map<string, TxRecord>; subFilter?: SubFilter; onEdit?: (id: string, type: string) => void }) {
   const qc = useQueryClient();
   const t = useT();
   // Feature 026: the item being categorized inline from the Summary list.
@@ -112,10 +113,10 @@ function TxEntry({ tx, parentMap, subFilter, onEdit }: { tx: TxRecord; parentMap
           <span className="text-xs text-gray-400 dark:text-gray-500 ml-1.5">{localDt(tx.transaction_at, { time: true })}</span>
         </span>
         <span className="flex items-center gap-2">
-          {tx.transaction_type === 'expense' && onEdit && (
+          {onEdit && (
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); onEdit(tx.id); }}
+              onClick={(e) => { e.stopPropagation(); onEdit(tx.id, tx.transaction_type); }}
               className="text-xs text-blue-500 hover:text-blue-700"
               aria-label={t('common.edit')}
             >
@@ -191,7 +192,7 @@ function TxEntry({ tx, parentMap, subFilter, onEdit }: { tx: TxRecord; parentMap
   );
 }
 
-function DateSubGroup({ dateLabel, items, parentMap, subFilter, onEdit }: { dateLabel: string; items: TxRecord[]; parentMap: Map<string, TxRecord>; subFilter?: SubFilter; onEdit?: (id: string) => void }) {
+function DateSubGroup({ dateLabel, items, parentMap, subFilter, onEdit }: { dateLabel: string; items: TxRecord[]; parentMap: Map<string, TxRecord>; subFilter?: SubFilter; onEdit?: (id: string, type: string) => void }) {
   const [open, setOpen] = useState(false);
   const total = items.reduce((s, t) => s + txSignedAmount(t, subFilter ?? null), 0);
   return (
@@ -213,7 +214,7 @@ function DateSubGroup({ dateLabel, items, parentMap, subFilter, onEdit }: { date
   );
 }
 
-function HistoryGroup({ label, items, parentMap, showDateSubs, subFilter, onEdit }: { label: string; items: TxRecord[]; parentMap: Map<string, TxRecord>; showDateSubs?: boolean; subFilter?: SubFilter; onEdit?: (id: string) => void }) {
+function HistoryGroup({ label, items, parentMap, showDateSubs, subFilter, onEdit }: { label: string; items: TxRecord[]; parentMap: Map<string, TxRecord>; showDateSubs?: boolean; subFilter?: SubFilter; onEdit?: (id: string, type: string) => void }) {
   const [open, setOpen] = useState(false);
   const total = items.reduce((s, t) => s + txSignedAmount(t, subFilter ?? null), 0);
 
@@ -249,7 +250,7 @@ function HistoryGroup({ label, items, parentMap, showDateSubs, subFilter, onEdit
   );
 }
 
-function LazyHistoryGroup({ period, onEdit }: { period: PeriodData; onEdit?: (id: string) => void }) {
+function LazyHistoryGroup({ period, onEdit }: { period: PeriodData; onEdit?: (id: string, type: string) => void }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const { data: txData, isLoading } = useMonthTransactions(period.from_date, period.to_date, open);
@@ -297,7 +298,7 @@ export function SummaryScreen() {
   const [drilldown, setDrilldown] = useState<string | null>(null);
   const [subDrilldown, setSubDrilldown] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [editingTxId, setEditingTxId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ id: string; type: string } | null>(null);
 
   // Feature 030: a subcategory selection is only meaningful inside a major drilldown, so
   // it resets to null wherever the major drilldown itself resets (FR-007), plus when
@@ -416,7 +417,12 @@ export function SummaryScreen() {
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
-      {editingTxId && <EditExpenseSheet txId={editingTxId} onClose={() => setEditingTxId(null)} />}
+      {editing && editing.type === 'expense' && (
+        <EditExpenseSheet txId={editing.id} onClose={() => setEditing(null)} />
+      )}
+      {editing && editing.type !== 'expense' && (
+        <EditFeeRefundSheet txId={editing.id} onClose={() => setEditing(null)} />
+      )}
       {pickerOpen && timeBase !== 'all' && (
         <PeriodPicker
           timeBase={timeBase}
@@ -600,7 +606,7 @@ export function SummaryScreen() {
             ? <div className="p-4 text-center text-gray-400 dark:text-gray-500 text-sm">{t('common.loading')}</div>
             : periods.length === 0
               ? <p className="text-center text-gray-400 dark:text-gray-500 text-sm py-4">{t('summary.noTransactions')}</p>
-              : periods.map((p) => <LazyHistoryGroup key={p.period} period={p} onEdit={setEditingTxId} />)
+              : periods.map((p) => <LazyHistoryGroup key={p.period} period={p} onEdit={(id, type) => setEditing({ id, type })} />)
         ) : groups.length === 0 ? (
           <p className="text-center text-gray-400 dark:text-gray-500 text-sm py-4">{t('summary.noTransactions')}</p>
         ) : (
@@ -612,7 +618,7 @@ export function SummaryScreen() {
               parentMap={parentMap}
               showDateSubs={timeBase === 'year' || timeBase === 'all'}
               subFilter={subFilter}
-              onEdit={setEditingTxId}
+              onEdit={(id, type) => setEditing({ id, type })}
             />
           ))
         )}

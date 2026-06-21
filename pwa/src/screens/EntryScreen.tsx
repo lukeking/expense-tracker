@@ -330,11 +330,16 @@ function ExpenseForm() {
 function FeeForm() {
   const t = useT();
   const [amount, setAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('credit_card');
+  const [category, setCategory] = useState<CategorySelection | null>(null);
   const [description, setDescription] = useState('');
   const [parent, setParent] = useState<ParentSearchResult | null>(null);
   const [toast, setToast] = useState('');
 
   const amountVal = parseInt(amount, 10) || 0;
+  const categoryTag = deriveCategoryTag(category);
+  const categoryIncomplete = category !== null && category.subcategory === null;
+  const canSubmit = amountVal > 0 && !categoryIncomplete;
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -342,20 +347,24 @@ function FeeForm() {
         method: 'POST',
         body: JSON.stringify({
           amount: amountVal,
+          payment_method: paymentMethod,
+          category_tag: categoryTag,
           description: description.trim() || t('entry.feeDescPlaceholder'),
           parent_transaction_id: parent?.id ?? null,
         }),
       }),
     onSuccess: () => {
-      setAmount(''); setDescription(''); setParent(null);
+      setAmount(''); setPaymentMethod('credit_card'); setCategory(null); setDescription(''); setParent(null);
       setToast(t('entry.toastFeeSaved'));
+      queryClient.invalidateQueries({ queryKey: ['summary'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
       setTimeout(() => setToast(''), 2000);
     },
   });
 
   return (
     <form
-      onSubmit={(e) => { e.preventDefault(); if (amountVal > 0) mutation.mutate(); }}
+      onSubmit={(e) => { e.preventDefault(); if (canSubmit) mutation.mutate(); }}
       className="flex flex-col h-full"
     >
       {toast && (
@@ -371,6 +380,17 @@ function FeeForm() {
           placeholder="0" required
           className="text-3xl font-bold w-full border-b-2 border-gray-300 dark:border-gray-600 outline-none pb-1 focus:border-blue-500 bg-transparent text-gray-900 dark:text-white"
         />
+      </div>
+      <div>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">{t('entry.paymentMethod')}</label>
+        <PaymentPills value={paymentMethod} onChange={setPaymentMethod} />
+      </div>
+      <div>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">{t('entry.category')}</label>
+        <CategoryPicker value={category} onChange={setCategory} />
+        {categoryIncomplete && (
+          <p className="text-xs text-orange-500 mt-1">{t('category.subRequired')}</p>
+        )}
       </div>
       <div>
         <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('entry.description')}</label>
@@ -396,7 +416,7 @@ function FeeForm() {
         {mutation.error && <p className="text-red-600 text-sm mb-2">{(mutation.error as Error).message}</p>}
         <button
           type="submit"
-          disabled={mutation.isPending || amountVal <= 0}
+          disabled={mutation.isPending || !canSubmit}
           className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold disabled:opacity-50"
         >
           {mutation.isPending ? t('entry.submitting') : t('entry.submit')}
