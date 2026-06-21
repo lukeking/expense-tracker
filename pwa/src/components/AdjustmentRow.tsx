@@ -21,7 +21,12 @@ export const KIND_LABEL_KEYS: Record<AdjustmentKind, MessageKey> = {
 export function resolveAdjAmount(a: AdjustmentRowData, base: number): number | null {
   if (a.value == null) return null;
   if (a.mode === 'absolute') return a.value;
-  return base > 0 ? Math.round(base * a.value / 100) : null;
+  if (base <= 0) return null;
+  // A percentage discount floors (無條件捨去) to match how a 折 is rung up at the
+  // register — e.g. 9折 of 115 → discount 11, pay 104 (not round-half-up's 12 → 103).
+  // Fee/refund percentages keep nearest-rounding.
+  const raw = base * a.value / 100;
+  return a.kind === 'discount' ? Math.floor(raw) : Math.round(raw);
 }
 
 interface Props {
