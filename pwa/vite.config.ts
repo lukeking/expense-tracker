@@ -8,7 +8,12 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt' (not 'autoUpdate'): the new SW still precaches the whole build in the
+      // background, but it stays waiting instead of silently reloading the page — which
+      // used to wipe in-progress form input mid-typing. UpdateBanner surfaces a manual
+      // 更新 button; ignoring it lets the new SW activate on the next app open. Stale-chunk
+      // protection is preserved (the old SW keeps serving the old, still-cached chunks).
+      registerType: 'prompt',
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         cleanupOutdatedCaches: true,

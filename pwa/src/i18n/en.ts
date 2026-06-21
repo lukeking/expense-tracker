@@ -3,6 +3,9 @@ import type { Messages } from './zh';
 // English catalog. Typed as Messages → a missing or renamed key is a compile error (SC-002).
 export const en: Messages = {
   'common.loading': 'Loading…',
+  'update.available': 'New version available',
+  'update.action': 'Update',
+  'update.dismiss': 'Dismiss',
 
   'nav.entry': 'Entry',
   'nav.summary': 'Summary',

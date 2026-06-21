@@ -6,6 +6,7 @@ import { useApiKey } from './hooks/useAuth';
 import { ApiKeyPrompt } from './components/ApiKeyPrompt';
 import { SettingsProvider } from './context/SettingsContext';
 import { SettingsSheet } from './components/SettingsSheet';
+import { UpdateBanner } from './components/UpdateBanner';
 import { useT } from './i18n';
 
 const EntryScreen = lazy(() => import('./screens/EntryScreen').then((m) => ({ default: m.EntryScreen })));
@@ -94,6 +95,7 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <SettingsProvider>
         <AppShell />
+        <UpdateBanner />
       </SettingsProvider>
     </QueryClientProvider>
   );

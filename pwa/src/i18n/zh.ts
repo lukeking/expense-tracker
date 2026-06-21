@@ -3,6 +3,9 @@
 // Keys are added per migration phase, grouped by area (common.* / nav.* / settings.* / entry.* …).
 export const zh = {
   'common.loading': '載入中…',
+  'update.available': '新版本可用',
+  'update.action': '更新',
+  'update.dismiss': '關閉',
 
   'nav.entry': '記帳',
   'nav.summary': '統計',
