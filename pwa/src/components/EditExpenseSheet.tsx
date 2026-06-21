@@ -51,8 +51,10 @@ function parseCategorySelection(tag: string | null): CategorySelection | null {
 }
 
 function deriveCategoryTag2(sel: CategorySelection | null): string | null {
-  if (!sel) return null;
-  return sel.subcategory ? `${sel.major}:${sel.subcategory}` : sel.major;
+  // See deriveCategoryTag in EntryScreen: a major-only selection must not emit a
+  // colon-less tag (it categorizes nothing and leaks into plain tags on re-read).
+  if (!sel || !sel.subcategory) return null;
+  return `${sel.major}:${sel.subcategory}`;
 }
 
 function formatDateTime(iso: string): string {
@@ -116,6 +118,7 @@ function EditExpenseFormInner({ tx, onClose }: { tx: TxDetail; onClose: () => vo
   }, [tx.id]);
 
   const categoryTag = deriveCategoryTag2(category);
+  const categoryIncomplete = category !== null && category.subcategory === null;
   const amountVal = parseInt(amount, 10) || 0;
   const nonNullAmounts = items.filter((i) => i.amount !== null).map((i) => i.amount as number);
   const itemSum = nonNullAmounts.reduce((s, a) => s + a, 0);
@@ -207,7 +210,7 @@ function EditExpenseFormInner({ tx, onClose }: { tx: TxDetail; onClose: () => vo
     },
   });
 
-  const canSubmit = amountVal > 0;
+  const canSubmit = amountVal > 0 && !categoryIncomplete;
 
   return (
     <form
@@ -254,6 +257,9 @@ function EditExpenseFormInner({ tx, onClose }: { tx: TxDetail; onClose: () => vo
       <div>
         <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">{t('entry.category')}</label>
         <CategoryPicker value={category} onChange={setCategory} />
+        {categoryIncomplete && (
+          <p className="text-xs text-orange-500 mt-1">{t('category.subRequired')}</p>
+        )}
       </div>
 
       {/* Free tags */}

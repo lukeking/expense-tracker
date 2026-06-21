@@ -57,6 +57,7 @@ export const zh = {
 
   'category.allSubsTitle': '{major} — 所有子分類',
   'category.searchSubs': '搜尋子分類…',
+  'category.subRequired': '請選擇子分類',
 
   'tag.placeholder': '新增標籤…',
 

@@ -57,6 +57,7 @@ export const en: Messages = {
 
   'category.allSubsTitle': '{major} — All subcategories',
   'category.searchSubs': 'Search subcategories…',
+  'category.subRequired': 'Pick a subcategory',
 
   'tag.placeholder': 'Add tag…',
 
