@@ -1,10 +1,7 @@
 <!--
 Snapshot of the live `categories` table — the source of truth for the catalog.
-(See memory: categories are DB-managed, not migration-driven. migrations 011/012 are
-only the initial seed; scripts/migrate-legacy.ts upserted the rest, plus manual curation.)
-
-Pulled 2026-06-09 via:  GET /pwa/categories  (auth: Bearer $ANDROID_API_KEY).
-Regenerate after changing the catalog by re-running that fetch and overwriting the rows below.
+(Categories are DB-managed; migrations 011/012 are only the initial seed.)
+Regenerate: backend/scripts/dump-categories.sh  (needs `pnpm dev` running).
 -->
 
 Major | Sub | Order
@@ -13,6 +10,7 @@ Major | Sub | Order
 住 | 仲介費 | 9999
 住 | 住宿 | 50
 住 | 修繕費 | 9999
+住 | 家具 | 9999
 住 | 家電 | 9999
 住 | 寢具 | 9999
 住 | 居家清潔 | 9999
@@ -22,14 +20,10 @@ Major | Sub | Order
 其他 | 3C周邊 | 70
 其他 | AI | 80
 其他 | App | 60
-其他 | Google Play | 9999
 其他 | NULL | 0
-其他 | 信用卡 | 9999
-其他 | 修拉鏈 | 9999
 其他 | 國外交易服務費 | 10
 其他 | 家用 | 50
-其他 | 影印 | 9999
-其他 | 所得稅 | 9999
+其他 | 廚具 | 9999
 其他 | 手續費 | 20
 其他 | 捐款 | 9999
 其他 | 日用品 | 30
@@ -37,15 +31,14 @@ Major | Sub | Order
 其他 | 煤油 | 9999
 其他 | 禮物 | 9999
 其他 | 禮金 | 9999
+其他 | 稅金 | 100
 其他 | 紅包 | 9999
-其他 | 置物櫃 | 9999
-其他 | 證件照 | 9999
 其他 | 贊助 | 9999
 其他 | 運費 | 9999
 其他 | 雜支 | 9999
+其他 | 雨具 | 9999
 其他 | 雲端 | 90
 其他 | 電信費 | 40
-其他 | 電池 | 9999
 樂 | FFXIV | 50
 樂 | KTV | 9999
 樂 | NULL | 0
@@ -82,7 +75,6 @@ Major | Sub | Order
 行 | 公車 | 20
 行 | 客運 | 9999
 行 | 捷運 | 10
-行 | 收計程車費 | 9999
 行 | 機票 | 9999
 行 | 機車小幫手 | 140
 行 | 機車部品 | 90
@@ -100,9 +92,9 @@ Major | Sub | Order
 行 | 高鐵 | 70
 衣 | NULL | 0
 衣 | 人身部品 | 30
+衣 | 修補保養 | 40
 衣 | 包 | 9999
 衣 | 泳裝 | 9999
-衣 | 洗鞋 | 9999
 衣 | 理髮 | 10
 衣 | 眼鏡 | 9999
 衣 | 衣物 | 20
