@@ -7,13 +7,11 @@ Regenerate: backend/scripts/dump-categories.sh  (needs `pnpm dev` running).
 Major | Sub | Order
 --- | --- | ---
 住 | NULL | 0
-住 | 仲介費 | 9999
 住 | 住宿 | 50
-住 | 修繕費 | 9999
-住 | 家具 | 9999
-住 | 家電 | 9999
-住 | 寢具 | 9999
-住 | 居家清潔 | 9999
+住 | 其他 | 100
+住 | 家具 | 65
+住 | 家電 | 60
+住 | 寢具 | 70
 住 | 水費 | 40
 住 | 租金 | 10
 住 | 電費 | 30
