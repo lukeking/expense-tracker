@@ -15,6 +15,13 @@ interface Props {
 
 const MAX_VISIBLE_SUBCATEGORIES = 5;
 
+// PWA-only presentation: the DB stores the major NAME (食…) unchanged; this just renders an
+// icon beside it. The major set is DB-managed and can grow, so unmapped majors render with no
+// icon (graceful fallback — never breaks). Edit freely; it's pure presentation.
+const MAJOR_ICONS: Record<string, string> = {
+  食: '🍜', 衣: '👕', 住: '🏠', 行: '🚗', 育: '📚', 樂: '🎮', 醫: '🏥', 其他: '📦', 保險: '🛡️',
+};
+
 export function CategoryPicker({ value, onChange }: Props) {
   const t = useT();
   const { data: categories } = useCategories();
@@ -63,7 +70,7 @@ export function CategoryPicker({ value, onChange }: Props) {
                 : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600'
             }`}
           >
-            {major}
+            {MAJOR_ICONS[major] ? `${MAJOR_ICONS[major]} ${major}` : major}
           </button>
         ))}
       </div>

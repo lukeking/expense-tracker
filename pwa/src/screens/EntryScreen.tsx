@@ -152,6 +152,10 @@ function ExpenseForm() {
   }
 
   const canSubmit = amountVal > 0 && items.length > 0 && !categoryIncomplete;
+  const missing = [
+    amountVal > 0 ? null : t('entry.fieldAmount'),
+    items.length > 0 ? null : t('entry.fieldItem'),
+  ].filter(Boolean);
 
   return (
     <form
@@ -167,37 +171,40 @@ function ExpenseForm() {
       <div className="flex-1 overflow-y-auto flex flex-col gap-4 p-4">
       {/* Amount */}
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('entry.amountLabel')}</label>
-        <div className="flex items-center gap-2">
-          <input
-            type="number"
-            min="1"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="0"
-            className="text-3xl font-bold flex-1 min-w-0 border-b-2 border-gray-300 dark:border-gray-600 outline-none pb-1 focus:border-blue-500 bg-transparent text-gray-900 dark:text-white"
-            required
-          />
-          <button
-            type="button"
-            onClick={() => setShowAdj((v) => !v)}
-            className="flex-shrink-0 text-gray-400 dark:text-gray-500 px-1 pb-1 text-sm"
-            aria-label={t('entry.adjAria')}
-          >
-            {showAdj ? '▾' : '▸'}
-          </button>
-        </div>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500" />
+          {t('entry.amountLabel')}
+        </label>
+        <input
+          type="number"
+          min="1"
+          inputMode="numeric"
+          autoFocus
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder="0"
+          className="text-3xl font-bold w-full border-b-2 border-gray-300 dark:border-gray-600 outline-none pb-1 focus:border-blue-500 bg-transparent text-gray-900 dark:text-white"
+          required
+        />
+        <button
+          type="button"
+          onClick={() => setShowAdj((v) => !v)}
+          className="mt-1.5 text-sm text-blue-600 dark:text-blue-400"
+          aria-label={t('entry.adjAria')}
+        >
+          {t('entry.adjToggle')} {showAdj ? '⌄' : '›'}
+        </button>
       </div>
 
       {/* Payment method */}
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">{t('entry.paymentMethod')}</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />{t('entry.paymentMethod')}</label>
         <PaymentPills value={paymentMethod} onChange={setPaymentMethod} />
       </div>
 
       {/* Category */}
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">{t('entry.category')}</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-orange-500" />{t('entry.category')}</label>
         <CategoryPicker value={category} onChange={setCategory} />
         {categoryIncomplete && (
           <p className="text-xs text-orange-500 mt-1">{t('category.subRequired')}</p>
@@ -206,7 +213,7 @@ function ExpenseForm() {
 
       {/* Free tags */}
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">{t('entry.tags')}</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-purple-500" />{t('entry.tags')}</label>
         <TagInput value={freeTags} onChange={setFreeTags} />
       </div>
 
@@ -235,7 +242,7 @@ function ExpenseForm() {
       {/* Items */}
       <div>
         <div className="flex items-center justify-between mb-1">
-          <label className="text-xs text-gray-500 dark:text-gray-400">{t('entry.itemDetails')}</label>
+          <label className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500" />{t('entry.itemDetails')}</label>
           {items.length > 0 && (
             <span className="text-xs text-gray-500 dark:text-gray-400">
               NT${itemSum}
@@ -315,10 +322,19 @@ function ExpenseForm() {
         )}
         <button
           type="submit"
-          disabled={mutation.isPending || !canSubmit}
-          className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold disabled:opacity-50"
+          disabled={mutation.isPending}
+          aria-disabled={!canSubmit}
+          className={`w-full rounded-xl py-3 font-semibold transition-colors disabled:opacity-60 ${
+            canSubmit
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+          }`}
         >
-          {mutation.isPending ? t('entry.submitting') : t('entry.submit')}
+          {mutation.isPending
+            ? t('entry.submitting')
+            : canSubmit
+              ? `${t('entry.submit')} · NT$${amountVal.toLocaleString()}`
+              : t('entry.missingFields', { fields: missing.join('・') })}
         </button>
       </div>
     </form>
@@ -340,6 +356,7 @@ function FeeForm() {
   const categoryTag = deriveCategoryTag(category);
   const categoryIncomplete = category !== null && category.subcategory === null;
   const canSubmit = amountVal > 0 && !categoryIncomplete;
+  const missing = amountVal > 0 ? [] : [t('entry.fieldAmount')];
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -374,30 +391,30 @@ function FeeForm() {
       )}
       <div className="flex-1 overflow-y-auto flex flex-col gap-4 p-4">
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('entry.amountLabel')}</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500" />{t('entry.amountLabel')}</label>
         <input
-          type="number" min="1" value={amount} onChange={(e) => setAmount(e.target.value)}
+          type="number" min="1" inputMode="numeric" autoFocus value={amount} onChange={(e) => setAmount(e.target.value)}
           placeholder="0" required
           className="text-3xl font-bold w-full border-b-2 border-gray-300 dark:border-gray-600 outline-none pb-1 focus:border-blue-500 bg-transparent text-gray-900 dark:text-white"
         />
       </div>
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">{t('entry.paymentMethod')}</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />{t('entry.paymentMethod')}</label>
         <PaymentPills value={paymentMethod} onChange={setPaymentMethod} />
       </div>
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">{t('entry.category')}</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-orange-500" />{t('entry.category')}</label>
         <CategoryPicker value={category} onChange={setCategory} />
         {categoryIncomplete && (
           <p className="text-xs text-orange-500 mt-1">{t('category.subRequired')}</p>
         )}
       </div>
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('entry.description')}</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500" />{t('entry.description')}</label>
         <DescriptionSuggest value={description} onChange={setDescription} type="fee" placeholder={t('entry.feeDescPlaceholder')} />
       </div>
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">{t('entry.linkOriginal')}</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-purple-500" />{t('entry.linkOriginal')}</label>
         <ParentSearch
           value={parent}
           onSelect={(result) => {
@@ -416,10 +433,19 @@ function FeeForm() {
         {mutation.error && <p className="text-red-600 text-sm mb-2">{(mutation.error as Error).message}</p>}
         <button
           type="submit"
-          disabled={mutation.isPending || !canSubmit}
-          className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold disabled:opacity-50"
+          disabled={mutation.isPending}
+          aria-disabled={!canSubmit}
+          className={`w-full rounded-xl py-3 font-semibold transition-colors disabled:opacity-60 ${
+            canSubmit
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+          }`}
         >
-          {mutation.isPending ? t('entry.submitting') : t('entry.submit')}
+          {mutation.isPending
+            ? t('entry.submitting')
+            : canSubmit
+              ? `${t('entry.submit')} · NT$${amountVal.toLocaleString()}`
+              : t('entry.missingFields', { fields: missing.join('・') })}
         </button>
       </div>
     </form>
@@ -437,6 +463,11 @@ function RefundForm() {
   const [toast, setToast] = useState('');
 
   const amountVal = parseInt(amount, 10) || 0;
+  const canSubmit = amountVal > 0 && !!description.trim();
+  const missing = [
+    amountVal > 0 ? null : t('entry.fieldAmount'),
+    description.trim() ? null : t('entry.fieldDescription'),
+  ].filter(Boolean);
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -458,7 +489,7 @@ function RefundForm() {
 
   return (
     <form
-      onSubmit={(e) => { e.preventDefault(); if (amountVal > 0 && description.trim()) mutation.mutate(); }}
+      onSubmit={(e) => { e.preventDefault(); if (canSubmit) mutation.mutate(); }}
       className="flex flex-col h-full"
     >
       {toast && (
@@ -468,23 +499,23 @@ function RefundForm() {
       )}
       <div className="flex-1 overflow-y-auto flex flex-col gap-4 p-4">
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('entry.amountLabel')}</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500" />{t('entry.amountLabel')}</label>
         <input
-          type="number" min="1" value={amount} onChange={(e) => setAmount(e.target.value)}
+          type="number" min="1" inputMode="numeric" autoFocus value={amount} onChange={(e) => setAmount(e.target.value)}
           placeholder="0" required
           className="text-3xl font-bold w-full border-b-2 border-gray-300 dark:border-gray-600 outline-none pb-1 focus:border-blue-500 bg-transparent text-gray-900 dark:text-white"
         />
       </div>
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('entry.description')}</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500" />{t('entry.description')}</label>
         <DescriptionSuggest value={description} onChange={setDescription} type="refund" placeholder={t('entry.refundDescPlaceholder')} required />
       </div>
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">{t('entry.refundTo')}</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />{t('entry.refundTo')}</label>
         <PaymentPills value={paymentMethod} onChange={setPaymentMethod} />
       </div>
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">{t('entry.linkOriginal')}</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-purple-500" />{t('entry.linkOriginal')}</label>
         <ParentSearch value={parent} onSelect={setParent} />
       </div>
       </div>
@@ -494,10 +525,19 @@ function RefundForm() {
         {mutation.error && <p className="text-red-600 text-sm mb-2">{(mutation.error as Error).message}</p>}
         <button
           type="submit"
-          disabled={mutation.isPending || amountVal <= 0 || !description.trim()}
-          className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold disabled:opacity-50"
+          disabled={mutation.isPending}
+          aria-disabled={!canSubmit}
+          className={`w-full rounded-xl py-3 font-semibold transition-colors disabled:opacity-60 ${
+            canSubmit
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+          }`}
         >
-          {mutation.isPending ? t('entry.submitting') : t('entry.submit')}
+          {mutation.isPending
+            ? t('entry.submitting')
+            : canSubmit
+              ? `${t('entry.submit')} · NT$${amountVal.toLocaleString()}`
+              : t('entry.missingFields', { fields: missing.join('・') })}
         </button>
       </div>
     </form>
