@@ -1,4 +1,13 @@
 import { test, expect, TEST_API_KEY } from '../fixtures/test';
+import { resetDb } from '../fixtures/reset-db';
+
+// These tests create extra transactions (parents + a fee/refund). The shared beforeEach reset
+// clears state before each test, but a following test that asserts the all-time baseline (e.g.
+// view-summary's grand total) can observe this test's rows. Reset again afterwards so nothing
+// created here leaks forward.
+test.afterEach(async () => {
+  await resetDb();
+});
 
 // Feature 041 — 連結原始交易 auto-fill. Drives the fee/refund tabs through the real UI:
 // linking an original auto-fills the form, and the refund 全額退款 button one-taps the
@@ -21,18 +30,22 @@ interface TxRow {
   items: { name: string }[];
 }
 
-async function createParent(request: import('@playwright/test').APIRequestContext): Promise<void> {
+// Creates a fresh parent and returns its UNIQUE note. Tests share one DB within a run, so a
+// per-test note keeps each parent-search matching exactly its own row (not another test's).
+async function createParent(request: import('@playwright/test').APIRequestContext): Promise<string> {
+  const note = `${PARENT_NOTE}-${Date.now()}-${Math.floor(Math.random() * 1e4)}`;
   const res = await request.post(`${API_URL}/pwa/expense`, {
     headers: authHeaders,
     data: {
       amount: 200,
       payment_method: 'easy_card',
       category_tag: '行:捷運',
-      note: PARENT_NOTE,
+      note,
       items: [{ name: 'E2E捷運', amount: 200 }],
     },
   });
   expect(res.ok(), 'parent expense should be created').toBeTruthy();
+  return note;
 }
 
 async function fetchTransactions(request: import('@playwright/test').APIRequestContext): Promise<TxRow[]> {
@@ -42,15 +55,15 @@ async function fetchTransactions(request: import('@playwright/test').APIRequestC
 }
 
 test('fee: linking an original auto-fills payment method and description', async ({ page, request }) => {
-  await createParent(request);
+  const note = await createParent(request);
   await page.goto('/');
   await page.getByRole('button', { name: '手續費', exact: true }).click();
 
   await page.getByPlaceholder('0').fill('47');
 
   // Link the original; do NOT touch payment/category — auto-fill must do it.
-  await page.getByPlaceholder('搜尋交易備註或品項…').fill(PARENT_NOTE);
-  await page.getByRole('button', { name: new RegExp(PARENT_NOTE) }).click();
+  await page.getByPlaceholder('搜尋交易備註或品項…').fill(note);
+  await page.getByRole('button', { name: note }).first().click();
 
   await page.getByRole('button', { name: '送出' }).click();
   await expect(page.getByText('手續費已記錄')).toBeVisible();
@@ -65,15 +78,15 @@ test('fee: linking an original auto-fills payment method and description', async
 });
 
 test('refund: 全額退款 one-taps the original amount; payment auto-fills', async ({ page, request }) => {
-  await createParent(request);
+  const note = await createParent(request);
   await page.goto('/');
   await page.getByRole('button', { name: '退款', exact: true }).click();
 
   // 全額退款 is absent until an original is linked.
   await expect(page.getByRole('button', { name: /全額退款/ })).toHaveCount(0);
 
-  await page.getByPlaceholder('搜尋交易備註或品項…').fill(PARENT_NOTE);
-  await page.getByRole('button', { name: new RegExp(PARENT_NOTE) }).click();
+  await page.getByPlaceholder('搜尋交易備註或品項…').fill(note);
+  await page.getByRole('button', { name: note }).first().click();
 
   // Now the button appears; tap it → amount becomes the original's full amount.
   await page.getByRole('button', { name: /全額退款/ }).click();
@@ -83,7 +96,7 @@ test('refund: 全額退款 one-taps the original amount; payment auto-fills', as
   await expect(page.getByText('退款已記錄')).toBeVisible();
 
   const txs = await fetchTransactions(request);
-  const refund = txs.find((t) => t.transaction_type === 'refund');
+  const refund = txs.find((t) => t.transaction_type === 'refund' && t.amount === 200);
   expect(refund, 'refund should be persisted').toBeTruthy();
   expect(refund!.amount).toBe(200);
   expect(refund!.payment_method).toBe('easy_card');

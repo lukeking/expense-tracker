@@ -43,17 +43,19 @@ test('tapping a subcategory bar filters the drilldown to that subcategory', asyn
   const bars = page.locator('.recharts-bar-rectangle');
   await expect(bars).toHaveCount(2);
 
-  // Tap 午餐 → header shows the net subcategory total; the major total (350) and the
-  // other subcategory (100) drop out of the list.
+  // Tap 午餐 → breadcrumb header + its net total. (The amount column always lists every
+  // subcategory, dimming the unselected ones rather than removing them, so assert the
+  // selection via the breadcrumb — not by the other subtotal vanishing.) The major total
+  // (350) does leave the page once a subcategory is active.
   await bars.nth(0).click();
+  await expect(page.getByText('食 › 午餐')).toBeVisible();
   await expect(page.getByText(money(250), { exact: true }).first()).toBeVisible();
   await expect(page.getByText(money(350), { exact: true })).toHaveCount(0);
-  await expect(page.getByText(money(100), { exact: true })).toHaveCount(0);
 
-  // Tap a different bar (早餐) → selection replaces, not stacks (FR-003).
+  // Tap a different bar (早餐) → selection replaces, not stacks (FR-003): breadcrumb + total switch.
   await bars.nth(1).click();
+  await expect(page.getByText('食 › 早餐')).toBeVisible();
   await expect(page.getByText(money(100), { exact: true }).first()).toBeVisible();
-  await expect(page.getByText(money(250), { exact: true })).toHaveCount(0);
 
   // Day-grouped: expanding the month group reveals the subcategory's day (SC-002 — with
   // one tx the single day subtotal equals the header total, both NT$100).
@@ -114,9 +116,11 @@ test('clicking the empty part of a row selects that subcategory', async ({ page 
   const surface = page.locator('.recharts-surface').first();
   await expect(surface).toBeVisible();
   const box = (await surface.boundingBox())!;
-  // 食 has two rows: 午餐 (top, long bar) and 早餐 (bottom, short bar). Click far right of
-  // the 早餐 row — well past its short bar — to prove the band, not just the bar, selects.
-  await surface.click({ position: { x: box.width - 20, y: box.height * 0.75 } });
+  // 食 has two rows: 午餐 (top, long bar) and 早餐 (bottom, short bar). Click the far-right
+  // of the 早餐 row — well past its short bar but inside the plot (the right 76px is the
+  // reserved amount column / chart margin, outside the clickable band) — to prove the whole
+  // band selects, not just the coloured bar.
+  await surface.click({ position: { x: box.width - 90, y: box.height * 0.75 } });
 
   await expect(page.getByText('食 › 早餐')).toBeVisible();
   await expect(page.getByText(money(100), { exact: true }).first()).toBeVisible();

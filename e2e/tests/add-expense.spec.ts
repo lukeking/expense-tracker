@@ -10,8 +10,11 @@ test('submits an expense through the UI and persists it', async ({ page, request
 
   // Amount (the large header field, placeholder "0").
   await page.getByPlaceholder('0').fill('123');
-  // Category: pick the 食 major chip.
-  await page.getByRole('button', { name: '食', exact: true }).click();
+  // Category: pick the 食 major chip (rendered with an emoji prefix, e.g. "🍜 食",
+  // so match by substring rather than exact).
+  await page.getByRole('button', { name: '食' }).click();
+  // A subcategory is required to complete the category (major-only is blocked from submit).
+  await page.getByRole('button', { name: '早餐', exact: true }).click();
   // Item name.
   await page.getByPlaceholder('品項名稱').fill(ITEM_NAME);
   // Payment method.
@@ -40,6 +43,8 @@ test('submits an expense through the UI and persists it', async ({ page, request
 
 test('blocks submit when the amount is empty', async ({ page }) => {
   await page.goto('/');
-  // The app's existing guard disables submit until a positive amount is entered.
-  await expect(page.getByRole('button', { name: '送出' })).toBeDisabled();
+  // The guard keeps submit inert until a positive amount is entered. The button stays in the
+  // DOM (its label folds to the missing-fields hint instead of 送出) and signals blocked via
+  // aria-disabled rather than the native disabled attribute.
+  await expect(page.locator('button[type="submit"]')).toHaveAttribute('aria-disabled', 'true');
 });
