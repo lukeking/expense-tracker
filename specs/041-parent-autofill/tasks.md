@@ -98,7 +98,7 @@ Web app: backend = `backend/src/`, `backend/tests/`; PWA = `pwa/src/`; E2E = `e2
 
 - [x] T014 [P] Run `cd backend && pnpm test` — confirm `resolveSingleCategory` + `findParentCandidates` (payment_method/category) pass.
 - [x] T015 [P] Run `cd pwa && pnpm exec tsc -b && pnpm i18n:check` — types for new `ParentSearchResult` fields/form wiring + `entry.fullRefund` zh=en parity.
-- [ ] T016 [P] (Optional) Add a Playwright smoke in `e2e/tests/` — link a parent (assert payment pill + fee category pre-fill), tap 全額退款 (assert amount = parent total), and assert a manually-changed field survives a re-link.
+- [x] T016 [P] (Optional) Add a Playwright smoke in `e2e/tests/` — link a parent (assert payment pill + fee category pre-fill), tap 全額退款 (assert amount = parent total), and assert a manually-changed field survives a re-link.
 - [ ] T017 Manual verification against `specs/041-parent-autofill/quickstart.md` (the 10 verification steps).
 
 ---
