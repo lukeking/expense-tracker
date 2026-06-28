@@ -58,6 +58,7 @@ function Layout() {
   const t = useT();
   return (
     <div className="flex flex-col h-full bg-white dark:bg-gray-900">
+      <UpdateBanner />
       <div className="flex-1 overflow-hidden">
         <Suspense fallback={<div className="h-full flex items-center justify-center text-gray-400 dark:text-gray-500">{t('common.loading')}</div>}>
           <Outlet />
@@ -95,7 +96,6 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <SettingsProvider>
         <AppShell />
-        <UpdateBanner />
       </SettingsProvider>
     </QueryClientProvider>
   );
