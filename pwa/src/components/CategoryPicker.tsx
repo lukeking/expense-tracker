@@ -19,7 +19,7 @@ const MAX_VISIBLE_SUBCATEGORIES = 5;
 // icon beside it. The major set is DB-managed and can grow, so unmapped majors render with no
 // icon (graceful fallback — never breaks). Edit freely; it's pure presentation.
 const MAJOR_ICONS: Record<string, string> = {
-  食: '🍜', 衣: '👕', 住: '🏠', 行: '🚗', 育: '📚', 樂: '🎮', 醫: '🏥', 其他: '📦', 保險: '🛡️',
+  食: '🍜', 衣: '👕', 住: '🏠', 行: '🚗', 育: '📚', 樂: '🎮', 醫: '🏥', 其他: '📦', 保險: '🛡️', // i18n-allow (keyed by DB major names)
 };
 
 export function CategoryPicker({ value, onChange }: Props) {
