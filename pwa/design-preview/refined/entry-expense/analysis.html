@@ -1,0 +1,1860 @@
+<!-- @dsCard group="分析 Analysis" name="支出頁 UX 拆解" subtitle="頁面結構 × 行為流程 × 可優化要點" -->
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>支出頁 UX 拆解 — 結構 / 行為 / 優化</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>/*! tailwindcss v4.3.0 | MIT License | https://tailwindcss.com */
+@layer properties;
+@layer theme, base, components, utilities;
+@layer theme {
+  :root, :host {
+    --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
+      "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+      "Courier New", monospace;
+    --color-red-50: oklch(97.1% 0.013 17.38);
+    --color-red-200: oklch(88.5% 0.062 18.334);
+    --color-red-300: oklch(80.8% 0.114 19.571);
+    --color-red-400: oklch(70.4% 0.191 22.216);
+    --color-red-500: oklch(63.7% 0.237 25.331);
+    --color-red-600: oklch(57.7% 0.245 27.325);
+    --color-red-700: oklch(50.5% 0.213 27.518);
+    --color-red-800: oklch(44.4% 0.177 26.899);
+    --color-red-900: oklch(39.6% 0.141 25.723);
+    --color-orange-500: oklch(70.5% 0.213 47.604);
+    --color-amber-200: oklch(92.4% 0.12 95.746);
+    --color-amber-300: oklch(87.9% 0.169 91.605);
+    --color-amber-400: oklch(82.8% 0.189 84.429);
+    --color-amber-600: oklch(66.6% 0.179 58.318);
+    --color-amber-700: oklch(55.5% 0.163 48.998);
+    --color-amber-800: oklch(47.3% 0.137 46.201);
+    --color-green-50: oklch(98.2% 0.018 155.826);
+    --color-green-200: oklch(92.5% 0.084 155.995);
+    --color-green-300: oklch(87.1% 0.15 154.449);
+    --color-green-400: oklch(79.2% 0.209 151.711);
+    --color-green-600: oklch(62.7% 0.194 149.214);
+    --color-green-800: oklch(44.8% 0.119 151.328);
+    --color-green-900: oklch(39.3% 0.095 152.535);
+    --color-emerald-600: oklch(59.6% 0.145 163.225);
+    --color-blue-50: oklch(97% 0.014 254.604);
+    --color-blue-100: oklch(93.2% 0.032 255.585);
+    --color-blue-300: oklch(80.9% 0.105 251.813);
+    --color-blue-400: oklch(70.7% 0.165 254.624);
+    --color-blue-500: oklch(62.3% 0.214 259.815);
+    --color-blue-600: oklch(54.6% 0.245 262.881);
+    --color-blue-700: oklch(48.8% 0.243 264.376);
+    --color-blue-800: oklch(42.4% 0.199 265.638);
+    --color-blue-900: oklch(37.9% 0.146 265.522);
+    --color-gray-50: oklch(98.5% 0.002 247.839);
+    --color-gray-100: oklch(96.7% 0.003 264.542);
+    --color-gray-200: oklch(92.8% 0.006 264.531);
+    --color-gray-300: oklch(87.2% 0.01 258.338);
+    --color-gray-400: oklch(70.7% 0.022 261.325);
+    --color-gray-500: oklch(55.1% 0.027 264.364);
+    --color-gray-600: oklch(44.6% 0.03 256.802);
+    --color-gray-700: oklch(37.3% 0.034 259.733);
+    --color-gray-800: oklch(27.8% 0.033 256.848);
+    --color-gray-900: oklch(21% 0.034 264.665);
+    --color-black: #000;
+    --color-white: #fff;
+    --spacing: 0.25rem;
+    --container-sm: 24rem;
+    --container-lg: 32rem;
+    --text-xs: 0.75rem;
+    --text-xs--line-height: calc(1 / 0.75);
+    --text-sm: 0.875rem;
+    --text-sm--line-height: calc(1.25 / 0.875);
+    --text-base: 1rem;
+    --text-base--line-height: calc(1.5 / 1);
+    --text-lg: 1.125rem;
+    --text-lg--line-height: calc(1.75 / 1.125);
+    --text-xl: 1.25rem;
+    --text-xl--line-height: calc(1.75 / 1.25);
+    --text-2xl: 1.5rem;
+    --text-2xl--line-height: calc(2 / 1.5);
+    --text-3xl: 1.875rem;
+    --text-3xl--line-height: calc(2.25 / 1.875);
+    --text-4xl: 2.25rem;
+    --text-4xl--line-height: calc(2.5 / 2.25);
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+    --font-weight-bold: 700;
+    --tracking-wide: 0.025em;
+    --radius-lg: 0.5rem;
+    --radius-xl: 0.75rem;
+    --radius-2xl: 1rem;
+    --ease-out: cubic-bezier(0, 0, 0.2, 1);
+    --default-transition-duration: 150ms;
+    --default-transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    --default-font-family: var(--font-sans);
+    --default-mono-font-family: var(--font-mono);
+  }
+}
+@layer base {
+  *, ::after, ::before, ::backdrop, ::file-selector-button {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    border: 0 solid;
+  }
+  html, :host {
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+    tab-size: 4;
+    font-family: var(--default-font-family, ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji");
+    font-feature-settings: var(--default-font-feature-settings, normal);
+    font-variation-settings: var(--default-font-variation-settings, normal);
+    -webkit-tap-highlight-color: transparent;
+  }
+  hr {
+    height: 0;
+    color: inherit;
+    border-top-width: 1px;
+  }
+  abbr:where([title]) {
+    -webkit-text-decoration: underline dotted;
+    text-decoration: underline dotted;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-size: inherit;
+    font-weight: inherit;
+  }
+  a {
+    color: inherit;
+    -webkit-text-decoration: inherit;
+    text-decoration: inherit;
+  }
+  b, strong {
+    font-weight: bolder;
+  }
+  code, kbd, samp, pre {
+    font-family: var(--default-mono-font-family, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
+    font-feature-settings: var(--default-mono-font-feature-settings, normal);
+    font-variation-settings: var(--default-mono-font-variation-settings, normal);
+    font-size: 1em;
+  }
+  small {
+    font-size: 80%;
+  }
+  sub, sup {
+    font-size: 75%;
+    line-height: 0;
+    position: relative;
+    vertical-align: baseline;
+  }
+  sub {
+    bottom: -0.25em;
+  }
+  sup {
+    top: -0.5em;
+  }
+  table {
+    text-indent: 0;
+    border-color: inherit;
+    border-collapse: collapse;
+  }
+  :-moz-focusring {
+    outline: auto;
+  }
+  progress {
+    vertical-align: baseline;
+  }
+  summary {
+    display: list-item;
+  }
+  ol, ul, menu {
+    list-style: none;
+  }
+  img, svg, video, canvas, audio, iframe, embed, object {
+    display: block;
+    vertical-align: middle;
+  }
+  img, video {
+    max-width: 100%;
+    height: auto;
+  }
+  button, input, select, optgroup, textarea, ::file-selector-button {
+    font: inherit;
+    font-feature-settings: inherit;
+    font-variation-settings: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+    border-radius: 0;
+    background-color: transparent;
+    opacity: 1;
+  }
+  :where(select:is([multiple], [size])) optgroup {
+    font-weight: bolder;
+  }
+  :where(select:is([multiple], [size])) optgroup option {
+    padding-inline-start: 20px;
+  }
+  ::file-selector-button {
+    margin-inline-end: 4px;
+  }
+  ::placeholder {
+    opacity: 1;
+  }
+  @supports (not (-webkit-appearance: -apple-pay-button))  or (contain-intrinsic-size: 1px) {
+    ::placeholder {
+      color: currentcolor;
+      @supports (color: color-mix(in lab, red, red)) {
+        color: color-mix(in oklab, currentcolor 50%, transparent);
+      }
+    }
+  }
+  textarea {
+    resize: vertical;
+  }
+  ::-webkit-search-decoration {
+    -webkit-appearance: none;
+  }
+  ::-webkit-date-and-time-value {
+    min-height: 1lh;
+    text-align: inherit;
+  }
+  ::-webkit-datetime-edit {
+    display: inline-flex;
+  }
+  ::-webkit-datetime-edit-fields-wrapper {
+    padding: 0;
+  }
+  ::-webkit-datetime-edit, ::-webkit-datetime-edit-year-field, ::-webkit-datetime-edit-month-field, ::-webkit-datetime-edit-day-field, ::-webkit-datetime-edit-hour-field, ::-webkit-datetime-edit-minute-field, ::-webkit-datetime-edit-second-field, ::-webkit-datetime-edit-millisecond-field, ::-webkit-datetime-edit-meridiem-field {
+    padding-block: 0;
+  }
+  ::-webkit-calendar-picker-indicator {
+    line-height: 1;
+  }
+  :-moz-ui-invalid {
+    box-shadow: none;
+  }
+  button, input:where([type="button"], [type="reset"], [type="submit"]), ::file-selector-button {
+    appearance: button;
+  }
+  ::-webkit-inner-spin-button, ::-webkit-outer-spin-button {
+    height: auto;
+  }
+  [hidden]:where(:not([hidden="until-found"])) {
+    display: none !important;
+  }
+}
+@layer utilities {
+  .pointer-events-auto {
+    pointer-events: auto;
+  }
+  .pointer-events-none {
+    pointer-events: none;
+  }
+  .collapse {
+    visibility: collapse;
+  }
+  .visible {
+    visibility: visible;
+  }
+  .absolute {
+    position: absolute;
+  }
+  .fixed {
+    position: fixed;
+  }
+  .relative {
+    position: relative;
+  }
+  .inset-0 {
+    inset: calc(var(--spacing) * 0);
+  }
+  .inset-x-0 {
+    inset-inline: calc(var(--spacing) * 0);
+  }
+  .inset-y-0 {
+    inset-block: calc(var(--spacing) * 0);
+  }
+  .top-1\/2 {
+    top: calc(1 / 2 * 100%);
+  }
+  .top-4 {
+    top: calc(var(--spacing) * 4);
+  }
+  .top-full {
+    top: 100%;
+  }
+  .right-0 {
+    right: calc(var(--spacing) * 0);
+  }
+  .right-2\.5 {
+    right: calc(var(--spacing) * 2.5);
+  }
+  .bottom-20 {
+    bottom: calc(var(--spacing) * 20);
+  }
+  .left-1\/2 {
+    left: calc(1 / 2 * 100%);
+  }
+  .left-2\.5 {
+    left: calc(var(--spacing) * 2.5);
+  }
+  .z-10 {
+    z-index: 10;
+  }
+  .z-50 {
+    z-index: 50;
+  }
+  .mt-0\.5 {
+    margin-top: calc(var(--spacing) * 0.5);
+  }
+  .mt-1 {
+    margin-top: calc(var(--spacing) * 1);
+  }
+  .mt-1\.5 {
+    margin-top: calc(var(--spacing) * 1.5);
+  }
+  .mt-2 {
+    margin-top: calc(var(--spacing) * 2);
+  }
+  .mb-1 {
+    margin-bottom: calc(var(--spacing) * 1);
+  }
+  .mb-2 {
+    margin-bottom: calc(var(--spacing) * 2);
+  }
+  .mb-3 {
+    margin-bottom: calc(var(--spacing) * 3);
+  }
+  .mb-4 {
+    margin-bottom: calc(var(--spacing) * 4);
+  }
+  .mb-6 {
+    margin-bottom: calc(var(--spacing) * 6);
+  }
+  .mb-8 {
+    margin-bottom: calc(var(--spacing) * 8);
+  }
+  .ml-1 {
+    margin-left: calc(var(--spacing) * 1);
+  }
+  .ml-1\.5 {
+    margin-left: calc(var(--spacing) * 1.5);
+  }
+  .ml-2 {
+    margin-left: calc(var(--spacing) * 2);
+  }
+  .ml-4 {
+    margin-left: calc(var(--spacing) * 4);
+  }
+  .ml-auto {
+    margin-left: auto;
+  }
+  .block {
+    display: block;
+  }
+  .flex {
+    display: flex;
+  }
+  .grid {
+    display: grid;
+  }
+  .hidden {
+    display: none;
+  }
+  .inline {
+    display: inline;
+  }
+  .inline-flex {
+    display: inline-flex;
+  }
+  .h-3 {
+    height: calc(var(--spacing) * 3);
+  }
+  .h-4 {
+    height: calc(var(--spacing) * 4);
+  }
+  .h-7 {
+    height: calc(var(--spacing) * 7);
+  }
+  .h-full {
+    height: 100%;
+  }
+  .max-h-40 {
+    max-height: calc(var(--spacing) * 40);
+  }
+  .max-h-48 {
+    max-height: calc(var(--spacing) * 48);
+  }
+  .max-h-\[70vh\] {
+    max-height: 70vh;
+  }
+  .max-h-\[80dvh\] {
+    max-height: 80dvh;
+  }
+  .min-h-\[42px\] {
+    min-height: 42px;
+  }
+  .w-3 {
+    width: calc(var(--spacing) * 3);
+  }
+  .w-7 {
+    width: calc(var(--spacing) * 7);
+  }
+  .w-14 {
+    width: calc(var(--spacing) * 14);
+  }
+  .w-20 {
+    width: calc(var(--spacing) * 20);
+  }
+  .w-\[76px\] {
+    width: 76px;
+  }
+  .w-full {
+    width: 100%;
+  }
+  .max-w-\[80px\] {
+    max-width: 80px;
+  }
+  .max-w-lg {
+    max-width: var(--container-lg);
+  }
+  .max-w-sm {
+    max-width: var(--container-sm);
+  }
+  .min-w-0 {
+    min-width: calc(var(--spacing) * 0);
+  }
+  .min-w-24 {
+    min-width: calc(var(--spacing) * 24);
+  }
+  .min-w-40 {
+    min-width: calc(var(--spacing) * 40);
+  }
+  .flex-1 {
+    flex: 1;
+  }
+  .flex-shrink-0 {
+    flex-shrink: 0;
+  }
+  .shrink-0 {
+    flex-shrink: 0;
+  }
+  .-translate-x-1\/2 {
+    --tw-translate-x: calc(calc(1 / 2 * 100%) * -1);
+    translate: var(--tw-translate-x) var(--tw-translate-y);
+  }
+  .-translate-y-1\/2 {
+    --tw-translate-y: calc(calc(1 / 2 * 100%) * -1);
+    translate: var(--tw-translate-x) var(--tw-translate-y);
+  }
+  .transform {
+    transform: var(--tw-rotate-x,) var(--tw-rotate-y,) var(--tw-rotate-z,) var(--tw-skew-x,) var(--tw-skew-y,);
+  }
+  .cursor-not-allowed {
+    cursor: not-allowed;
+  }
+  .cursor-pointer {
+    cursor: pointer;
+  }
+  .cursor-text {
+    cursor: text;
+  }
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .flex-col {
+    flex-direction: column;
+  }
+  .flex-wrap {
+    flex-wrap: wrap;
+  }
+  .items-center {
+    align-items: center;
+  }
+  .items-end {
+    align-items: flex-end;
+  }
+  .items-start {
+    align-items: flex-start;
+  }
+  .justify-between {
+    justify-content: space-between;
+  }
+  .justify-center {
+    justify-content: center;
+  }
+  .justify-end {
+    justify-content: flex-end;
+  }
+  .gap-0\.5 {
+    gap: calc(var(--spacing) * 0.5);
+  }
+  .gap-1 {
+    gap: calc(var(--spacing) * 1);
+  }
+  .gap-1\.5 {
+    gap: calc(var(--spacing) * 1.5);
+  }
+  .gap-2 {
+    gap: calc(var(--spacing) * 2);
+  }
+  .gap-3 {
+    gap: calc(var(--spacing) * 3);
+  }
+  .gap-4 {
+    gap: calc(var(--spacing) * 4);
+  }
+  .gap-6 {
+    gap: calc(var(--spacing) * 6);
+  }
+  .space-y-0\.5 {
+    :where(& > :not(:last-child)) {
+      --tw-space-y-reverse: 0;
+      margin-block-start: calc(calc(var(--spacing) * 0.5) * var(--tw-space-y-reverse));
+      margin-block-end: calc(calc(var(--spacing) * 0.5) * calc(1 - var(--tw-space-y-reverse)));
+    }
+  }
+  .space-y-1 {
+    :where(& > :not(:last-child)) {
+      --tw-space-y-reverse: 0;
+      margin-block-start: calc(calc(var(--spacing) * 1) * var(--tw-space-y-reverse));
+      margin-block-end: calc(calc(var(--spacing) * 1) * calc(1 - var(--tw-space-y-reverse)));
+    }
+  }
+  .space-y-1\.5 {
+    :where(& > :not(:last-child)) {
+      --tw-space-y-reverse: 0;
+      margin-block-start: calc(calc(var(--spacing) * 1.5) * var(--tw-space-y-reverse));
+      margin-block-end: calc(calc(var(--spacing) * 1.5) * calc(1 - var(--tw-space-y-reverse)));
+    }
+  }
+  .space-y-2 {
+    :where(& > :not(:last-child)) {
+      --tw-space-y-reverse: 0;
+      margin-block-start: calc(calc(var(--spacing) * 2) * var(--tw-space-y-reverse));
+      margin-block-end: calc(calc(var(--spacing) * 2) * calc(1 - var(--tw-space-y-reverse)));
+    }
+  }
+  .space-y-3 {
+    :where(& > :not(:last-child)) {
+      --tw-space-y-reverse: 0;
+      margin-block-start: calc(calc(var(--spacing) * 3) * var(--tw-space-y-reverse));
+      margin-block-end: calc(calc(var(--spacing) * 3) * calc(1 - var(--tw-space-y-reverse)));
+    }
+  }
+  .space-y-4 {
+    :where(& > :not(:last-child)) {
+      --tw-space-y-reverse: 0;
+      margin-block-start: calc(calc(var(--spacing) * 4) * var(--tw-space-y-reverse));
+      margin-block-end: calc(calc(var(--spacing) * 4) * calc(1 - var(--tw-space-y-reverse)));
+    }
+  }
+  .space-y-6 {
+    :where(& > :not(:last-child)) {
+      --tw-space-y-reverse: 0;
+      margin-block-start: calc(calc(var(--spacing) * 6) * var(--tw-space-y-reverse));
+      margin-block-end: calc(calc(var(--spacing) * 6) * calc(1 - var(--tw-space-y-reverse)));
+    }
+  }
+  .divide-y {
+    :where(& > :not(:last-child)) {
+      --tw-divide-y-reverse: 0;
+      border-bottom-style: var(--tw-border-style);
+      border-top-style: var(--tw-border-style);
+      border-top-width: calc(1px * var(--tw-divide-y-reverse));
+      border-bottom-width: calc(1px * calc(1 - var(--tw-divide-y-reverse)));
+    }
+  }
+  .divide-gray-100 {
+    :where(& > :not(:last-child)) {
+      border-color: var(--color-gray-100);
+    }
+  }
+  .self-start {
+    align-self: flex-start;
+  }
+  .truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .overflow-hidden {
+    overflow: hidden;
+  }
+  .overflow-x-auto {
+    overflow-x: auto;
+  }
+  .overflow-y-auto {
+    overflow-y: auto;
+  }
+  .rounded {
+    border-radius: 0.25rem;
+  }
+  .rounded-full {
+    border-radius: calc(infinity * 1px);
+  }
+  .rounded-lg {
+    border-radius: var(--radius-lg);
+  }
+  .rounded-xl {
+    border-radius: var(--radius-xl);
+  }
+  .rounded-t-2xl {
+    border-top-left-radius: var(--radius-2xl);
+    border-top-right-radius: var(--radius-2xl);
+  }
+  .border {
+    border-style: var(--tw-border-style);
+    border-width: 1px;
+  }
+  .border-0 {
+    border-style: var(--tw-border-style);
+    border-width: 0px;
+  }
+  .border-2 {
+    border-style: var(--tw-border-style);
+    border-width: 2px;
+  }
+  .border-t {
+    border-top-style: var(--tw-border-style);
+    border-top-width: 1px;
+  }
+  .border-b {
+    border-bottom-style: var(--tw-border-style);
+    border-bottom-width: 1px;
+  }
+  .border-b-2 {
+    border-bottom-style: var(--tw-border-style);
+    border-bottom-width: 2px;
+  }
+  .border-l-2 {
+    border-left-style: var(--tw-border-style);
+    border-left-width: 2px;
+  }
+  .border-dashed {
+    --tw-border-style: dashed;
+    border-style: dashed;
+  }
+  .border-amber-200 {
+    border-color: var(--color-amber-200);
+  }
+  .border-amber-300 {
+    border-color: var(--color-amber-300);
+  }
+  .border-blue-300 {
+    border-color: var(--color-blue-300);
+  }
+  .border-blue-400 {
+    border-color: var(--color-blue-400);
+  }
+  .border-blue-600 {
+    border-color: var(--color-blue-600);
+  }
+  .border-emerald-600 {
+    border-color: var(--color-emerald-600);
+  }
+  .border-gray-50 {
+    border-color: var(--color-gray-50);
+  }
+  .border-gray-100 {
+    border-color: var(--color-gray-100);
+  }
+  .border-gray-200 {
+    border-color: var(--color-gray-200);
+  }
+  .border-gray-300 {
+    border-color: var(--color-gray-300);
+  }
+  .border-green-200 {
+    border-color: var(--color-green-200);
+  }
+  .border-red-200 {
+    border-color: var(--color-red-200);
+  }
+  .border-red-300 {
+    border-color: var(--color-red-300);
+  }
+  .bg-black\/40 {
+    background-color: color-mix(in srgb, #000 40%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      background-color: color-mix(in oklab, var(--color-black) 40%, transparent);
+    }
+  }
+  .bg-blue-50 {
+    background-color: var(--color-blue-50);
+  }
+  .bg-blue-100 {
+    background-color: var(--color-blue-100);
+  }
+  .bg-blue-500 {
+    background-color: var(--color-blue-500);
+  }
+  .bg-blue-600 {
+    background-color: var(--color-blue-600);
+  }
+  .bg-emerald-600 {
+    background-color: var(--color-emerald-600);
+  }
+  .bg-gray-50 {
+    background-color: var(--color-gray-50);
+  }
+  .bg-gray-100 {
+    background-color: var(--color-gray-100);
+  }
+  .bg-gray-900 {
+    background-color: var(--color-gray-900);
+  }
+  .bg-green-50 {
+    background-color: var(--color-green-50);
+  }
+  .bg-green-600 {
+    background-color: var(--color-green-600);
+  }
+  .bg-red-50 {
+    background-color: var(--color-red-50);
+  }
+  .bg-red-500 {
+    background-color: var(--color-red-500);
+  }
+  .bg-transparent {
+    background-color: transparent;
+  }
+  .bg-white {
+    background-color: var(--color-white);
+  }
+  .p-1 {
+    padding: calc(var(--spacing) * 1);
+  }
+  .p-2 {
+    padding: calc(var(--spacing) * 2);
+  }
+  .p-4 {
+    padding: calc(var(--spacing) * 4);
+  }
+  .p-6 {
+    padding: calc(var(--spacing) * 6);
+  }
+  .p-8 {
+    padding: calc(var(--spacing) * 8);
+  }
+  .px-1 {
+    padding-inline: calc(var(--spacing) * 1);
+  }
+  .px-1\.5 {
+    padding-inline: calc(var(--spacing) * 1.5);
+  }
+  .px-2 {
+    padding-inline: calc(var(--spacing) * 2);
+  }
+  .px-2\.5 {
+    padding-inline: calc(var(--spacing) * 2.5);
+  }
+  .px-3 {
+    padding-inline: calc(var(--spacing) * 3);
+  }
+  .px-4 {
+    padding-inline: calc(var(--spacing) * 4);
+  }
+  .px-6 {
+    padding-inline: calc(var(--spacing) * 6);
+  }
+  .py-0\.5 {
+    padding-block: calc(var(--spacing) * 0.5);
+  }
+  .py-1 {
+    padding-block: calc(var(--spacing) * 1);
+  }
+  .py-1\.5 {
+    padding-block: calc(var(--spacing) * 1.5);
+  }
+  .py-2 {
+    padding-block: calc(var(--spacing) * 2);
+  }
+  .py-2\.5 {
+    padding-block: calc(var(--spacing) * 2.5);
+  }
+  .py-3 {
+    padding-block: calc(var(--spacing) * 3);
+  }
+  .py-4 {
+    padding-block: calc(var(--spacing) * 4);
+  }
+  .pt-0\.5 {
+    padding-top: calc(var(--spacing) * 0.5);
+  }
+  .pt-1 {
+    padding-top: calc(var(--spacing) * 1);
+  }
+  .pt-2 {
+    padding-top: calc(var(--spacing) * 2);
+  }
+  .pt-2\.5 {
+    padding-top: calc(var(--spacing) * 2.5);
+  }
+  .pt-3 {
+    padding-top: calc(var(--spacing) * 3);
+  }
+  .pr-1 {
+    padding-right: calc(var(--spacing) * 1);
+  }
+  .pr-2 {
+    padding-right: calc(var(--spacing) * 2);
+  }
+  .pr-3 {
+    padding-right: calc(var(--spacing) * 3);
+  }
+  .pr-4 {
+    padding-right: calc(var(--spacing) * 4);
+  }
+  .pb-1 {
+    padding-bottom: calc(var(--spacing) * 1);
+  }
+  .pb-2 {
+    padding-bottom: calc(var(--spacing) * 2);
+  }
+  .pb-3 {
+    padding-bottom: calc(var(--spacing) * 3);
+  }
+  .pl-1 {
+    padding-left: calc(var(--spacing) * 1);
+  }
+  .pl-2 {
+    padding-left: calc(var(--spacing) * 2);
+  }
+  .pl-4 {
+    padding-left: calc(var(--spacing) * 4);
+  }
+  .pl-7 {
+    padding-left: calc(var(--spacing) * 7);
+  }
+  .pl-8 {
+    padding-left: calc(var(--spacing) * 8);
+  }
+  .text-center {
+    text-align: center;
+  }
+  .text-left {
+    text-align: left;
+  }
+  .text-right {
+    text-align: right;
+  }
+  .text-2xl {
+    font-size: var(--text-2xl);
+    line-height: var(--tw-leading, var(--text-2xl--line-height));
+  }
+  .text-3xl {
+    font-size: var(--text-3xl);
+    line-height: var(--tw-leading, var(--text-3xl--line-height));
+  }
+  .text-4xl {
+    font-size: var(--text-4xl);
+    line-height: var(--tw-leading, var(--text-4xl--line-height));
+  }
+  .text-base {
+    font-size: var(--text-base);
+    line-height: var(--tw-leading, var(--text-base--line-height));
+  }
+  .text-lg {
+    font-size: var(--text-lg);
+    line-height: var(--tw-leading, var(--text-lg--line-height));
+  }
+  .text-sm {
+    font-size: var(--text-sm);
+    line-height: var(--tw-leading, var(--text-sm--line-height));
+  }
+  .text-xl {
+    font-size: var(--text-xl);
+    line-height: var(--tw-leading, var(--text-xl--line-height));
+  }
+  .text-xs {
+    font-size: var(--text-xs);
+    line-height: var(--tw-leading, var(--text-xs--line-height));
+  }
+  .leading-none {
+    --tw-leading: 1;
+    line-height: 1;
+  }
+  .font-bold {
+    --tw-font-weight: var(--font-weight-bold);
+    font-weight: var(--font-weight-bold);
+  }
+  .font-medium {
+    --tw-font-weight: var(--font-weight-medium);
+    font-weight: var(--font-weight-medium);
+  }
+  .font-semibold {
+    --tw-font-weight: var(--font-weight-semibold);
+    font-weight: var(--font-weight-semibold);
+  }
+  .tracking-wide {
+    --tw-tracking: var(--tracking-wide);
+    letter-spacing: var(--tracking-wide);
+  }
+  .whitespace-nowrap {
+    white-space: nowrap;
+  }
+  .text-amber-600 {
+    color: var(--color-amber-600);
+  }
+  .text-blue-400 {
+    color: var(--color-blue-400);
+  }
+  .text-blue-500 {
+    color: var(--color-blue-500);
+  }
+  .text-blue-600 {
+    color: var(--color-blue-600);
+  }
+  .text-blue-700 {
+    color: var(--color-blue-700);
+  }
+  .text-blue-800 {
+    color: var(--color-blue-800);
+  }
+  .text-gray-300 {
+    color: var(--color-gray-300);
+  }
+  .text-gray-400 {
+    color: var(--color-gray-400);
+  }
+  .text-gray-500 {
+    color: var(--color-gray-500);
+  }
+  .text-gray-600 {
+    color: var(--color-gray-600);
+  }
+  .text-gray-700 {
+    color: var(--color-gray-700);
+  }
+  .text-gray-800 {
+    color: var(--color-gray-800);
+  }
+  .text-gray-900 {
+    color: var(--color-gray-900);
+  }
+  .text-green-600 {
+    color: var(--color-green-600);
+  }
+  .text-green-800 {
+    color: var(--color-green-800);
+  }
+  .text-orange-500 {
+    color: var(--color-orange-500);
+  }
+  .text-red-500 {
+    color: var(--color-red-500);
+  }
+  .text-red-600 {
+    color: var(--color-red-600);
+  }
+  .text-red-700 {
+    color: var(--color-red-700);
+  }
+  .text-white {
+    color: var(--color-white);
+  }
+  .uppercase {
+    text-transform: uppercase;
+  }
+  .tabular-nums {
+    --tw-numeric-spacing: tabular-nums;
+    font-variant-numeric: var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,);
+  }
+  .line-through {
+    text-decoration-line: line-through;
+  }
+  .underline {
+    text-decoration-line: underline;
+  }
+  .placeholder-gray-300 {
+    &::placeholder {
+      color: var(--color-gray-300);
+    }
+  }
+  .placeholder-gray-400 {
+    &::placeholder {
+      color: var(--color-gray-400);
+    }
+  }
+  .opacity-25 {
+    opacity: 25%;
+  }
+  .opacity-30 {
+    opacity: 30%;
+  }
+  .opacity-40 {
+    opacity: 40%;
+  }
+  .opacity-60 {
+    opacity: 60%;
+  }
+  .opacity-100 {
+    opacity: 100%;
+  }
+  .shadow-lg {
+    --tw-shadow: 0 10px 15px -3px var(--tw-shadow-color, rgb(0 0 0 / 0.1)), 0 4px 6px -4px var(--tw-shadow-color, rgb(0 0 0 / 0.1));
+    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+  }
+  .shadow-md {
+    --tw-shadow: 0 4px 6px -1px var(--tw-shadow-color, rgb(0 0 0 / 0.1)), 0 2px 4px -2px var(--tw-shadow-color, rgb(0 0 0 / 0.1));
+    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+  }
+  .filter {
+    filter: var(--tw-blur,) var(--tw-brightness,) var(--tw-contrast,) var(--tw-grayscale,) var(--tw-hue-rotate,) var(--tw-invert,) var(--tw-saturate,) var(--tw-sepia,) var(--tw-drop-shadow,);
+  }
+  .transition {
+    transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter, display, content-visibility, overlay, pointer-events;
+    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
+    transition-duration: var(--tw-duration, var(--default-transition-duration));
+  }
+  .transition-all {
+    transition-property: all;
+    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
+    transition-duration: var(--tw-duration, var(--default-transition-duration));
+  }
+  .transition-colors {
+    transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to;
+    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
+    transition-duration: var(--tw-duration, var(--default-transition-duration));
+  }
+  .transition-opacity {
+    transition-property: opacity;
+    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
+    transition-duration: var(--tw-duration, var(--default-transition-duration));
+  }
+  .duration-300 {
+    --tw-duration: 300ms;
+    transition-duration: 300ms;
+  }
+  .duration-500 {
+    --tw-duration: 500ms;
+    transition-duration: 500ms;
+  }
+  .ease-out {
+    --tw-ease: var(--ease-out);
+    transition-timing-function: var(--ease-out);
+  }
+  .outline-none {
+    --tw-outline-style: none;
+    outline-style: none;
+  }
+  .last\:border-0 {
+    &:last-child {
+      border-style: var(--tw-border-style);
+      border-width: 0px;
+    }
+  }
+  .hover\:border-blue-400 {
+    &:hover {
+      @media (hover: hover) {
+        border-color: var(--color-blue-400);
+      }
+    }
+  }
+  .hover\:bg-gray-50 {
+    &:hover {
+      @media (hover: hover) {
+        background-color: var(--color-gray-50);
+      }
+    }
+  }
+  .hover\:text-blue-700 {
+    &:hover {
+      @media (hover: hover) {
+        color: var(--color-blue-700);
+      }
+    }
+  }
+  .hover\:text-gray-700 {
+    &:hover {
+      @media (hover: hover) {
+        color: var(--color-gray-700);
+      }
+    }
+  }
+  .hover\:text-gray-800 {
+    &:hover {
+      @media (hover: hover) {
+        color: var(--color-gray-800);
+      }
+    }
+  }
+  .hover\:text-red-500 {
+    &:hover {
+      @media (hover: hover) {
+        color: var(--color-red-500);
+      }
+    }
+  }
+  .hover\:text-white {
+    &:hover {
+      @media (hover: hover) {
+        color: var(--color-white);
+      }
+    }
+  }
+  .focus\:border-blue-400 {
+    &:focus {
+      border-color: var(--color-blue-400);
+    }
+  }
+  .focus\:border-blue-500 {
+    &:focus {
+      border-color: var(--color-blue-500);
+    }
+  }
+  .focus\:ring-2 {
+    &:focus {
+      --tw-ring-shadow: var(--tw-ring-inset,) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);
+      box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+    }
+  }
+  .focus\:ring-blue-500 {
+    &:focus {
+      --tw-ring-color: var(--color-blue-500);
+    }
+  }
+  .focus\:outline-none {
+    &:focus {
+      --tw-outline-style: none;
+      outline-style: none;
+    }
+  }
+  .disabled\:opacity-30 {
+    &:disabled {
+      opacity: 30%;
+    }
+  }
+  .disabled\:opacity-50 {
+    &:disabled {
+      opacity: 50%;
+    }
+  }
+  .dark\:divide-gray-800 {
+    &:where(.dark, .dark *) {
+      :where(& > :not(:last-child)) {
+        border-color: var(--color-gray-800);
+      }
+    }
+  }
+  .dark\:border-amber-700 {
+    &:where(.dark, .dark *) {
+      border-color: var(--color-amber-700);
+    }
+  }
+  .dark\:border-amber-800 {
+    &:where(.dark, .dark *) {
+      border-color: var(--color-amber-800);
+    }
+  }
+  .dark\:border-blue-700 {
+    &:where(.dark, .dark *) {
+      border-color: var(--color-blue-700);
+    }
+  }
+  .dark\:border-gray-600 {
+    &:where(.dark, .dark *) {
+      border-color: var(--color-gray-600);
+    }
+  }
+  .dark\:border-gray-700 {
+    &:where(.dark, .dark *) {
+      border-color: var(--color-gray-700);
+    }
+  }
+  .dark\:border-gray-800 {
+    &:where(.dark, .dark *) {
+      border-color: var(--color-gray-800);
+    }
+  }
+  .dark\:border-green-800 {
+    &:where(.dark, .dark *) {
+      border-color: var(--color-green-800);
+    }
+  }
+  .dark\:border-red-700 {
+    &:where(.dark, .dark *) {
+      border-color: var(--color-red-700);
+    }
+  }
+  .dark\:border-red-800 {
+    &:where(.dark, .dark *) {
+      border-color: var(--color-red-800);
+    }
+  }
+  .dark\:bg-blue-900\/30 {
+    &:where(.dark, .dark *) {
+      background-color: color-mix(in srgb, oklch(37.9% 0.146 265.522) 30%, transparent);
+      @supports (color: color-mix(in lab, red, red)) {
+        background-color: color-mix(in oklab, var(--color-blue-900) 30%, transparent);
+      }
+    }
+  }
+  .dark\:bg-blue-900\/40 {
+    &:where(.dark, .dark *) {
+      background-color: color-mix(in srgb, oklch(37.9% 0.146 265.522) 40%, transparent);
+      @supports (color: color-mix(in lab, red, red)) {
+        background-color: color-mix(in oklab, var(--color-blue-900) 40%, transparent);
+      }
+    }
+  }
+  .dark\:bg-gray-700 {
+    &:where(.dark, .dark *) {
+      background-color: var(--color-gray-700);
+    }
+  }
+  .dark\:bg-gray-800 {
+    &:where(.dark, .dark *) {
+      background-color: var(--color-gray-800);
+    }
+  }
+  .dark\:bg-gray-800\/50 {
+    &:where(.dark, .dark *) {
+      background-color: color-mix(in srgb, oklch(27.8% 0.033 256.848) 50%, transparent);
+      @supports (color: color-mix(in lab, red, red)) {
+        background-color: color-mix(in oklab, var(--color-gray-800) 50%, transparent);
+      }
+    }
+  }
+  .dark\:bg-gray-900 {
+    &:where(.dark, .dark *) {
+      background-color: var(--color-gray-900);
+    }
+  }
+  .dark\:bg-green-900\/30 {
+    &:where(.dark, .dark *) {
+      background-color: color-mix(in srgb, oklch(39.3% 0.095 152.535) 30%, transparent);
+      @supports (color: color-mix(in lab, red, red)) {
+        background-color: color-mix(in oklab, var(--color-green-900) 30%, transparent);
+      }
+    }
+  }
+  .dark\:bg-red-900\/30 {
+    &:where(.dark, .dark *) {
+      background-color: color-mix(in srgb, oklch(39.6% 0.141 25.723) 30%, transparent);
+      @supports (color: color-mix(in lab, red, red)) {
+        background-color: color-mix(in oklab, var(--color-red-900) 30%, transparent);
+      }
+    }
+  }
+  .dark\:text-amber-400 {
+    &:where(.dark, .dark *) {
+      color: var(--color-amber-400);
+    }
+  }
+  .dark\:text-blue-300 {
+    &:where(.dark, .dark *) {
+      color: var(--color-blue-300);
+    }
+  }
+  .dark\:text-blue-400 {
+    &:where(.dark, .dark *) {
+      color: var(--color-blue-400);
+    }
+  }
+  .dark\:text-gray-100 {
+    &:where(.dark, .dark *) {
+      color: var(--color-gray-100);
+    }
+  }
+  .dark\:text-gray-200 {
+    &:where(.dark, .dark *) {
+      color: var(--color-gray-200);
+    }
+  }
+  .dark\:text-gray-300 {
+    &:where(.dark, .dark *) {
+      color: var(--color-gray-300);
+    }
+  }
+  .dark\:text-gray-400 {
+    &:where(.dark, .dark *) {
+      color: var(--color-gray-400);
+    }
+  }
+  .dark\:text-gray-500 {
+    &:where(.dark, .dark *) {
+      color: var(--color-gray-500);
+    }
+  }
+  .dark\:text-gray-600 {
+    &:where(.dark, .dark *) {
+      color: var(--color-gray-600);
+    }
+  }
+  .dark\:text-green-300 {
+    &:where(.dark, .dark *) {
+      color: var(--color-green-300);
+    }
+  }
+  .dark\:text-green-400 {
+    &:where(.dark, .dark *) {
+      color: var(--color-green-400);
+    }
+  }
+  .dark\:text-red-400 {
+    &:where(.dark, .dark *) {
+      color: var(--color-red-400);
+    }
+  }
+  .dark\:text-white {
+    &:where(.dark, .dark *) {
+      color: var(--color-white);
+    }
+  }
+  .dark\:placeholder-gray-500 {
+    &:where(.dark, .dark *) {
+      &::placeholder {
+        color: var(--color-gray-500);
+      }
+    }
+  }
+  .dark\:placeholder-gray-600 {
+    &:where(.dark, .dark *) {
+      &::placeholder {
+        color: var(--color-gray-600);
+      }
+    }
+  }
+  .dark\:hover\:bg-gray-700 {
+    &:where(.dark, .dark *) {
+      &:hover {
+        @media (hover: hover) {
+          background-color: var(--color-gray-700);
+        }
+      }
+    }
+  }
+  .dark\:hover\:text-gray-100 {
+    &:where(.dark, .dark *) {
+      &:hover {
+        @media (hover: hover) {
+          color: var(--color-gray-100);
+        }
+      }
+    }
+  }
+  .dark\:hover\:text-gray-200 {
+    &:where(.dark, .dark *) {
+      &:hover {
+        @media (hover: hover) {
+          color: var(--color-gray-200);
+        }
+      }
+    }
+  }
+}
+* {
+  -webkit-tap-highlight-color: transparent;
+  box-sizing: border-box;
+}
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+#root {
+  height: 100svh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+@property --tw-translate-x {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0;
+}
+@property --tw-translate-y {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0;
+}
+@property --tw-translate-z {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0;
+}
+@property --tw-rotate-x {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-rotate-y {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-rotate-z {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-skew-x {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-skew-y {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-space-y-reverse {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0;
+}
+@property --tw-divide-y-reverse {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0;
+}
+@property --tw-border-style {
+  syntax: "*";
+  inherits: false;
+  initial-value: solid;
+}
+@property --tw-leading {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-font-weight {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-tracking {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-ordinal {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-slashed-zero {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-numeric-figure {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-numeric-spacing {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-numeric-fraction {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-shadow {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0 0 #0000;
+}
+@property --tw-shadow-color {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-shadow-alpha {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 100%;
+}
+@property --tw-inset-shadow {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0 0 #0000;
+}
+@property --tw-inset-shadow-color {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-inset-shadow-alpha {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 100%;
+}
+@property --tw-ring-color {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-ring-shadow {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0 0 #0000;
+}
+@property --tw-inset-ring-color {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-inset-ring-shadow {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0 0 #0000;
+}
+@property --tw-ring-inset {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-ring-offset-width {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --tw-ring-offset-color {
+  syntax: "*";
+  inherits: false;
+  initial-value: #fff;
+}
+@property --tw-ring-offset-shadow {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0 0 #0000;
+}
+@property --tw-blur {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-brightness {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-contrast {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-grayscale {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-hue-rotate {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-invert {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-opacity {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-saturate {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-sepia {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-drop-shadow {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-drop-shadow-color {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-drop-shadow-alpha {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 100%;
+}
+@property --tw-drop-shadow-size {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-duration {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-ease {
+  syntax: "*";
+  inherits: false;
+}
+@layer properties {
+  @supports ((-webkit-hyphens: none) and (not (margin-trim: inline))) or ((-moz-orient: inline) and (not (color:rgb(from red r g b)))) {
+    *, ::before, ::after, ::backdrop {
+      --tw-translate-x: 0;
+      --tw-translate-y: 0;
+      --tw-translate-z: 0;
+      --tw-rotate-x: initial;
+      --tw-rotate-y: initial;
+      --tw-rotate-z: initial;
+      --tw-skew-x: initial;
+      --tw-skew-y: initial;
+      --tw-space-y-reverse: 0;
+      --tw-divide-y-reverse: 0;
+      --tw-border-style: solid;
+      --tw-leading: initial;
+      --tw-font-weight: initial;
+      --tw-tracking: initial;
+      --tw-ordinal: initial;
+      --tw-slashed-zero: initial;
+      --tw-numeric-figure: initial;
+      --tw-numeric-spacing: initial;
+      --tw-numeric-fraction: initial;
+      --tw-shadow: 0 0 #0000;
+      --tw-shadow-color: initial;
+      --tw-shadow-alpha: 100%;
+      --tw-inset-shadow: 0 0 #0000;
+      --tw-inset-shadow-color: initial;
+      --tw-inset-shadow-alpha: 100%;
+      --tw-ring-color: initial;
+      --tw-ring-shadow: 0 0 #0000;
+      --tw-inset-ring-color: initial;
+      --tw-inset-ring-shadow: 0 0 #0000;
+      --tw-ring-inset: initial;
+      --tw-ring-offset-width: 0px;
+      --tw-ring-offset-color: #fff;
+      --tw-ring-offset-shadow: 0 0 #0000;
+      --tw-blur: initial;
+      --tw-brightness: initial;
+      --tw-contrast: initial;
+      --tw-grayscale: initial;
+      --tw-hue-rotate: initial;
+      --tw-invert: initial;
+      --tw-opacity: initial;
+      --tw-saturate: initial;
+      --tw-sepia: initial;
+      --tw-drop-shadow: initial;
+      --tw-drop-shadow-color: initial;
+      --tw-drop-shadow-alpha: 100%;
+      --tw-drop-shadow-size: initial;
+      --tw-duration: initial;
+      --tw-ease: initial;
+    }
+  }
+}
+</style>
+<style>
+  :root{
+    --bg:#eef1f5; --ink:#0f172a; --ink2:#475569; --ink3:#94a3b8;
+    --line:#e2e8f0; --card:#ffffff;
+    --accent:#2563eb;
+    --p0:#dc2626; --p1:#d97706; --p2:#0891b2;
+    --font: "Noto Sans TC", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  html,body{height:auto;overflow:auto;}
+  body{margin:0;background:var(--bg);font-family:var(--font);color:var(--ink);
+       -webkit-font-smoothing:antialiased;line-height:1.6;display:block;justify-content:initial;padding:0;}
+  .wrap{max-width:1240px;margin:0 auto;padding:48px 40px 80px;}
+
+  /* header */
+  .masthead{margin-bottom:40px;}
+  .eyebrow{font-size:12px;letter-spacing:.18em;font-weight:700;color:var(--accent);text-transform:uppercase;margin-bottom:14px;}
+  .masthead h1{font-size:38px;font-weight:900;letter-spacing:-.01em;line-height:1.15;margin:0 0 12px;}
+  .masthead p{font-size:16px;color:var(--ink2);max-width:680px;margin:0;}
+  .meta{display:flex;gap:28px;margin-top:22px;flex-wrap:wrap;}
+  .meta div{font-size:13px;color:var(--ink3);}
+  .meta b{display:block;font-size:14px;color:var(--ink);font-weight:700;margin-top:2px;}
+
+  .grid{display:grid;grid-template-columns:418px 1fr;gap:48px;align-items:start;}
+
+  /* device column */
+  .shot{position:sticky;top:32px;}
+  .shot .frame{position:relative;width:390px;margin:0 auto;}
+  .shot .device{width:390px;height:auto;background:#fff;border-radius:26px;overflow:hidden;
+                box-shadow:0 18px 50px rgba(15,23,42,.18);border:1px solid #dfe4ea;}
+  .shot .device .h-full{height:auto !important;}
+  .shot .device .overflow-hidden{overflow:visible !important;}
+  .shot .device .overflow-y-auto{overflow:visible !important;flex:0 0 auto !important;}
+  .shot .device .flex-1.overflow-hidden{flex:0 0 auto !important;}
+  .shotcap{text-align:center;font-size:12px;color:var(--ink3);margin-top:14px;}
+  .shotcap b{color:var(--ink2);font-weight:700;}
+
+  /* pins on the screen */
+  .pin{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;
+       border-radius:50%;background:var(--accent);color:#fff;font-size:11px;font-weight:700;
+       margin-right:6px;vertical-align:middle;flex-shrink:0;font-family:var(--font);}
+  .pin-cta{background:#fff;color:var(--accent);margin-right:7px;}
+  [data-flag]{color:var(--p0) !important;font-weight:700 !important;}
+
+  /* content column */
+  section{margin-bottom:44px;}
+  .sec-h{display:flex;align-items:baseline;gap:12px;margin-bottom:18px;
+         padding-bottom:12px;border-bottom:2px solid var(--ink);}
+  .sec-h .n{font-size:13px;font-weight:900;color:var(--accent);font-feature-settings:"tnum";}
+  .sec-h h2{font-size:20px;font-weight:900;margin:0;letter-spacing:-.01em;}
+  .sec-h .sub{margin-left:auto;font-size:12px;color:var(--ink3);}
+
+  /* IA tree */
+  .tree{font-size:14px;}
+  .tree .row{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line);}
+  .tree .row:last-child{border-bottom:0;}
+  .tree .ico{width:18px;height:18px;border-radius:50%;background:var(--accent);color:#fff;font-size:11px;
+             font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;}
+  .tree .ico.muted{background:var(--ink3);}
+  .tree .lbl{font-weight:700;}
+  .tree .lbl .lv2{font-weight:400;color:var(--ink2);}
+  .tree .desc{color:var(--ink2);font-size:13px;margin-left:auto;text-align:right;max-width:46%;}
+  .tree .indent{padding-left:30px;}
+  .tag{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:5px;margin-left:8px;vertical-align:middle;}
+  .tag.pri{background:#dbeafe;color:#1d4ed8;}
+  .tag.opt{background:#f1f5f9;color:#64748b;}
+  .tag.adv{background:#fef3c7;color:#b45309;}
+  .tag.com{background:#dcfce7;color:#15803d;}
+  .note{margin-top:7px;display:flex;gap:8px;align-items:flex-start;font-size:12.5px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;padding:7px 11px;border-radius:8px;}
+  .note b{font-weight:700;flex-shrink:0;}
+
+  /* flow */
+  .flow{display:flex;flex-direction:column;gap:0;}
+  .step{display:flex;gap:16px;}
+  .step .rail{display:flex;flex-direction:column;align-items:center;}
+  .step .dot{width:30px;height:30px;border-radius:50%;background:var(--card);border:2px solid var(--accent);
+             color:var(--accent);font-weight:900;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .step .line{width:2px;flex:1;background:var(--line);min-height:14px;}
+  .step:last-child .line{display:none;}
+  .step .body{padding-bottom:22px;flex:1;}
+  .step .ttl{font-weight:700;font-size:15px;margin-bottom:2px;}
+  .step .ttl .ref{font-size:11px;font-weight:700;color:var(--accent);margin-left:6px;}
+  .step .txt{font-size:13px;color:var(--ink2);}
+  .friction{margin-top:7px;display:flex;gap:8px;align-items:flex-start;font-size:12.5px;
+            background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;padding:7px 11px;border-radius:8px;}
+  .friction b{font-weight:700;}
+
+  /* optimization cards */
+  .legend{display:flex;gap:16px;margin-bottom:18px;flex-wrap:wrap;font-size:12.5px;color:var(--ink2);}
+  .legend span{display:inline-flex;align-items:center;gap:6px;}
+  .chip{font-size:11px;font-weight:900;padding:2px 8px;border-radius:6px;color:#fff;letter-spacing:.02em;}
+  .chip.p0{background:var(--p0);} .chip.p1{background:var(--p1);} .chip.p2{background:var(--p2);}
+  .opt{display:flex;flex-direction:column;gap:12px;}
+  .ocard{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;
+         display:grid;grid-template-columns:auto 1fr;gap:14px;box-shadow:0 1px 2px rgba(15,23,42,.04);}
+  .ocard .left{display:flex;flex-direction:column;gap:8px;align-items:flex-start;min-width:54px;}
+  .ocard .refs{display:flex;gap:4px;flex-wrap:wrap;}
+  .ocard .ref{width:20px;height:20px;border-radius:50%;background:var(--ink);color:#fff;font-size:11px;
+              font-weight:700;display:flex;align-items:center;justify-content:center;}
+  .ocard h3{font-size:15px;font-weight:700;margin:0 0 4px;}
+  .ocard p{font-size:13.5px;color:var(--ink2);margin:0;}
+  .ocard p .now{color:#b91c1c;} .ocard p .fix{color:#15803d;font-weight:600;}
+  .ocard.p0{border-left:4px solid var(--p0);}
+  .ocard.p1{border-left:4px solid var(--p1);}
+  .ocard.p2{border-left:4px solid var(--p2);}
+
+  .foot{margin-top:8px;font-size:12px;color:var(--ink3);border-top:1px solid var(--line);padding-top:16px;}
+
+  @media (max-width:900px){.grid{grid-template-columns:1fr;}.shot{position:static;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="masthead">
+    <div class="eyebrow">UX Teardown · 記帳 PWA</div>
+    <h1>支出記帳頁 — 結構與行為拆解</h1>
+    <p>針對「支出」輸入頁，拆解資訊架構與使用者操作路徑，標記摩擦點，並依影響程度整理可優化要點。畫面上的編號 ①–⑨ 對應右側分析。</p>
+    <div class="meta">
+      <div>頁面<b>記帳 / 支出 EntryScreen</b></div>
+      <div>主要任務<b>快速記下一筆支出</b></div>
+      <div>表單欄位<b>6 區塊 · 單欄捲動</b></div>
+      <div>導覽系統<b>2 套（分頁＋底部）</b></div>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="shot">
+      <div class="frame">
+        <div class="device"><div class="flex flex-col h-full bg-white dark:bg-gray-900"><div class="flex-1 overflow-hidden"><div class="flex flex-col h-full"><div class="flex border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"><button type="button" class="flex-1 py-3 text-sm font-medium transition-colors text-blue-600 border-b-2 border-blue-600"><span class="pin ">1</span>支出</button><button type="button" class="flex-1 py-3 text-sm font-medium transition-colors text-gray-500 dark:text-gray-400">手續費</button><button type="button" class="flex-1 py-3 text-sm font-medium transition-colors text-gray-500 dark:text-gray-400">退款</button></div><div class="flex-1 overflow-hidden"><form class="flex flex-col h-full"><div class="flex-1 overflow-y-auto flex flex-col gap-4 p-4"><div><label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block"><span class="pin ">2</span>金額 (NTD)</label><div class="flex items-center gap-2"><input type="number" min="1" placeholder="0" class="text-3xl font-bold flex-1 min-w-0 border-b-2 border-gray-300 dark:border-gray-600 outline-none pb-1 focus:border-blue-500 bg-transparent text-gray-900 dark:text-white" required="" value=""><button type="button" class="flex-shrink-0 text-gray-400 dark:text-gray-500 px-1 pb-1 text-sm" aria-label="折抵設定" data-flag="1">▸</button></div></div><div><label class="text-xs text-gray-500 dark:text-gray-400 mb-2 block"><span class="pin ">3</span>付款方式</label><div class="flex flex-wrap gap-2"><button type="button" class="px-3 py-1.5 rounded-full text-sm font-medium border transition-colors bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600">現金</button><button type="button" class="px-3 py-1.5 rounded-full text-sm font-medium border transition-colors bg-blue-600 text-white border-blue-600">信用卡</button><button type="button" class="px-3 py-1.5 rounded-full text-sm font-medium border transition-colors bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600">悠遊卡</button><button type="button" class="px-3 py-1.5 rounded-full text-sm font-medium border transition-colors bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600">電子支付</button><button type="button" class="px-3 py-1.5 rounded-full text-sm font-medium border transition-colors bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600">銀行帳戶</button></div></div><div><label class="text-xs text-gray-500 dark:text-gray-400 mb-2 block"><span class="pin ">4</span>分類</label><div class="space-y-2"><div class="flex gap-2 overflow-x-auto pb-1 scrollbar-none"><button type="button" class="flex-shrink-0 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600">食</button><button type="button" class="flex-shrink-0 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600">衣</button><button type="button" class="flex-shrink-0 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600">住</button><button type="button" class="flex-shrink-0 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600">行</button><button type="button" class="flex-shrink-0 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600">育</button><button type="button" class="flex-shrink-0 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600">樂</button><button type="button" class="flex-shrink-0 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600">醫</button></div></div></div><div><label class="text-xs text-gray-500 dark:text-gray-400 mb-2 block"><span class="pin ">5</span>標籤</label><div class="relative"><div class="flex flex-wrap gap-1.5 p-2 border border-gray-300 dark:border-gray-600 rounded-lg min-h-[42px] cursor-text dark:bg-gray-800"><input type="text" placeholder="新增標籤…" class="flex-1 min-w-24 outline-none text-sm bg-transparent text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500" value=""></div></div></div><div><div class="flex items-center justify-between mb-1"><label class="text-xs text-gray-500 dark:text-gray-400"><span class="pin ">6</span>品項明細</label><span class="text-xs text-gray-500 dark:text-gray-400">NT$0</span></div><div class="flex flex-col gap-1 py-2 border-b border-gray-100 dark:border-gray-700 last:border-0"><div class="flex items-center gap-2"><button type="button" class="flex-shrink-0 text-xs px-2 py-1 rounded border truncate max-w-[80px] border-gray-200 dark:border-gray-600 text-gray-400 dark:text-gray-500" title="繼承分類">—</button><input type="text" placeholder="品項名稱" class="flex-1 min-w-0 text-sm border-0 outline-none bg-transparent text-gray-900 dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-600" value=""><div class="flex items-center gap-1 flex-shrink-0"><button type="button" class="w-7 h-7 rounded-full border border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300 text-lg leading-none">−</button><input type="number" min="1" placeholder="—" class="w-14 text-center text-sm border-b border-gray-300 dark:border-gray-600 outline-none bg-transparent text-gray-900 dark:text-gray-100" value=""><button type="button" class="w-7 h-7 rounded-full border border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300 text-lg leading-none">＋</button></div></div><div class="flex items-center gap-2 pl-1"><input type="text" placeholder="備註" maxlength="200" class="flex-1 text-xs border-0 outline-none bg-transparent text-gray-500 dark:text-gray-400 placeholder-gray-300 dark:placeholder-gray-600" value=""><button type="button" disabled="" class="flex-shrink-0 text-xs px-2 py-0.5 rounded border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 disabled:opacity-30">Max</button></div></div><button type="button" class="mt-2 text-sm text-blue-600 flex items-center gap-1">＋ 新增品項</button></div><div><label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block"><span class="pin ">7</span>備註</label><input type="text" placeholder="可不填" class="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" value=""></div></div><div class="p-4 pt-3 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"><button type="submit" disabled="" class="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold disabled:opacity-50"><span class="pin pin-cta">8</span>送出</button></div></form></div></div></div><nav class="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 flex safe-area-pb"><a aria-current="page" class="flex flex-col items-center gap-0.5 py-2 flex-1 text-xs text-blue-600" href="#/"><span class="text-xl">✏️</span><span>記帳<span class="pin ">9</span></span></a><a class="flex flex-col items-center gap-0.5 py-2 flex-1 text-xs text-gray-500 dark:text-gray-400" href="#/summary"><span class="text-xl">📊</span><span>統計</span></a><a class="flex flex-col items-center gap-0.5 py-2 flex-1 text-xs text-gray-500 dark:text-gray-400" href="#/budget"><span class="text-xl">💰</span><span>預算</span></a><a class="flex flex-col items-center gap-0.5 py-2 flex-1 text-xs text-gray-500 dark:text-gray-400" href="#/import"><span class="text-xl">📂</span><span>匯入</span></a><button type="button" class="flex flex-col items-center gap-0.5 py-2 px-3 text-xs text-gray-500 dark:text-gray-400"><span class="text-xl">⚙️</span><span>設定</span></button></nav></div></div>
+      </div>
+      <div class="shotcap"><b>現況畫面</b>　·　已展開全部欄位供標註（實際為可捲動）。未含「選定分類後的子標籤 pool／搜尋 modal」狀態。</div>
+    </div>
+
+    <div class="content">
+      <section>
+        <div class="sec-h"><span class="n">A</span><h2>頁面結構（資訊架構）</h2><span class="sub">由上而下</span></div>
+        <div class="tree">
+          <div class="row"><span class="ico">1</span><span class="lbl">類型分頁 <span class="lv2">支出 / 手續費 / 退款</span></span><span class="desc">切換記帳種類，預設「支出」</span></div>
+          <div class="row"><span class="ico">2</span><span class="lbl">金額 <span class="lv2">＋ 折抵設定 ▸</span><span class="tag pri">必填</span></span><span class="desc">頁面主要輸入；折抵藏於小箭頭內</span></div>
+          <div class="row"><span class="ico">3</span><span class="lbl">付款方式 <span class="lv2">pill × 5</span></span><span class="desc">現金 / 信用卡 / 悠遊卡 / 電子支付 / 銀行</span></div>
+          <div class="row"><span class="ico">4</span><span class="lbl">分類 <span class="lv2">食衣住行育樂醫</span></span><span class="desc">單字 pill，水平捲動；選定後展開子標籤 pool</span></div>
+          <div class="row"><span class="ico muted">4·</span><span class="lbl">子標籤 pool <span class="lv2">選定分類後展開</span></span><span class="desc">該分類專屬標籤、數量龐大；附「🔍 搜尋」pill 開 modal 即時過濾</span></div>
+          <div class="row"><span class="ico">5</span><span class="lbl">標籤 <span class="lv2">自由輸入・歷史自動補完</span><span class="tag com">常用</span></span><span class="desc">多標籤輸入框</span></div>
+          <div class="row"><span class="ico">6</span><span class="lbl">品項明細 <span class="lv2">名稱・數量・備註</span><span class="tag com">常用</span></span><span class="desc">可成長清單，逐項可覆寫分類</span></div>
+          <div class="row"><span class="ico">7</span><span class="lbl">備註 <span class="lv2">整筆</span><span class="tag opt">少用</span></span><span class="desc">與品項備註語意重疊</span></div>
+          <div class="row"><span class="ico">8</span><span class="lbl">送出</span><span class="desc">固定底欄，預設 disabled</span></div>
+          <div class="row"><span class="ico muted">9</span><span class="lbl">底部導覽 <span class="lv2">記帳 / 統計 / 預算 / 匯入 / 設定</span></span><span class="desc">全域導覽，與類型分頁並存</span></div>
+        </div>
+      </section>
+
+      <section>
+        <div class="sec-h"><span class="n">B</span><h2>使用者行為流程</h2><span class="sub">典型快速記帳路徑</span></div>
+        <div class="flow">
+          <div class="step"><div class="rail"><div class="dot">1</div><div class="line"></div></div>
+            <div class="body"><div class="ttl">選擇類型<span class="ref">① 多數情況已是「支出」</span></div>
+              <div class="txt">預設正確，使用者通常直接略過。</div></div></div>
+
+          <div class="step"><div class="rail"><div class="dot">2</div><div class="line"></div></div>
+            <div class="body"><div class="ttl">輸入金額<span class="ref">②</span></div>
+              <div class="txt">核心動作。理應是進入頁面的第一焦點。</div>
+              <div class="friction"><b>摩擦</b><span>未自動聚焦／喚起數字鍵盤；幣別 NT$ 僅在 label，欄內無前綴。折抵入口「▸」可發現性低。</span></div></div></div>
+
+          <div class="step"><div class="rail"><div class="dot">3</div><div class="line"></div></div>
+            <div class="body"><div class="ttl">選付款方式 → 選分類<span class="ref">③ ④</span></div>
+              <div class="txt">兩排外觀相近的 pill，需逐一辨識。</div>
+              <div class="friction"><b>摩擦</b><span>分類為單字（食衣住行…）語意模糊；水平捲動使「行育樂醫」隱沒於畫面右側，易被忽略。</span></div></div></div>
+
+          <div class="step"><div class="rail"><div class="dot">4</div><div class="line"></div></div>
+            <div class="body"><div class="ttl">填寫標籤與品項明細<span class="ref">⑤ ⑥</span></div>
+              <div class="txt">此頁多數情境會填標籤與品項明細，屬核心輸入而非選填；整筆備註（⑦）才是少數使用。</div>
+              <div class="note"><b>狀態</b><span>選定分類④後，下方展開該分類專屬的子標籤 pool（數量龐大），並以「🔍 搜尋」pill 開 modal 即時過濾，避免大量 pill 侵蝕版面。此狀態未出現在左側靜態截圖。</span></div>
+              <div class="friction"><b>摩擦</b><span>表單偏長，送出需捲到底；整筆備註與品項備註語意重疊易混淆。</span></div></div></div>
+
+          <div class="step"><div class="rail"><div class="dot">5</div><div class="line"></div></div>
+            <div class="body"><div class="ttl">送出<span class="ref">⑧</span></div>
+              <div class="txt">完成記帳。</div>
+              <div class="friction"><b>摩擦</b><span>按鈕 disabled 時未說明「還缺什麼」，缺乏即時驗證回饋。</span></div></div></div>
+        </div>
+      </section>
+
+      <section>
+        <div class="sec-h"><span class="n">C</span><h2>可優化要點</h2><span class="sub">依影響程度排序</span></div>
+        <div class="legend">
+          <span><span class="chip p0">P0</span>高影響 · 直接卡住主任務</span>
+          <span><span class="chip p1">P1</span>中影響 · 效率與清晰度</span>
+          <span><span class="chip p2">P2</span>加值 · 長期體驗</span>
+        </div>
+        <div class="opt">
+
+          <div class="ocard p0"><div class="left"><span class="chip p0">P0</span><div class="refs"><span class="ref">2</span></div></div>
+            <div><h3>金額作為唯一首要焦點</h3><p>進頁<span class="fix">自動聚焦金額並喚起數字鍵盤</span>，欄內加 <b>NT$</b> 前綴。<span class="now">現況需手動點選、幣別只在 label。</span></p></div></div>
+
+          <div class="ocard p0"><div class="left"><span class="chip p0">P0</span><div class="refs"><span class="ref">4</span></div></div>
+            <div><h3>分類改為圖示＋完整名稱、避免隱藏</h3><p>單字 pill 換成「圖示＋詞（餐飲、交通…）」，並以可換行 grid 或「更多」取代水平捲動。<span class="now">現況單字語意模糊、右側選項被捲動隱沒。</span></p></div></div>
+
+          <div class="ocard p0"><div class="left"><span class="chip p0">P0</span><div class="refs"><span class="ref">8</span></div></div>
+            <div><h3>送出狀態與即時驗證</h3><p>當必填未完成時，<span class="fix">明示「還差：金額／分類」</span>而非僅變灰。送出後給予明確完成回饋。</p></div></div>
+
+          <div class="ocard p0"><div class="left"><span class="chip p0">P0</span><div class="refs"><span class="ref">2</span></div></div>
+            <div><h3>折抵入口外顯</h3><p>「▸」改為具標籤的可點區塊（如<span class="fix">「設定折抵 ›」</span>），提升可發現性與可點面積。</p></div></div>
+
+          <div class="ocard p1"><div class="left"><span class="chip p1">P1</span><div class="refs"><span class="ref">7</span></div></div>
+            <div><h3>收合少用的整筆備註，而非品項明細</h3><p>標籤與品項明細為核心輸入，應維持可見；<span class="fix">把較少使用的整筆備註降級／預設收合</span>，並釐清其與品項備註的分工，縮短表單。</p></div></div>
+
+          <div class="ocard p1"><div class="left"><span class="chip p1">P1</span><div class="refs"><span class="ref">3</span><span class="ref">4</span><span class="ref">5</span></div></div>
+            <div><h3>區塊差異化，降低掃描成本</h3><p>付款方式、分類、標籤皆為相似 pill。以圖示、底色或分段標題做出視覺區隔，避免三排難以辨識。</p></div></div>
+
+          <div class="ocard p1"><div class="left"><span class="chip p1">P1</span><div class="refs"><span class="ref">4</span><span class="ref">5</span></div></div>
+            <div><h3>子標籤 pool 精簡顯示</h3><p>標籤已有歷史自動補完、子標籤亦以搜尋 modal 控管龐大數量（良好基礎）。可再讓 pool <span class="fix">預設只露出高頻數個＋搜尋入口</span>，避免一展開即大量 pill；點選式建議僅在命中率高時才提供，否則維持搜尋輸入。</p></div></div>
+
+          <div class="ocard p2"><div class="left"><span class="chip p2">P2</span><div class="refs"><span class="ref">2</span></div></div>
+            <div><h3>快速記帳範本（需高命中率）</h3><p>常用「金額＋分類＋付款」組合一鍵帶入或複製最近一筆可加速重複記帳；<span class="now">惟命中率不足時反增負擔</span>，建議僅推薦少數高信心範本。</p></div></div>
+
+          <div class="ocard p2"><div class="left"><span class="chip p2">P2</span><div class="refs"><span class="ref">1</span><span class="ref">9</span></div></div>
+            <div><h3>釐清雙導覽層級</h3><p>頂部類型分頁與底部 Tab 並存，確認兩者層級關係；分頁可加語意色彩或圖示輔助。</p></div></div>
+
+          <div class="ocard p2"><div class="left"><span class="chip p2">P2</span><div class="refs"><span class="ref">3</span><span class="ref">6</span></div></div>
+            <div><h3>深色模式對比檢查</h3><p>部分 placeholder（gray-600 / gray-300）對比偏低，於深色背景下檢視可讀性。</p></div></div>
+
+        </div>
+      </section>
+
+      <div class="foot">分析範圍：支出輸入頁靜態結構與典型操作路徑。建議落地順序 P0 → P1 → P2，P0 四項可優先驗證對完成率與輸入時間的影響。</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
