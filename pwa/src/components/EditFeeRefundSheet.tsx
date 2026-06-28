@@ -7,6 +7,7 @@ import { PaymentPills } from './PaymentPills';
 import type { PaymentMethod } from './PaymentPills';
 import { useT } from '../i18n';
 import type { MessageKey } from '../i18n';
+import { parseCategorySelection } from '../lib/categoryTag';
 
 // Dedicated minimal editor for single-line transactions (fee / refund). They have no
 // items / adjustments / reconciliation, so they don't go through EditExpenseSheet — this
@@ -20,13 +21,6 @@ type TxDetail = {
   note: string | null;
   transaction_type: string;
 };
-
-function parseCategorySelection(tag: string | null): CategorySelection | null {
-  if (!tag) return null;
-  const idx = tag.indexOf(':');
-  if (idx === -1) return { major: tag, subcategory: null };
-  return { major: tag.slice(0, idx), subcategory: tag.slice(idx + 1) };
-}
 
 function deriveCategoryTag(sel: CategorySelection | null): string | null {
   // A category is only ever `主:子`; a major-only selection emits null (see EntryScreen).

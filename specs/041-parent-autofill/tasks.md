@@ -32,12 +32,12 @@ Web app: backend = `backend/src/`, `backend/tests/`; PWA = `pwa/src/`; E2E = `e2
 
 **⚠️ CRITICAL**: Complete before starting US1 / US2.
 
-- [ ] T001 [P] Backend — in `backend/src/db/queries.ts`: add an exported pure helper `resolveSingleCategory(txTags: string[], itemTagsLists: string[][]): string | null` that returns the single distinct `主:子` tag across all tags (`t.includes(':')`), or `null` when zero/▶multiple distinct (mirror the colon-tag detection in `enrichRefundTags`; see contracts/parent-search.md).
-- [ ] T002 Backend — in `backend/src/db/queries.ts`: extend `findParentCandidates` to (a) add `payment_method` to the `.select(...)`, (b) request item `tags` already present, and (c) return each candidate enriched with `payment_method` and `category` (computed via `resolveSingleCategory`); widen the function's return type accordingly. (depends on T001; same file as T001)
-- [ ] T003 Backend — in `backend/src/handlers/pwa.ts` (`GET /pwa/parent-search`, ~L686): include `payment_method` and `category` on each object in the `transactions` response mapping. (depends on T002)
-- [ ] T004 [P] Frontend — in `pwa/src/components/ParentSearch.tsx`: extend `ParentSearchResult` with `payment_method: string` and `category: string | null`. (different file)
-- [ ] T005 [P] Backend test — in `backend/tests/db/queries.test.ts`: unit-test `resolveSingleCategory` (single category → that tag; tx-level tag + inherited item tags → that one tag; multiple distinct → `null`; no colon-tag → `null`).
-- [ ] T006 Backend test — in `backend/tests/db/queries.test.ts`: extend the `findParentCandidates` coverage to assert each returned candidate carries `payment_method` and the resolved `category` (single-category fixture → the tag; multi-category fixture → `null`). (depends on T002; same file as T005)
+- [x] T001 [P] Backend — in `backend/src/db/queries.ts`: add an exported pure helper `resolveSingleCategory(txTags: string[], itemTagsLists: string[][]): string | null` that returns the single distinct `主:子` tag across all tags (`t.includes(':')`), or `null` when zero/▶multiple distinct (mirror the colon-tag detection in `enrichRefundTags`; see contracts/parent-search.md).
+- [x] T002 Backend — in `backend/src/db/queries.ts`: extend `findParentCandidates` to (a) add `payment_method` to the `.select(...)`, (b) request item `tags` already present, and (c) return each candidate enriched with `payment_method` and `category` (computed via `resolveSingleCategory`); widen the function's return type accordingly. (depends on T001; same file as T001)
+- [x] T003 Backend — in `backend/src/handlers/pwa.ts` (`GET /pwa/parent-search`, ~L686): include `payment_method` and `category` on each object in the `transactions` response mapping. (depends on T002)
+- [x] T004 [P] Frontend — in `pwa/src/components/ParentSearch.tsx`: extend `ParentSearchResult` with `payment_method: string` and `category: string | null`. (different file)
+- [x] T005 [P] Backend test — in `backend/tests/db/queries.test.ts`: unit-test `resolveSingleCategory` (single category → that tag; tx-level tag + inherited item tags → that one tag; multiple distinct → `null`; no colon-tag → `null`).
+- [x] T006 Backend test — in `backend/tests/db/queries.test.ts`: extend the `findParentCandidates` coverage to assert each returned candidate carries `payment_method` and the resolved `category` (single-category fixture → the tag; multi-category fixture → `null`). (depends on T002; same file as T005)
 
 **Checkpoint**: `parent-search` returns `payment_method` + `category`; `ParentSearchResult` carries them; backend tests green.
 
@@ -49,8 +49,8 @@ Web app: backend = `backend/src/`, `backend/tests/`; PWA = `pwa/src/`; E2E = `e2
 
 **Independent Test**: On 手續費 and 退款, enter an amount, link an original paid by a non-default method → the payment pill switches to it; manually change it, re-link a different original → manual choice survives; submit succeeds.
 
-- [ ] T007 [US1] In `pwa/src/screens/EntryScreen.tsx` `FeeForm`: add a `paymentTouched` flag set when the user changes `PaymentPills`; on `ParentSearch` select, set `paymentMethod = parent.payment_method` only when `!paymentTouched`; clear the flag in the success/reset handler. (EntryScreen.tsx)
-- [ ] T008 [US1] In `pwa/src/screens/EntryScreen.tsx` `RefundForm`: same `paymentTouched` flag + auto-fill of the "退款至" payment method from `parent.payment_method` on select; clear on reset. (EntryScreen.tsx; after T007 — same file)
+- [x] T007 [US1] In `pwa/src/screens/EntryScreen.tsx` `FeeForm`: add a `paymentTouched` flag set when the user changes `PaymentPills`; on `ParentSearch` select, set `paymentMethod = parent.payment_method` only when `!paymentTouched`; clear the flag in the success/reset handler. (EntryScreen.tsx)
+- [x] T008 [US1] In `pwa/src/screens/EntryScreen.tsx` `RefundForm`: same `paymentTouched` flag + auto-fill of the "退款至" payment method from `parent.payment_method` on select; clear on reset. (EntryScreen.tsx; after T007 — same file)
 
 **Checkpoint**: Payment-method auto-fill works on both tabs and never overrides a manual pick. MVP deliverable.
 
@@ -62,8 +62,8 @@ Web app: backend = `backend/src/`, `backend/tests/`; PWA = `pwa/src/`; E2E = `e2
 
 **Independent Test**: On 手續費, link a single-category original → 分類 pre-fills; link a multi-category/uncategorized original → 分類 stays empty; pick a category by hand then link → manual category kept.
 
-- [ ] T009 [P] [US2] Extract `parseCategorySelection(tag): CategorySelection | null` into `pwa/src/lib/categoryTag.ts` and update `pwa/src/components/EditFeeRefundSheet.tsx` + `pwa/src/components/EditExpenseSheet.tsx` to import it (de-duplicate the two existing copies). (does not touch EntryScreen.tsx — parallelizable with US1)
-- [ ] T010 [US2] In `pwa/src/screens/EntryScreen.tsx` `FeeForm`: add a `categoryTouched` flag set when the user changes `CategoryPicker`; on select, when `!categoryTouched && parent.category != null` → `setCategory(parseCategorySelection(parent.category))`; clear the flag on reset. Import `parseCategorySelection` from `lib/categoryTag.ts`. (EntryScreen.tsx; after T009 and after US1 EntryScreen tasks — same file)
+- [x] T009 [P] [US2] Extract `parseCategorySelection(tag): CategorySelection | null` into `pwa/src/lib/categoryTag.ts` and update `pwa/src/components/EditFeeRefundSheet.tsx` + `pwa/src/components/EditExpenseSheet.tsx` to import it (de-duplicate the two existing copies). (does not touch EntryScreen.tsx — parallelizable with US1)
+- [x] T010 [US2] In `pwa/src/screens/EntryScreen.tsx` `FeeForm`: add a `categoryTouched` flag set when the user changes `CategoryPicker`; on select, when `!categoryTouched && parent.category != null` → `setCategory(parseCategorySelection(parent.category))`; clear the flag on reset. Import `parseCategorySelection` from `lib/categoryTag.ts`. (EntryScreen.tsx; after T009 and after US1 EntryScreen tasks — same file)
 
 **Checkpoint**: Fee category auto-fills only on an unambiguous original; refund tab unaffected (no category field).
 
@@ -75,8 +75,8 @@ Web app: backend = `backend/src/`, `backend/tests/`; PWA = `pwa/src/`; E2E = `e2
 
 **Independent Test**: On 退款 with no link → no button; link an original → button appears; tap → 金額 = parent total; edit 金額 down → edit kept.
 
-- [ ] T011 [P] [US3] Add `entry.fullRefund` to `pwa/src/i18n/zh.ts` (`'全額退款'`) and `pwa/src/i18n/en.ts` (`'Full refund'`). (i18n files — parallelizable; parity enforced by tsc/i18n:check)
-- [ ] T012 [US3] In `pwa/src/screens/EntryScreen.tsx` `RefundForm`: render a 全額退款 button (using `t('entry.fullRefund')`) only when `parent != null`, near the amount field; `onClick` → `setAmount(String(parent.amount))`; amount stays editable. (EntryScreen.tsx; after prior EntryScreen tasks — same file; needs T011)
+- [x] T011 [P] [US3] Add `entry.fullRefund` to `pwa/src/i18n/zh.ts` (`'全額退款'`) and `pwa/src/i18n/en.ts` (`'Full refund'`). (i18n files — parallelizable; parity enforced by tsc/i18n:check)
+- [x] T012 [US3] In `pwa/src/screens/EntryScreen.tsx` `RefundForm`: render a 全額退款 button (using `t('entry.fullRefund')`) only when `parent != null`, near the amount field; `onClick` → `setAmount(String(parent.amount))`; amount stays editable. (EntryScreen.tsx; after prior EntryScreen tasks — same file; needs T011)
 
 **Checkpoint**: Full-refund one-tap works and is hidden until a parent is linked.
 
@@ -88,7 +88,7 @@ Web app: backend = `backend/src/`, `backend/tests/`; PWA = `pwa/src/`; E2E = `e2
 
 **Independent Test**: On 退款 with empty 說明 → linking fills it from the parent label; with 說明 typed → linking preserves it.
 
-- [ ] T013 [US4] In `pwa/src/screens/EntryScreen.tsx` `RefundForm`: on `ParentSearch` select, when `description` is empty set it from the parent label (`parent.note ?? parent.item_names[0] ?? parent.tags[0] ?? ''`), mirroring `FeeForm`'s existing `onSelect`. (EntryScreen.tsx; after prior EntryScreen tasks — same file)
+- [x] T013 [US4] In `pwa/src/screens/EntryScreen.tsx` `RefundForm`: on `ParentSearch` select, when `description` is empty set it from the parent label (`parent.note ?? parent.item_names[0] ?? parent.tags[0] ?? ''`), mirroring `FeeForm`'s existing `onSelect`. (EntryScreen.tsx; after prior EntryScreen tasks — same file)
 
 **Checkpoint**: All four stories functional; both tabs behave consistently.
 
@@ -96,8 +96,8 @@ Web app: backend = `backend/src/`, `backend/tests/`; PWA = `pwa/src/`; E2E = `e2
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-- [ ] T014 [P] Run `cd backend && pnpm test` — confirm `resolveSingleCategory` + `findParentCandidates` (payment_method/category) pass.
-- [ ] T015 [P] Run `cd pwa && pnpm exec tsc -b && pnpm i18n:check` — types for new `ParentSearchResult` fields/form wiring + `entry.fullRefund` zh=en parity.
+- [x] T014 [P] Run `cd backend && pnpm test` — confirm `resolveSingleCategory` + `findParentCandidates` (payment_method/category) pass.
+- [x] T015 [P] Run `cd pwa && pnpm exec tsc -b && pnpm i18n:check` — types for new `ParentSearchResult` fields/form wiring + `entry.fullRefund` zh=en parity.
 - [ ] T016 [P] (Optional) Add a Playwright smoke in `e2e/tests/` — link a parent (assert payment pill + fee category pre-fill), tap 全額退款 (assert amount = parent total), and assert a manually-changed field survives a re-link.
 - [ ] T017 Manual verification against `specs/041-parent-autofill/quickstart.md` (the 10 verification steps).
 

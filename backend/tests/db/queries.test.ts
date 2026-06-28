@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { findAllMatchedInvoices, markInvoicesRead, getTransactionsByIds, getTransactionItemsByTransactionIds, resetInvoiceToAmbiguous, computeEffectiveShares, computeAndWriteEffectiveAmounts, findParentCandidates, transactionMatchesParentSearch, updateParentTransactionId, mergeParentTags } from '../../src/db/queries';
+import { findAllMatchedInvoices, markInvoicesRead, getTransactionsByIds, getTransactionItemsByTransactionIds, resetInvoiceToAmbiguous, computeEffectiveShares, computeAndWriteEffectiveAmounts, findParentCandidates, transactionMatchesParentSearch, resolveSingleCategory, updateParentTransactionId, mergeParentTags } from '../../src/db/queries';
 
 // Test the getMonthlySpend reduce logic directly — same formula as the implementation
 function computeMonthlySpend(rows: { amount: number; transaction_type: string }[]): number {
@@ -436,6 +436,64 @@ describe('findParentCandidates (fee linkable + self-exclude)', () => {
     const { client } = makeFake(seed());
     const rows = await findParentCandidates(client, '國外交易服務費', 90);
     expect(rows.map((r) => r.id)).toEqual(['fee-iherb']);
+  });
+});
+
+describe('resolveSingleCategory (parent auto-fill category)', () => {
+  it('returns the single tx-level category', () => {
+    expect(resolveSingleCategory(['食:保健'], [])).toBe('食:保健');
+  });
+
+  it('returns the one category when the tx tag is inherited onto items (B2 shape)', () => {
+    expect(resolveSingleCategory(['食:保健'], [['食:保健'], ['食:保健']])).toBe('食:保健');
+  });
+
+  it('returns an item-only single category (iherb shared-category tag)', () => {
+    expect(resolveSingleCategory([], [['網購:iherb']])).toBe('網購:iherb');
+  });
+
+  it('returns null when there are multiple distinct categories (ambiguous)', () => {
+    expect(resolveSingleCategory(['食:保健'], [['行:加油']])).toBeNull();
+  });
+
+  it('returns null when there is no category tag (only plain/free tags)', () => {
+    expect(resolveSingleCategory(['iherb'], [[]])).toBeNull();
+  });
+
+  it('ignores plain tags alongside a single category', () => {
+    expect(resolveSingleCategory(['食:保健', 'iherb'], [['iherb']])).toBe('食:保健');
+  });
+
+  it('tolerates null tags / item tags', () => {
+    expect(resolveSingleCategory(null, [null])).toBeNull();
+  });
+});
+
+describe('findParentCandidates enrichment (payment_method + category)', () => {
+  const now = new Date().toISOString();
+  const seed = () => ({
+    transactions: [
+      // single category (tx-level tag inherited onto the item) → resolves to that tag
+      { id: 'single-cat', transaction_type: 'expense', amount: 1200, note: '保健', tags: ['食:保健'], payment_method: 'credit_card', transaction_at: now, transaction_items: [{ name: '魚油', tags: ['食:保健'] }] },
+      // multiple distinct categories → ambiguous → null
+      { id: 'multi-cat', transaction_type: 'expense', amount: 800, note: '混合', tags: [], payment_method: 'easy_card', transaction_at: now, transaction_items: [{ name: '咖啡', tags: ['食:咖啡'] }, { name: '加油', tags: ['行:加油'] }] },
+    ],
+  });
+
+  it('returns payment_method and the single resolved category', async () => {
+    const { client } = makeFake(seed());
+    const rows = await findParentCandidates(client, '魚油', 90);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].payment_method).toBe('credit_card');
+    expect(rows[0].category).toBe('食:保健');
+  });
+
+  it('returns category null for a multi-category (ambiguous) parent', async () => {
+    const { client } = makeFake(seed());
+    const rows = await findParentCandidates(client, '咖啡', 90);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].payment_method).toBe('easy_card');
+    expect(rows[0].category).toBeNull();
   });
 });
 
