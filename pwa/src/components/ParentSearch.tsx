@@ -9,6 +9,8 @@ export interface ParentSearchResult {
   tags: string[];
   transaction_at: string;
   item_names: string[];
+  payment_method: string;
+  category: string | null;
 }
 
 interface Props {

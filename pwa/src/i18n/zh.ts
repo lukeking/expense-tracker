@@ -40,6 +40,7 @@ export const zh = {
   'entry.notePlaceholder': '可不填',
   'entry.description': '說明',
   'entry.feeDescPlaceholder': '國外交易服務費',
+  'entry.fullRefund': '全額退款',
   'entry.linkOriginal': '連結原始交易（可選）',
   'entry.refundDescPlaceholder': '如：訂單退款',
   'entry.refundTo': '退款至',

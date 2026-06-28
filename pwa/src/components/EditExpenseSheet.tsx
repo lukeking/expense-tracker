@@ -3,6 +3,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiFetch, queryClient } from '../api/client';
 import { CategoryPicker } from './CategoryPicker';
 import type { CategorySelection } from './CategoryPicker';
+import { parseCategorySelection } from '../lib/categoryTag';
 import { TagInput } from './TagInput';
 import { ItemRow } from './ItemRow';
 import type { ItemRowData } from './ItemRow';
@@ -41,13 +42,6 @@ function deriveCategoryTag(items: TxDetail['items']): string | null {
     if (cat) return cat;
   }
   return null;
-}
-
-function parseCategorySelection(tag: string | null): CategorySelection | null {
-  if (!tag) return null;
-  const idx = tag.indexOf(':');
-  if (idx === -1) return { major: tag, subcategory: null };
-  return { major: tag.slice(0, idx), subcategory: tag.slice(idx + 1) };
 }
 
 function deriveCategoryTag2(sel: CategorySelection | null): string | null {

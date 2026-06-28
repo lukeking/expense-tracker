@@ -690,6 +690,8 @@ pwaRouter.get('/parent-search', async (c) => {
     tags: (tx.tags as string[]) ?? [],
     transaction_at: tx.transaction_at,
     item_names: (tx.transaction_items as { name: string }[]).map((i) => i.name),
+    payment_method: tx.payment_method,
+    category: tx.category,
   }));
   return c.json({ transactions });
 });

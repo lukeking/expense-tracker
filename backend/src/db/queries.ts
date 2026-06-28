@@ -216,12 +216,29 @@ export function transactionMatchesParentSearch(
   );
 }
 
+/**
+ * Resolve a transaction's single category for parent auto-fill: the one distinct
+ * `主:子` tag across the transaction-level tags and every item's tags, or null when
+ * there are zero (uncategorized) or more than one distinct category (an ambiguous
+ * multi-item legacy expense). A category tag is any tag containing ':' (plain/free
+ * tags have none) — the same detection enrichRefundTags uses. Pure so it can be
+ * unit-tested without a DB.
+ */
+export function resolveSingleCategory(
+  txTags: string[] | null,
+  itemTagsLists: (string[] | null)[]
+): string | null {
+  const all = [...(txTags ?? []), ...itemTagsLists.flatMap((t) => t ?? [])];
+  const cats = new Set(all.filter((t) => t.includes(':')));
+  return cats.size === 1 ? [...cats][0] : null;
+}
+
 export async function findParentCandidates(
   supabase: SupabaseClient,
   searchTerm: string,
   windowDays: number,
   excludeId?: string
-): Promise<(Pick<Transaction, 'id' | 'amount' | 'note' | 'tags' | 'transaction_at'> & { transaction_items: { name: string }[] })[]> {
+): Promise<(Pick<Transaction, 'id' | 'amount' | 'note' | 'tags' | 'transaction_at' | 'payment_method'> & { transaction_items: { name: string }[]; category: string | null })[]> {
   const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString();
   // Include `fee` rows, not just `expense`: a refund can reverse part of an earlier
   // fee (e.g. a tax-exempt 國外交易服務費 partial refund), so the fee must be linkable
@@ -230,7 +247,7 @@ export async function findParentCandidates(
   // window and filter in JS. At ~100 tx/month this is at most ~300 rows over 90 days.
   const { data, error } = await supabase
     .from('transactions')
-    .select('id, amount, note, tags, transaction_at, transaction_items(name, tags)')
+    .select('id, amount, note, tags, transaction_at, payment_method, transaction_items(name, tags)')
     .in('transaction_type', ['expense', 'fee'])
     .gte('transaction_at', since)
     .order('transaction_at', { ascending: false });
@@ -247,7 +264,15 @@ export async function findParentCandidates(
         searchTerm
       )
   );
-  return matches.slice(0, 5) as (Pick<Transaction, 'id' | 'amount' | 'note' | 'tags' | 'transaction_at'> & { transaction_items: { name: string }[] })[];
+  // Enrich each candidate with the single resolved category (主:子 | null) so the PWA
+  // can auto-fill a linked fee's category. payment_method comes straight from the row.
+  return matches.slice(0, 5).map((row) => {
+    const itemTags = ((row.transaction_items as { tags?: string[] | null }[] | null) ?? []).map((i) => i.tags ?? null);
+    return {
+      ...(row as Pick<Transaction, 'id' | 'amount' | 'note' | 'tags' | 'transaction_at' | 'payment_method'> & { transaction_items: { name: string }[] }),
+      category: resolveSingleCategory((row.tags as string[] | null) ?? null, itemTags),
+    };
+  });
 }
 
 /**

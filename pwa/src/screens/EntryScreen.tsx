@@ -15,6 +15,7 @@ import { ParentSearch } from '../components/ParentSearch';
 import type { ParentSearchResult } from '../components/ParentSearch';
 import { useT } from '../i18n';
 import type { MessageKey } from '../i18n';
+import { parseCategorySelection } from '../lib/categoryTag';
 
 type Tab = 'expense' | 'fee' | 'refund';
 
@@ -351,6 +352,9 @@ function FeeForm() {
   const [description, setDescription] = useState('');
   const [parent, setParent] = useState<ParentSearchResult | null>(null);
   const [toast, setToast] = useState('');
+  // Track manual edits so linking a parent never overwrites a field the user has set.
+  const [paymentTouched, setPaymentTouched] = useState(false);
+  const [categoryTouched, setCategoryTouched] = useState(false);
 
   const amountVal = parseInt(amount, 10) || 0;
   const categoryTag = deriveCategoryTag(category);
@@ -372,6 +376,7 @@ function FeeForm() {
       }),
     onSuccess: () => {
       setAmount(''); setPaymentMethod('credit_card'); setCategory(null); setDescription(''); setParent(null);
+      setPaymentTouched(false); setCategoryTouched(false);
       setToast(t('entry.toastFeeSaved'));
       queryClient.invalidateQueries({ queryKey: ['summary'] });
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
@@ -400,11 +405,11 @@ function FeeForm() {
       </div>
       <div>
         <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />{t('entry.paymentMethod')}</label>
-        <PaymentPills value={paymentMethod} onChange={setPaymentMethod} />
+        <PaymentPills value={paymentMethod} onChange={(v) => { setPaymentTouched(true); setPaymentMethod(v); }} />
       </div>
       <div>
         <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-orange-500" />{t('entry.category')}</label>
-        <CategoryPicker value={category} onChange={setCategory} />
+        <CategoryPicker value={category} onChange={(v) => { setCategoryTouched(true); setCategory(v); }} />
         {categoryIncomplete && (
           <p className="text-xs text-orange-500 mt-1">{t('category.subRequired')}</p>
         )}
@@ -419,9 +424,13 @@ function FeeForm() {
           value={parent}
           onSelect={(result) => {
             setParent(result);
-            if (result && !description.trim()) {
-              const label = result.note ?? result.item_names[0] ?? result.tags[0] ?? '';
-              if (label) setDescription(label);
+            if (result) {
+              if (!paymentTouched) setPaymentMethod(result.payment_method as PaymentMethod);
+              if (!categoryTouched && result.category) setCategory(parseCategorySelection(result.category));
+              if (!description.trim()) {
+                const label = result.note ?? result.item_names[0] ?? result.tags[0] ?? '';
+                if (label) setDescription(label);
+              }
             }
           }}
         />
@@ -461,6 +470,8 @@ function RefundForm() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('credit_card');
   const [parent, setParent] = useState<ParentSearchResult | null>(null);
   const [toast, setToast] = useState('');
+  // Track a manual payment pick so linking a parent never overwrites it.
+  const [paymentTouched, setPaymentTouched] = useState(false);
 
   const amountVal = parseInt(amount, 10) || 0;
   const canSubmit = amountVal > 0 && !!description.trim();
@@ -482,6 +493,7 @@ function RefundForm() {
       }),
     onSuccess: () => {
       setAmount(''); setDescription(''); setParent(null);
+      setPaymentTouched(false);
       setToast(t('entry.toastRefundSaved'));
       setTimeout(() => setToast(''), 2000);
     },
@@ -505,6 +517,15 @@ function RefundForm() {
           placeholder="0" required
           className="text-3xl font-bold w-full border-b-2 border-gray-300 dark:border-gray-600 outline-none pb-1 focus:border-blue-500 bg-transparent text-gray-900 dark:text-white"
         />
+        {parent && (
+          <button
+            type="button"
+            onClick={() => setAmount(String(parent.amount))}
+            className="mt-1.5 text-sm text-blue-600 dark:text-blue-400"
+          >
+            {t('entry.fullRefund')} · NT${parent.amount.toLocaleString()}
+          </button>
+        )}
       </div>
       <div>
         <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500" />{t('entry.description')}</label>
@@ -512,11 +533,23 @@ function RefundForm() {
       </div>
       <div>
         <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />{t('entry.refundTo')}</label>
-        <PaymentPills value={paymentMethod} onChange={setPaymentMethod} />
+        <PaymentPills value={paymentMethod} onChange={(v) => { setPaymentTouched(true); setPaymentMethod(v); }} />
       </div>
       <div>
         <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-purple-500" />{t('entry.linkOriginal')}</label>
-        <ParentSearch value={parent} onSelect={setParent} />
+        <ParentSearch
+          value={parent}
+          onSelect={(result) => {
+            setParent(result);
+            if (result) {
+              if (!paymentTouched) setPaymentMethod(result.payment_method as PaymentMethod);
+              if (!description.trim()) {
+                const label = result.note ?? result.item_names[0] ?? result.tags[0] ?? '';
+                if (label) setDescription(label);
+              }
+            }
+          }}
+        />
       </div>
       </div>
 
