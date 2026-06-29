@@ -26,7 +26,7 @@ All paths under `pwa/src/` (PWA React app). No backend/Android paths in this fea
 
 **Purpose**: Confirm a clean baseline before changes.
 
-- [ ] T001 Confirm on branch `042-entry-layout-category` and baseline green: `cd pwa && pnpm exec tsc -b && pnpm i18n:check`
+- [x] T001 Confirm on branch `042-entry-layout-category` and baseline green: `cd pwa && pnpm exec tsc -b && pnpm i18n:check`
 
 ---
 
@@ -46,10 +46,10 @@ All paths under `pwa/src/` (PWA React app). No backend/Android paths in this fea
 
 ### Implementation for User Story 1
 
-- [ ] T002 [P] [US1] Update i18n in `pwa/src/i18n/zh.ts` + `pwa/src/i18n/en.ts`: change `entry.linkOriginal` (drop 「（可選）」), add link-card meta + refund 全額退/部分退 + 原金額 strings (per contracts/fee-refund-layout.md)
-- [ ] T003 [US1] Rework `ParentSearch.tsx` linked state into the rich card — 🔗 + title (`note ?? item_names[0] ?? tags[0]`) + meta line `付款 · 分類 · NT$金額 · M/D` (omit 分類 when `category` null) + ✕ clear — per data-model `LinkedOriginalCard`. First **export `LABEL_KEYS` from `PaymentPills.tsx`** (currently module-private) so the card can render the payment-method label via `t(LABEL_KEYS[pm])`; no API change
-- [ ] T004 [US1] Reorder `FeeForm` in `EntryScreen.tsx` to 金額 → 連結原始交易 → 付款方式 → 分類 → 說明 (move `ParentSearch` directly under amount, 說明 last); preserve `paymentTouched`/`categoryTouched` auto-fill gating unchanged
-- [ ] T005 [US1] Reorder `RefundForm` in `EntryScreen.tsx` to 金額 → 連結原始交易 → 退款至 → 說明; render 全額退/部分退 + 原金額 hint within the link-card area and keep the existing 全額退款 (`amount = parent.amount`) behavior + `paymentTouched` gating
+- [x] T002 [P] [US1] Update i18n in `pwa/src/i18n/zh.ts` + `pwa/src/i18n/en.ts`: change `entry.linkOriginal` (drop 「（可選）」), add link-card meta + refund 全額退/部分退 + 原金額 strings (per contracts/fee-refund-layout.md)
+- [x] T003 [US1] Rework `ParentSearch.tsx` linked state into the rich card — 🔗 + title (`note ?? item_names[0] ?? tags[0]`) + meta line `付款 · 分類 · NT$金額 · M/D` (omit 分類 when `category` null) + ✕ clear — per data-model `LinkedOriginalCard`. First **export `LABEL_KEYS` from `PaymentPills.tsx`** (currently module-private) so the card can render the payment-method label via `t(LABEL_KEYS[pm])`; no API change
+- [x] T004 [US1] Reorder `FeeForm` in `EntryScreen.tsx` to 金額 → 連結原始交易 → 付款方式 → 分類 → 說明 (move `ParentSearch` directly under amount, 說明 last); preserve `paymentTouched`/`categoryTouched` auto-fill gating unchanged
+- [x] T005 [US1] Reorder `RefundForm` in `EntryScreen.tsx` to 金額 → 連結原始交易 → 退款至 → 說明; render 全額退/部分退 + 原金額 hint within the link-card area and keep the existing 全額退款 (`amount = parent.amount`) behavior + `paymentTouched` gating
 
 **Checkpoint**: US1 fully functional — both tabs match the synced design's structure (`pwa/design-preview/refined/entry-fee|entry-refund/optimized.html`), behavior preserved. MVP shippable.
 
@@ -63,10 +63,10 @@ All paths under `pwa/src/` (PWA React app). No backend/Android paths in this fea
 
 ### Implementation for User Story 2
 
-- [ ] T006 [P] [US2] Add i18n keys to `pwa/src/i18n/zh.ts` + `pwa/src/i18n/en.ts`: `category.allMajorsTitle` and the 「更多」 label (per contracts/category-picker.md)
-- [ ] T007 [P] [US2] Create `pwa/src/hooks/useCategoryUsage.ts`: one bounded recent-transactions fetch (~180d) via existing `/pwa/transactions` (long `staleTime`), `useMemo` count of distinct `主:子` colon-tags from `tags` + `items[].tags` (major recognised against `useCategories`), returns `{ majorRank, subRank, hasData }` with `sort_order` tie-break (per data-model.md + research D1)
-- [ ] T008 [US2] Rework `CategoryPicker.tsx` major row: frequency top-N inline chips (single `N` constant, fit one row) + 「⋯ 更多」 opening the existing `BottomSheet` listing all majors with icons; selected major always visible; remove `overflow-x-auto`; consume `useCategoryUsage` with fallback to `useMajors` order
-- [ ] T009 [US2] In `CategoryPicker.tsx`, order visible sub-chips and the sub-overflow sheet list by `useCategoryUsage` `subRank` (fallback to `useSubcategories` order when `hasData` is false)
+- [x] T006 [P] [US2] Add i18n keys to `pwa/src/i18n/zh.ts` + `pwa/src/i18n/en.ts`: `category.allMajorsTitle` and the 「更多」 label (per contracts/category-picker.md)
+- [x] T007 [P] [US2] Create `pwa/src/hooks/useCategoryUsage.ts`: one bounded recent-transactions fetch (~180d) via existing `/pwa/transactions` (long `staleTime`), `useMemo` count of distinct `主:子` colon-tags from `tags` + `items[].tags` (major recognised against `useCategories`), returns `{ majorRank, subRank, hasData }` with `sort_order` tie-break (per data-model.md + research D1)
+- [x] T008 [US2] Rework `CategoryPicker.tsx` major row: frequency top-N inline chips (single `N` constant, fit one row) + 「⋯ 更多」 opening the existing `BottomSheet` listing all majors with icons; selected major always visible; remove `overflow-x-auto`; consume `useCategoryUsage` with fallback to `useMajors` order
+- [x] T009 [US2] In `CategoryPicker.tsx`, order visible sub-chips and the sub-overflow sheet list by `useCategoryUsage` `subRank` (fallback to `useSubcategories` order when `hasData` is false)
 
 **Checkpoint**: US2 fully functional and independently testable; applies everywhere `CategoryPicker` is used (props unchanged).
 
@@ -80,9 +80,9 @@ All paths under `pwa/src/` (PWA React app). No backend/Android paths in this fea
 
 ### Implementation for User Story 3
 
-- [ ] T010 [P] [US3] Add i18n keys to `pwa/src/i18n/zh.ts` + `pwa/src/i18n/en.ts`: fee「附加成本」, refund「退回」, and the readiness hint (e.g. `entry.readyToSubmit`)
-- [ ] T011 [US3] In `FeeForm` (`EntryScreen.tsx`): frame 金額 as 「附加成本」 and add the inline ✓「必填已完成…可送出」 hint above the submit button (shown when `canSubmit`)
-- [ ] T012 [US3] In `RefundForm` (`EntryScreen.tsx`): apply the green 「+ NT$ … 退回」 amount framing and add the inline ✓ readiness hint above submit
+- [x] T010 [P] [US3] Add i18n keys to `pwa/src/i18n/zh.ts` + `pwa/src/i18n/en.ts`: fee「附加成本」, refund「退回」, and the readiness hint (e.g. `entry.readyToSubmit`)
+- [x] T011 [US3] In `FeeForm` (`EntryScreen.tsx`): frame 金額 as 「附加成本」 and add the inline ✓「必填已完成…可送出」 hint above the submit button (shown when `canSubmit`)
+- [x] T012 [US3] In `RefundForm` (`EntryScreen.tsx`): apply the green 「+ NT$ … 退回」 amount framing and add the inline ✓ readiness hint above submit
 
 **Checkpoint**: All three stories functional; fee/refund tabs visually match the synced design references end-to-end.
 
@@ -90,10 +90,10 @@ All paths under `pwa/src/` (PWA React app). No backend/Android paths in this fea
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T013 [P] Run `cd pwa && pnpm exec tsc -b && pnpm i18n:check` and resolve any type/parity issues
-- [ ] T014 Visual verification at 390px against `pwa/design-preview/refined/entry-fee/optimized.html` + `entry-refund/optimized.html`: field order, link card, direction cues, readiness hint; confirm major row has zero horizontal scroll and 「更多」 sheet works
+- [x] T013 [P] Run `cd pwa && pnpm exec tsc -b && pnpm i18n:check` and resolve any type/parity issues
+- [x] T014 Visual verification at 390px against `pwa/design-preview/refined/entry-fee/optimized.html` + `entry-refund/optimized.html`: field order, link card, direction cues, readiness hint; confirm major row has zero horizontal scroll and 「更多」 sheet works
 - [ ] T015 [P] (Optional) Add/extend Playwright e2e smoke in `e2e/` for fee/refund field order + major-row no-overflow + 「更多」 opens sheet (needs local Supabase; not in CI — run locally)
-- [ ] T016 Run `specs/042-entry-layout-category/quickstart.md` end-to-end
+- [x] T016 Run `specs/042-entry-layout-category/quickstart.md` end-to-end
 
 ---
 
