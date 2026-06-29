@@ -47,7 +47,7 @@ All paths under `pwa/src/` (PWA React app). No backend/Android paths in this fea
 ### Implementation for User Story 1
 
 - [ ] T002 [P] [US1] Update i18n in `pwa/src/i18n/zh.ts` + `pwa/src/i18n/en.ts`: change `entry.linkOriginal` (drop 「（可選）」), add link-card meta + refund 全額退/部分退 + 原金額 strings (per contracts/fee-refund-layout.md)
-- [ ] T003 [US1] Rework `ParentSearch.tsx` linked state into the rich card — 🔗 + title (`note ?? item_names[0] ?? tags[0]`) + meta line `付款 · 分類 · NT$金額 · M/D` (omit 分類 when `category` null) + ✕ clear — per data-model `LinkedOriginalCard` (reuse the payment-method label from `PaymentPills`; no API change)
+- [ ] T003 [US1] Rework `ParentSearch.tsx` linked state into the rich card — 🔗 + title (`note ?? item_names[0] ?? tags[0]`) + meta line `付款 · 分類 · NT$金額 · M/D` (omit 分類 when `category` null) + ✕ clear — per data-model `LinkedOriginalCard`. First **export `LABEL_KEYS` from `PaymentPills.tsx`** (currently module-private) so the card can render the payment-method label via `t(LABEL_KEYS[pm])`; no API change
 - [ ] T004 [US1] Reorder `FeeForm` in `EntryScreen.tsx` to 金額 → 連結原始交易 → 付款方式 → 分類 → 說明 (move `ParentSearch` directly under amount, 說明 last); preserve `paymentTouched`/`categoryTouched` auto-fill gating unchanged
 - [ ] T005 [US1] Reorder `RefundForm` in `EntryScreen.tsx` to 金額 → 連結原始交易 → 退款至 → 說明; render 全額退/部分退 + 原金額 hint within the link-card area and keep the existing 全額退款 (`amount = parent.amount`) behavior + `paymentTouched` gating
 

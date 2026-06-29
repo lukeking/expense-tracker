@@ -122,7 +122,7 @@ The amount on the 手續費 tab is framed as an added cost, while the 退款 tab
 - **SC-003**: When linking an original, the number of fields the person must fill manually is reduced (payment channel, and category for fee, arrive pre-filled), measured as fewer required manual touches than the pre-feature flow.
 - **SC-004**: The most-used major categories appear in the always-visible set for a person with representative history (top-used majors are reachable without opening "more" in the common case).
 - **SC-005**: No regression in submit validation: refund still cannot be submitted without a description; fee can; amount still required on both.
-- **SC-006**: The shipped layout matches the synced design references for both tabs (field order, link card, direction cues, readiness hint).
+- **SC-006**: The shipped **fee/refund form layout** matches the synced design references for both tabs — field order, link card, direction cues, readiness hint. (Scope excludes the major-category row presentation, which US2 owns and intentionally diverges from the mockup's chip layout.)
 
 ## Assumptions
 
