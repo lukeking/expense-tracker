@@ -92,7 +92,7 @@ All paths under `pwa/src/` (PWA React app). No backend/Android paths in this fea
 
 - [x] T013 [P] Run `cd pwa && pnpm exec tsc -b && pnpm i18n:check` and resolve any type/parity issues
 - [x] T014 Visual verification at 390px against `pwa/design-preview/refined/entry-fee/optimized.html` + `entry-refund/optimized.html`: field order, link card, direction cues, readiness hint; confirm major row has zero horizontal scroll and 「更多」 sheet works
-- [ ] T015 [P] (Optional) Add/extend Playwright e2e smoke in `e2e/` for fee/refund field order + major-row no-overflow + 「更多」 opens sheet (needs local Supabase; not in CI — run locally)
+- [x] T015 [P] (Optional) Add/extend Playwright e2e smoke in `e2e/` for fee/refund field order + major-row no-overflow + 「更多」 opens sheet (needs local Supabase; not in CI — run locally) — added `e2e/tests/entry-layout.spec.ts` (3 smokes) + updated `parent-autofill.spec.ts` for the 全額退/部分退 chips; full suite 19/19 green locally
 - [x] T016 Run `specs/042-entry-layout-category/quickstart.md` end-to-end
 
 ---

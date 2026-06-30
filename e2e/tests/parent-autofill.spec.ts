@@ -10,10 +10,11 @@ test.afterEach(async () => {
 });
 
 // Feature 041 — 連結原始交易 auto-fill. Drives the fee/refund tabs through the real UI:
-// linking an original auto-fills the form, and the refund 全額退款 button one-taps the
-// original's amount. (Category resolution itself has dedicated backend unit tests in
-// queries.test.ts; here we prove the end-to-end form wiring via the cleanest signals —
-// payment_method, the auto-filled description, and the 全額退款 amount.)
+// linking an original auto-fills the form, and the refund 「全額退」 chip one-taps the
+// original's amount. (Spec 042 renamed the old 全額退款 button to the 全額退/部分退 chip pair,
+// shown only once an original is linked.) Category resolution has dedicated backend unit
+// tests in queries.test.ts; here we prove the end-to-end form wiring via the cleanest
+// signals — payment_method, the auto-filled description, and the 全額退 amount.
 const API_URL = 'http://localhost:8787';
 const authHeaders = { Authorization: `Bearer ${TEST_API_KEY}` };
 
@@ -77,19 +78,19 @@ test('fee: linking an original auto-fills payment method and description', async
   expect(fee!.tags.some((t) => t === '行:捷運')).toBeTruthy();
 });
 
-test('refund: 全額退款 one-taps the original amount; payment auto-fills', async ({ page, request }) => {
+test('refund: 全額退 one-taps the original amount; payment auto-fills', async ({ page, request }) => {
   const note = await createParent(request);
   await page.goto('/');
   await page.getByRole('button', { name: '退款', exact: true }).click();
 
-  // 全額退款 is absent until an original is linked.
-  await expect(page.getByRole('button', { name: /全額退款/ })).toHaveCount(0);
+  // The 全額退/部分退 chips are absent until an original is linked.
+  await expect(page.getByRole('button', { name: '全額退', exact: true })).toHaveCount(0);
 
   await page.getByPlaceholder('搜尋交易備註或品項…').fill(note);
   await page.getByRole('button', { name: note }).first().click();
 
-  // Now the button appears; tap it → amount becomes the original's full amount.
-  await page.getByRole('button', { name: /全額退款/ }).click();
+  // Now the chips appear; tap 全額退 → amount becomes the original's full amount.
+  await page.getByRole('button', { name: '全額退', exact: true }).click();
   await expect(page.getByPlaceholder('0')).toHaveValue('200');
 
   await page.getByRole('button', { name: '送出' }).click();

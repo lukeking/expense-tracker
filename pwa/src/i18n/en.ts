@@ -40,7 +40,6 @@ export const en: Messages = {
   'entry.notePlaceholder': 'Optional',
   'entry.description': 'Description',
   'entry.feeDescPlaceholder': 'Overseas transaction fee',
-  'entry.fullRefund': 'Full refund',
   'entry.linkOriginal': 'Link original transaction',
   'entry.linkOriginalHintFee': '· fills payment & category',
   'entry.linkOriginalHintRefund': '· fills refund method & amount',
