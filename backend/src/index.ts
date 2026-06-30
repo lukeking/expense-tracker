@@ -42,9 +42,23 @@ async function sendInvoiceReminder(env: Env): Promise<void> {
   await sendChannelMessage(env, formatReminderMessage(latestRun));
 }
 
+// Trivial read so the Supabase free-tier project never hits its 7-day inactivity pause:
+// the pause timer resets on any incoming API request, and a daily query keeps it alive
+// even if the PWA goes unused for a week (a paused project on free tier has no backups and
+// is eventually deleted). Cheapest safe query — one row from the small categories table.
+async function keepAlivePing(env: Env): Promise<void> {
+  const supabase = getSupabaseClient(env);
+  await supabase.from('categories').select('major').limit(1);
+}
+
 export default {
   fetch: app.fetch,
-  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(sendInvoiceReminder(env));
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    if (event.cron === '0 9 1 */2 *') {
+      ctx.waitUntil(sendInvoiceReminder(env));
+    } else {
+      // Daily '0 2 * * *' keep-alive (and a safe default for any other schedule).
+      ctx.waitUntil(keepAlivePing(env));
+    }
   },
 };

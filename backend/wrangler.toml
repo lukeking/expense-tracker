@@ -8,7 +8,9 @@ PWA_ORIGIN = "https://expense-tracker-5pj.pages.dev"
 # PWA_ORIGIN = "http://localhost:5173"
 
 [triggers]
-crons = ["0 9 1 */2 *"]
+# "0 2 * * *"   — daily Supabase keep-alive (avoids the free-tier 7-day inactivity pause)
+# "0 9 1 */2 *" — bimonthly invoice-import reminder
+crons = ["0 2 * * *", "0 9 1 */2 *"]
 
 # All secrets set via `wrangler secret put`:
 # SUPABASE_URL
