@@ -54,7 +54,7 @@ async function keepAlivePing(env: Env): Promise<void> {
 export default {
   fetch: app.fetch,
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    if (event.cron === '0 9 1 */2 *') {
+    if (event.cron === '0 1 26 */2 *') {
       ctx.waitUntil(sendInvoiceReminder(env));
     } else {
       // Daily '0 2 * * *' keep-alive (and a safe default for any other schedule).

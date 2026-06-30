@@ -8,9 +8,11 @@ PWA_ORIGIN = "https://expense-tracker-5pj.pages.dev"
 # PWA_ORIGIN = "http://localhost:5173"
 
 [triggers]
-# "0 2 * * *"   — daily Supabase keep-alive (avoids the free-tier 7-day inactivity pause)
-# "0 9 1 */2 *" — bimonthly invoice-import reminder
-crons = ["0 2 * * *", "0 9 1 */2 *"]
+# "0 2 * * *"    — daily Supabase keep-alive (avoids the free-tier 7-day inactivity pause)
+# "0 1 26 */2 *" — invoice-import reminder: 09:00 Taipei (01:00 UTC) on the 26th of odd
+#                  months (Jan/Mar/May/Jul/Sep/Nov) — the day after the 25th lottery draw,
+#                  once the MOF API congestion has eased. (Delivery → Web Push, deferred.)
+crons = ["0 2 * * *", "0 1 26 */2 *"]
 
 # All secrets set via `wrangler secret put`:
 # SUPABASE_URL
