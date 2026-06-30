@@ -10,6 +10,7 @@ import { EditExpenseSheet } from '../components/EditExpenseSheet';
 import { EditFeeRefundSheet } from '../components/EditFeeRefundSheet';
 import { useQueryClient } from '@tanstack/react-query';
 import { ItemCategorySheet } from '../components/ItemCategorySheet';
+import { LABEL_KEYS, type PaymentMethod } from '../components/PaymentPills';
 import { assignItemCategory } from '../api/client';
 import { itemCategoryTag, effectiveItemCategory } from '../lib/itemCategory';
 import { txInSubcategory, itemInSubcategory, subAmount, txInMajor, UNCATEGORIZED } from '../lib/subcategory';
@@ -86,6 +87,10 @@ function TxEntry({ tx, parentMap, subFilter, onEdit }: { tx: TxRecord; parentMap
   const [catItem, setCatItem] = useState<{ itemId: string; value: string | null } | null>(null);
   const canCategorize = tx.transaction_type === 'expense';
   const inheritedTag = tx.tags.find((t) => t.includes(':')) ?? null;
+  // Payment-method badge: canonical full label, falling back to the raw value for any
+  // legacy/unmapped method so the badge never renders empty.
+  const pmKey = LABEL_KEYS[tx.payment_method as PaymentMethod];
+  const pmLabel = pmKey ? t(pmKey) : tx.payment_method;
   // Feature 030: under a subcategory filter, show only the matching item lines and the
   // net subcategory amount for the row; otherwise the whole transaction.
   const filter = subFilter ?? null;
@@ -113,6 +118,9 @@ function TxEntry({ tx, parentMap, subFilter, onEdit }: { tx: TxRecord; parentMap
           <span className="text-xs text-gray-400 dark:text-gray-500 ml-1.5">{localDt(tx.transaction_at, { time: true })}</span>
         </span>
         <span className="flex items-center gap-2">
+          <span className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 whitespace-nowrap">
+            {pmLabel}
+          </span>
           {onEdit && (
             <button
               type="button"
