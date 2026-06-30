@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { apiFetch } from '../api/client';
 import { useT } from '../i18n';
+import { LABEL_KEYS, type PaymentMethod } from './PaymentPills';
 
 export interface ParentSearchResult {
   id: string;
@@ -71,18 +72,26 @@ export function ParentSearch({ value, onSelect }: Props) {
   }
 
   if (value) {
+    const pm = value.payment_method as PaymentMethod;
+    const pmLabel = LABEL_KEYS[pm] ? t(LABEL_KEYS[pm]) : value.payment_method;
+    const d = new Date(value.transaction_at);
+    const dateStr = `${d.getMonth() + 1}/${d.getDate()}`;
+    const title = value.note ?? value.item_names[0] ?? value.tags[0] ?? value.id.slice(0, 8);
+    const meta = [pmLabel, value.category, `NT$${value.amount.toLocaleString()}`, dateStr]
+      .filter(Boolean)
+      .join(' · ');
     return (
-      <div className="flex items-center gap-2 border border-blue-300 bg-blue-50 dark:bg-blue-900/30 rounded-lg px-3 py-2 text-sm">
+      <div className="flex items-center gap-2 border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/30 rounded-lg px-3 py-2.5">
+        <span className="text-base">🔗</span>
         <div className="flex-1 min-w-0">
-          <p className="text-blue-800 dark:text-blue-300 font-medium truncate">
-            {value.note ?? value.item_names[0] ?? value.tags[0] ?? value.id.slice(0, 8)}
-          </p>
-          <p className="text-blue-600 dark:text-blue-400 text-xs">NT${value.amount}</p>
+          <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{title}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{meta}</p>
         </div>
         <button
           type="button"
           onClick={() => onSelect(null)}
-          className="text-blue-400 text-lg leading-none"
+          aria-label={t('common.remove')}
+          className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-sm leading-none flex-shrink-0"
         >
           ✕
         </button>

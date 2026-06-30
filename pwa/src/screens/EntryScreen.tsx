@@ -396,7 +396,7 @@ function FeeForm() {
       )}
       <div className="flex-1 overflow-y-auto flex flex-col gap-4 p-4">
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500" />{t('entry.amountLabel')}</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500" />{t('entry.amountLabel')} <span className="text-gray-400 dark:text-gray-500">· {t('entry.feeAmountHint')}</span></label>
         <input
           type="number" min="1" inputMode="numeric" autoFocus value={amount} onChange={(e) => setAmount(e.target.value)}
           placeholder="0" required
@@ -404,22 +404,7 @@ function FeeForm() {
         />
       </div>
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />{t('entry.paymentMethod')}</label>
-        <PaymentPills value={paymentMethod} onChange={(v) => { setPaymentTouched(true); setPaymentMethod(v); }} />
-      </div>
-      <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-orange-500" />{t('entry.category')}</label>
-        <CategoryPicker value={category} onChange={(v) => { setCategoryTouched(true); setCategory(v); }} />
-        {categoryIncomplete && (
-          <p className="text-xs text-orange-500 mt-1">{t('category.subRequired')}</p>
-        )}
-      </div>
-      <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500" />{t('entry.description')}</label>
-        <DescriptionSuggest value={description} onChange={setDescription} type="fee" placeholder={t('entry.feeDescPlaceholder')} />
-      </div>
-      <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-purple-500" />{t('entry.linkOriginal')}</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-purple-500" />{t('entry.linkOriginal')} <span className="text-gray-400 dark:text-gray-500">{t('entry.linkOriginalHintFee')}</span></label>
         <ParentSearch
           value={parent}
           onSelect={(result) => {
@@ -435,11 +420,29 @@ function FeeForm() {
           }}
         />
       </div>
+      <div>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />{t('entry.paymentMethod')}{parent && <span className="text-gray-400 dark:text-gray-500">{t('entry.autofilled')}</span>}</label>
+        <PaymentPills value={paymentMethod} onChange={(v) => { setPaymentTouched(true); setPaymentMethod(v); }} />
+      </div>
+      <div>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-orange-500" />{t('entry.category')}{parent && category && <span className="text-gray-400 dark:text-gray-500">{t('entry.autofilled')}</span>}</label>
+        <CategoryPicker value={category} onChange={(v) => { setCategoryTouched(true); setCategory(v); }} />
+        {categoryIncomplete && (
+          <p className="text-xs text-orange-500 mt-1">{t('category.subRequired')}</p>
+        )}
+      </div>
+      <div>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500" />{t('entry.description')}</label>
+        <DescriptionSuggest value={description} onChange={setDescription} type="fee" placeholder={t('entry.feeDescPlaceholder')} />
+      </div>
       </div>
 
       {/* Pinned submit footer */}
       <div className="p-4 pt-3 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
         {mutation.error && <p className="text-red-600 text-sm mb-2">{(mutation.error as Error).message}</p>}
+        {canSubmit && (
+          <div className="flex items-center gap-1.5 mb-2 text-xs text-green-600 dark:text-green-400"><span>✓</span><span>{t('entry.readyToSubmit')}</span></div>
+        )}
         <button
           type="submit"
           disabled={mutation.isPending}
@@ -511,32 +514,18 @@ function RefundForm() {
       )}
       <div className="flex-1 overflow-y-auto flex flex-col gap-4 p-4">
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500" />{t('entry.amountLabel')}</label>
-        <input
-          type="number" min="1" inputMode="numeric" autoFocus value={amount} onChange={(e) => setAmount(e.target.value)}
-          placeholder="0" required
-          className="text-3xl font-bold w-full border-b-2 border-gray-300 dark:border-gray-600 outline-none pb-1 focus:border-blue-500 bg-transparent text-gray-900 dark:text-white"
-        />
-        {parent && (
-          <button
-            type="button"
-            onClick={() => setAmount(String(parent.amount))}
-            className="mt-1.5 text-sm text-blue-600 dark:text-blue-400"
-          >
-            {t('entry.fullRefund')} · NT${parent.amount.toLocaleString()}
-          </button>
-        )}
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500" />{t('entry.amountLabel')} <span className="text-xs text-green-600 dark:text-green-400">{t('entry.refundDirection')}</span></label>
+        <div className="flex items-end gap-2">
+          <span className="text-xl font-bold text-green-600 dark:text-green-400 pb-1">+ NT$</span>
+          <input
+            type="number" min="1" inputMode="numeric" autoFocus value={amount} onChange={(e) => setAmount(e.target.value)}
+            placeholder="0" required
+            className="text-3xl font-bold flex-1 min-w-0 border-b-2 border-gray-300 dark:border-gray-600 outline-none pb-1 focus:border-blue-500 bg-transparent text-green-600 dark:text-green-400"
+          />
+        </div>
       </div>
       <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500" />{t('entry.description')}</label>
-        <DescriptionSuggest value={description} onChange={setDescription} type="refund" placeholder={t('entry.refundDescPlaceholder')} required />
-      </div>
-      <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />{t('entry.refundTo')}</label>
-        <PaymentPills value={paymentMethod} onChange={(v) => { setPaymentTouched(true); setPaymentMethod(v); }} />
-      </div>
-      <div>
-        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-purple-500" />{t('entry.linkOriginal')}</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-purple-500" />{t('entry.linkOriginal')} <span className="text-gray-400 dark:text-gray-500">{t('entry.linkOriginalHintRefund')}</span></label>
         <ParentSearch
           value={parent}
           onSelect={(result) => {
@@ -550,12 +539,42 @@ function RefundForm() {
             }
           }}
         />
+        {parent && (
+          <div className="flex items-center gap-2 mt-2">
+            <button
+              type="button"
+              onClick={() => setAmount(String(parent.amount))}
+              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${amountVal === parent.amount ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600'}`}
+            >
+              {t('entry.refundFull')}
+            </button>
+            <button
+              type="button"
+              onClick={() => { if (amountVal === parent.amount) setAmount(''); }}
+              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${amountVal !== parent.amount ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600'}`}
+            >
+              {t('entry.refundPartial')}
+            </button>
+            <span className="text-xs text-gray-500 dark:text-gray-400 ml-auto">{t('entry.refundOriginal', { amt: parent.amount.toLocaleString() })}</span>
+          </div>
+        )}
+      </div>
+      <div>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />{t('entry.refundTo')}{parent && <span className="text-gray-400 dark:text-gray-500">{t('entry.autofilled')}</span>}</label>
+        <PaymentPills value={paymentMethod} onChange={(v) => { setPaymentTouched(true); setPaymentMethod(v); }} />
+      </div>
+      <div>
+        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5"><span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500" />{t('entry.description')}</label>
+        <DescriptionSuggest value={description} onChange={setDescription} type="refund" placeholder={t('entry.refundDescPlaceholder')} required />
       </div>
       </div>
 
       {/* Pinned submit footer */}
       <div className="p-4 pt-3 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
         {mutation.error && <p className="text-red-600 text-sm mb-2">{(mutation.error as Error).message}</p>}
+        {canSubmit && (
+          <div className="flex items-center gap-1.5 mb-2 text-xs text-green-600 dark:text-green-400"><span>✓</span><span>{t('entry.readyToSubmit')}</span></div>
+        )}
         <button
           type="submit"
           disabled={mutation.isPending}

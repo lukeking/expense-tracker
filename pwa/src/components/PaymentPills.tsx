@@ -3,7 +3,7 @@ import type { MessageKey } from '../i18n';
 
 export type PaymentMethod = 'cash' | 'credit_card' | 'easy_card' | 'prepaid_wallet' | 'bank_account';
 
-const LABEL_KEYS: Record<PaymentMethod, MessageKey> = {
+export const LABEL_KEYS: Record<PaymentMethod, MessageKey> = {
   cash: 'payment.cash',
   credit_card: 'payment.creditCard',
   easy_card: 'payment.easyCard',
